@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase";
-import type { TablesInsert } from "@/types/supabase";
+import type { Database, Tables, TablesInsert } from "@/types/supabase";
 import {
   BODY_ZONE_LABELS,
   EXERCISE_CATEGORY_LABELS,
@@ -51,7 +51,7 @@ function parseRepsString(reps: string | null, sets: number | null) {
 
 function getRpeColor(rpe: number | null) {
   if (!rpe) {
-    return "bg-zinc-200 text-zinc-700";
+    return "bg-muted text-foreground";
   }
   if (rpe >= 1 && rpe <= 6) {
     return "bg-emerald-100 text-emerald-800";
@@ -72,7 +72,7 @@ async function logWorkout(formData: FormData) {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/auth?view=login");
   }
 
   const sessionExerciseIdValue = formData.get("session_exercise_id");
@@ -129,7 +129,9 @@ async function logWorkout(formData: FormData) {
     redirect("/student?error=empty");
   }
 
-  const { error } = await supabase.from("workout_logs").insert(inserts as any);
+  const { error } = await supabase
+    .from("workout_logs")
+    .insert(inserts as never);
 
   if (error) {
     redirect("/student?error=save");
@@ -139,7 +141,25 @@ async function logWorkout(formData: FormData) {
   redirect("/student");
 }
 
-async function getStudentContext() {
+type StudentProfile = Database["public"]["Tables"]["profiles"]["Row"];
+type TrainingPlan = Database["public"]["Tables"]["training_plans"]["Row"];
+type Session = Database["public"]["Tables"]["sessions"]["Row"];
+type SessionExercise = Tables<"session_exercises"> & {
+  exercise?: {
+    name: string | null;
+    body_zone: Database["public"]["Enums"]["body_zone"] | null;
+    category: Database["public"]["Enums"]["exercise_category"] | null;
+  } | null;
+};
+
+type StudentContext = {
+  profile: StudentProfile;
+  plan: TrainingPlan | null;
+  session: Session | null;
+  exercises: SessionExercise[];
+};
+
+async function getStudentContext(): Promise<StudentContext> {
   const supabase = await createSupabaseServerClient();
 
   const {
@@ -147,32 +167,34 @@ async function getStudentContext() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/auth?view=login");
   }
 
-  const { data: profile } = (await supabase
+  const { data: profile } = await supabase
     .from("profiles")
-    .select("role, full_name")
-    .eq("id", user.id as any)
-    .single()) as any;
+    .select("role, full_name, id")
+    .eq("id", user.id as never)
+    .single();
 
-  if (!profile || profile.role !== "STUDENT") {
-    redirect("/login");
+  const studentProfile = profile as StudentProfile | null;
+
+  if (!studentProfile || studentProfile.role !== "STUDENT") {
+    redirect("/auth?view=login");
   }
 
   const { data: plans } = (await supabase
     .from("training_plans")
-    .select("id, name, start_date, is_active")
-    .eq("student_id", user.id as any)
-    .eq("is_active", true as any)
+    .select("id, name, start_date, is_active, student_id")
+    .eq("student_id", user.id as never)
+    .eq("is_active", true as never)
     .order("created_at", { ascending: false })
-    .limit(1)) as any;
+    .limit(1)) as { data: TrainingPlan[] | null };
 
-  const plan = plans?.[0] ?? null;
+  const plan = (plans ?? [])[0] ?? null;
 
   if (!plan) {
     return {
-      profile,
+      profile: studentProfile,
       plan: null,
       session: null,
       exercises: [],
@@ -181,37 +203,41 @@ async function getStudentContext() {
 
   const todayName = getTodayName();
 
-  const { data: rawSessions } = await supabase
+  const { data: rawSessions } = (await supabase
     .from("sessions")
-    .select("id, day_name, week_number, is_completed")
-    .eq("plan_id", plan.id)
-    .eq("day_name", todayName as any)
+    .select("id, day_name, week_number, is_completed, plan_id, order_index")
+    .eq("plan_id", plan.id as never)
+    .eq("day_name", todayName as never)
     .order("week_number", { ascending: true })
-    .order("order_index", { ascending: true });
+    .order("order_index", { ascending: true })) as {
+    data: Session[] | null;
+  };
 
-  const sessions = (rawSessions ?? []) as any[];
+  const sessions = rawSessions ?? [];
 
-  const session = sessions?.[0] ?? null;
+  const session = sessions[0] ?? null;
 
   if (!session) {
     return {
-      profile,
+      profile: studentProfile,
       plan,
       session: null,
       exercises: [],
     };
   }
 
-  const { data: sessionExercises } = await supabase
+  const { data: sessionExercises } = (await supabase
     .from("session_exercises")
     .select(
-      "id, sets, reps, rest_seconds, rpe_target, coach_notes, order_index, exercise:exercises(name, body_zone, category)",
+      "id, sets, reps, rest_seconds, rpe_target, coach_notes, order_index, session_id, exercise:exercises(name, body_zone, category)",
     )
-    .eq("session_id", session.id)
-    .order("order_index", { ascending: true });
+    .eq("session_id", session.id as never)
+    .order("order_index", { ascending: true })) as {
+    data: SessionExercise[] | null;
+  };
 
   return {
-    profile,
+    profile: studentProfile,
     plan,
     session,
     exercises: sessionExercises ?? [],
@@ -234,12 +260,12 @@ export default async function StudentPage({ searchParams }: StudentPageProps) {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-zinc-900">
+        <h1 className="text-2xl font-semibold text-foreground">
           Sesión de hoy
         </h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           {profile.full_name
             ? `Hola, ${profile.full_name}.`
             : "Hola, preparado para entrenar hoy."}
@@ -255,31 +281,31 @@ export default async function StudentPage({ searchParams }: StudentPageProps) {
       ) : null}
 
       {!plan ? (
-        <div className="rounded-lg bg-white p-6 text-sm text-zinc-600 shadow-sm">
+        <div className="rounded-lg bg-card p-6 text-sm text-muted-foreground shadow-sm">
           No tienes un plan de entrenamiento activo asignado.
         </div>
       ) : null}
 
       {plan && !session ? (
-        <div className="rounded-lg bg-white p-6 text-sm text-zinc-600 shadow-sm">
+        <div className="rounded-lg bg-card p-6 text-sm text-muted-foreground shadow-sm">
           No hay una sesión programada para hoy en tu plan actual.
         </div>
       ) : null}
 
       {plan && session ? (
         <div className="space-y-4">
-          <div className="flex flex-col gap-1 rounded-lg bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+          <div className="flex flex-col gap-1 rounded-lg bg-card p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
               Plan activo
             </p>
-            <p className="text-sm font-semibold text-zinc-900">{plan.name}</p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-sm font-semibold text-foreground">{plan.name}</p>
+            <p className="text-xs text-muted-foreground">
               Semana {session.week_number} · {session.day_name}
             </p>
           </div>
 
           <div className="space-y-4">
-            {(exercises as any[]).map((exercise) => {
+            {exercises.map((exercise) => {
               const sets = exercise.sets ?? 0;
               const targetReps = parseRepsString(exercise.reps, exercise.sets);
 
@@ -287,7 +313,7 @@ export default async function StudentPage({ searchParams }: StudentPageProps) {
                 <form
                   key={exercise.id}
                   action={logWorkout}
-                  className="rounded-lg bg-white p-4 shadow-sm"
+                  className="rounded-lg bg-card p-4 shadow-sm"
                 >
                   <input
                     type="hidden"
@@ -300,37 +326,33 @@ export default async function StudentPage({ searchParams }: StudentPageProps) {
                     value={sets}
                   />
 
-                  <div className="flex flex-col gap-1 border-b border-zinc-100 pb-3">
+                  <div className="flex flex-col gap-1 border-b border-border pb-3">
                     <div className="flex items-baseline justify-between">
                       <div>
-                        <p className="text-sm font-semibold text-zinc-900">
+                        <p className="text-sm font-semibold text-foreground">
                           {exercise.exercise?.name ?? "Ejercicio"}
                         </p>
-                        <p className="text-xs text-zinc-500">
+                        <p className="text-xs text-muted-foreground">
                           {exercise.exercise?.body_zone
-                            ? (BODY_ZONE_LABELS as any)[
-                                exercise.exercise.body_zone as any
-                              ]
+                            ? BODY_ZONE_LABELS[exercise.exercise.body_zone]
                             : null}
                           {exercise.exercise?.body_zone &&
                           exercise.exercise.category
                             ? " · "
                             : null}
                           {exercise.exercise?.category
-                            ? (EXERCISE_CATEGORY_LABELS as any)[
-                                exercise.exercise.category as any
-                              ]
+                            ? EXERCISE_CATEGORY_LABELS[exercise.exercise.category]
                             : null}
                         </p>
                       </div>
                       {exercise.rpe_target ? (
-                        <span className="text-xs font-medium text-zinc-500">
+                        <span className="text-xs font-medium text-muted-foreground">
                           RPE objetivo {exercise.rpe_target}
                         </span>
                       ) : null}
                     </div>
                     {exercise.coach_notes ? (
-                      <p className="text-xs text-zinc-500">
+                      <p className="text-xs text-muted-foreground">
                         Nota del coach: {exercise.coach_notes}
                       </p>
                     ) : null}
@@ -344,38 +366,38 @@ export default async function StudentPage({ searchParams }: StudentPageProps) {
                       return (
                         <div
                           key={setNumber}
-                          className="flex items-center justify-between gap-3 rounded-md bg-zinc-50 px-3 py-2"
+                          className="flex flex-col items-start justify-between gap-3 rounded-md bg-muted px-3 py-2 md:flex-row md:items-center"
                         >
                           <div className="flex items-center gap-3">
-                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-zinc-900 text-xs font-semibold text-white">
+                            <span className="flex h-6 w-6 items-center justify-center rounded-full bg-primary text-xs font-semibold text-primary-foreground">
                               {setNumber}
                             </span>
-                            <div className="text-xs text-zinc-600">
+                            <div className="text-xs text-muted-foreground">
                               <p>
                                 Serie objetivo:{" "}
                                 {target ? `${target} reps` : "Sin objetivo"}
                               </p>
                               {exercise.rest_seconds ? (
-                                <p className="text-[11px] text-zinc-400">
+                                <p className="text-[11px] text-muted-foreground">
                                   Descanso {exercise.rest_seconds} s
                                 </p>
                               ) : null}
                             </div>
                           </div>
 
-                          <div className="flex flex-1 items-center justify-end gap-2">
+                          <div className="flex flex-1 flex-wrap items-center justify-end gap-2">
                             <input
                               name={`weight_kg_${setNumber}`}
                               type="number"
                               step="0.5"
                               placeholder="Kg"
-                              className="w-20 rounded-md border border-zinc-300 px-2 py-1 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+                              className="w-20 rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                             />
                             <input
                               name={`reps_performed_${setNumber}`}
                               type="number"
                               placeholder="Reps"
-                              className="w-16 rounded-md border border-zinc-300 px-2 py-1 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+                              className="w-16 rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                             />
                             <input
                               name={`rpe_actual_${setNumber}`}
@@ -383,7 +405,7 @@ export default async function StudentPage({ searchParams }: StudentPageProps) {
                               min={1}
                               max={10}
                               placeholder="RPE"
-                              className="w-14 rounded-md border border-zinc-300 px-2 py-1 text-xs outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+                              className="w-14 rounded-md border border-input bg-background px-2 py-1 text-xs outline-none focus:border-primary focus:ring-1 focus:ring-primary"
                             />
                             <div
                               className={`ml-1 rounded-full px-2 py-1 text-[11px] font-medium ${getRpeColor(
@@ -401,7 +423,7 @@ export default async function StudentPage({ searchParams }: StudentPageProps) {
                   <div className="mt-3 flex justify-end">
                     <button
                       type="submit"
-                      className="rounded-md bg-zinc-900 px-3 py-1.5 text-xs font-medium text-white transition hover:bg-zinc-800"
+                      className="rounded-md bg-primary px-3 py-1.5 text-xs font-medium text-primary-foreground transition hover:bg-primary/90"
                     >
                       Guardar ejercicio
                     </button>

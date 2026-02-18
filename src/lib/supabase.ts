@@ -18,10 +18,25 @@ export function createSupabaseBrowserClient() {
   return browserClient;
 }
 
-export function createSupabaseServerClient() {
+export async function createSupabaseServerClient() {
   if (!supabaseUrl || !supabaseAnonKey) {
     throw new Error("Missing Supabase environment variables");
   }
 
-  return createServerClient<Database>(supabaseUrl, supabaseAnonKey);
+  const { cookies } = await import("next/headers");
+  const cookieStore = await cookies();
+
+  return createServerClient<Database>(supabaseUrl, supabaseAnonKey, {
+    cookies: {
+      get(name) {
+        return cookieStore.get(name)?.value;
+      },
+      set(name, value, options) {
+        cookieStore.set(name, value, options);
+      },
+      remove(name, options) {
+        cookieStore.set(name, "", { ...(options ?? {}), maxAge: 0 });
+      },
+    },
+  });
 }

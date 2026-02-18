@@ -14,7 +14,7 @@ export function ExerciseListClient({ initialExercises }: Props) {
 
   if (!exercises || exercises.length === 0) {
     return (
-      <p className="text-sm text-zinc-500">
+      <p className="text-sm text-muted-foreground">
         Aún no has creado ningún ejercicio.
       </p>
     );
@@ -25,11 +25,13 @@ export function ExerciseListClient({ initialExercises }: Props) {
       {exercises.map((exercise) => (
         <div
           key={exercise.id}
-          className="flex items-center justify-between rounded-md border border-zinc-100 px-3 py-2"
+          className="flex items-center justify-between rounded-md border border-border bg-background px-3 py-2"
         >
           <div>
-            <p className="text-sm font-medium text-zinc-900">{exercise.name}</p>
-            <p className="text-xs text-zinc-500">
+            <p className="text-sm font-medium text-foreground">
+              {exercise.name}
+            </p>
+            <p className="text-xs text-muted-foreground">
               {exercise.body_zone
                 ? BODY_ZONE_LABELS[exercise.body_zone]
                 : "Sin zona"}

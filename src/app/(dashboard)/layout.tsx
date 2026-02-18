@@ -23,22 +23,30 @@ async function getCurrentUserRole() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/auth?view=login");
   }
 
-  const { data: profile } = (await supabase
+  const { data: profile } = await supabase
     .from("profiles")
     .select("full_name, role")
-    .eq("id", user.id as any)
-    .single()) as any;
+    .eq("id", user.id as never)
+    .single();
 
-  if (!profile?.role) {
-    redirect("/login");
+  const typedProfile =
+    profile as
+      | {
+          full_name: string | null;
+          role: UserRole | null;
+        }
+      | null;
+
+  if (!typedProfile?.role) {
+    redirect("/auth?view=login");
   }
 
   return {
-    role: profile.role as UserRole,
-    fullName: profile.full_name ?? "",
+    role: typedProfile.role,
+    fullName: typedProfile.full_name ?? "",
   };
 }
 
@@ -67,13 +75,13 @@ export default async function DashboardLayout({
   const navItems = getNavItems(role);
 
   return (
-    <div className="flex min-h-screen bg-zinc-100">
-      <aside className="flex w-64 flex-col border-r border-zinc-200 bg-white px-4 py-6">
+    <div className="flex min-h-screen bg-background">
+      <aside className="flex w-64 flex-col border-r border-border bg-card px-4 py-6">
         <div className="mb-8 flex items-center gap-2">
-          <Dumbbell className="h-6 w-6 text-zinc-900" />
+          <Dumbbell className="h-6 w-6 text-primary" />
           <div>
-            <p className="text-sm font-semibold text-zinc-900">Gymapp</p>
-            <p className="text-xs text-zinc-500">{getRoleLabel(role)}</p>
+            <p className="text-sm font-semibold text-foreground">Gymapp</p>
+            <p className="text-xs text-muted-foreground">{getRoleLabel(role)}</p>
           </div>
         </div>
 
@@ -82,33 +90,33 @@ export default async function DashboardLayout({
             <a
               key={item.href}
               href={item.href}
-              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-primary/10 hover:text-foreground"
             >
               {role === "COACH" && item.href === "/coach" ? (
-                <CalendarClock className="h-4 w-4" />
+                <CalendarClock className="h-4 w-4 text-primary" />
               ) : null}
               {role === "COACH" && item.href === "/coach/library" ? (
-                <BookOpen className="h-4 w-4" />
+                <BookOpen className="h-4 w-4 text-primary" />
               ) : null}
               {role === "STUDENT" && item.href === "/student" ? (
-                <CalendarClock className="h-4 w-4" />
+                <CalendarClock className="h-4 w-4 text-primary" />
               ) : null}
               <span>{item.label}</span>
             </a>
           ))}
         </nav>
 
-        <div className="mt-6 border-t border-zinc-200 pt-4">
-          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+        <div className="mt-6 border-t border-border pt-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
             Sesión
           </p>
-          <p className="mt-1 text-sm font-medium text-zinc-800">
+          <p className="mt-1 text-sm font-medium text-foreground">
             {fullName || "Usuario"}
           </p>
         </div>
       </aside>
 
-      <main className="flex-1">{children}</main>
+      <main className="flex-1 bg-background">{children}</main>
     </div>
   );
 }

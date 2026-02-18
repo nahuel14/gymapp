@@ -15,9 +15,10 @@ export function StudentPlanSummaryClient() {
   }
 
   return (
-    <div className="rounded-lg bg-zinc-50 p-3 text-xs text-zinc-600">
+    <div className="rounded-lg bg-muted p-3 text-xs text-muted-foreground">
       <p>
-        Plan activo (cliente): <span className="font-medium">{plan.name}</span>
+        Plan activo (cliente):{" "}
+        <span className="font-medium text-foreground">{plan.name}</span>
       </p>
       <p>
         Semana {session.week_number} · {session.day_name}

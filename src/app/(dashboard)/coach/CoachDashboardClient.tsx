@@ -16,16 +16,16 @@ export function CoachDashboardClient({ errorKey }: Props) {
 
   if (isLoading && !data) {
     return (
-      <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
-        <p className="text-sm text-zinc-500">Cargando estudiantes...</p>
+      <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
+        <p className="text-sm text-muted-foreground">Cargando estudiantes...</p>
       </div>
     );
   }
 
   if (!data) {
     return (
-      <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
-        <p className="text-sm text-zinc-500">
+      <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
+        <p className="text-sm text-muted-foreground">
           No se pudo cargar la información del coach.
         </p>
       </div>
@@ -35,12 +35,12 @@ export function CoachDashboardClient({ errorKey }: Props) {
   const { coach, students } = data;
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-zinc-900">
+        <h1 className="text-2xl font-semibold text-foreground">
           Panel de estudiantes
         </h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           {coach.full_name
             ? `Hola, ${coach.full_name}.`
             : "Hola, revisa el estado de tus estudiantes."}
@@ -54,7 +54,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
       ) : null}
 
       {students.length === 0 ? (
-        <div className="rounded-lg bg-white p-6 text-sm text-zinc-600 shadow-sm">
+        <div className="rounded-lg bg-card p-6 text-sm text-muted-foreground shadow-sm">
           No tienes estudiantes con planes activos asignados.
         </div>
       ) : (
@@ -62,24 +62,24 @@ export function CoachDashboardClient({ errorKey }: Props) {
           {students.map((student) => (
             <div
               key={student.planId}
-              className="flex items-center justify-between rounded-lg bg-white p-4 shadow-sm"
+              className="flex flex-col items-start justify-between gap-3 rounded-lg bg-card p-4 shadow-sm md:flex-row md:items-center"
             >
               <div>
-                <p className="text-sm font-semibold text-zinc-900">
+                <p className="text-sm font-semibold text-foreground">
                   {student.studentName}
                 </p>
-                <p className="text-xs text-zinc-500">
+                <p className="text-xs text-muted-foreground">
                   Plan activo: {student.planName}
                 </p>
                 {student.startDate ? (
-                  <p className="text-xs text-zinc-400">
+                  <p className="text-xs text-muted-foreground">
                     Inicio: {new Date(student.startDate).toLocaleDateString()}
                   </p>
                 ) : null}
               </div>
               <button
                 type="button"
-                className="rounded-md border border-zinc-300 px-3 py-1.5 text-xs font-medium text-zinc-700 transition hover:border-zinc-900 hover:text-zinc-900"
+                className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-primary hover:text-primary-foreground"
               >
                 Ver detalle
               </button>

@@ -1,10 +1,13 @@
  "use client";
 import { useQuery } from "@tanstack/react-query";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import type { Tables } from "@/types/supabase";
+import type { Database, Tables } from "@/types/supabase";
 
-type Profile = Tables<"profiles">;
-type TrainingPlan = Tables<"training_plans">;
+type Profile = Pick<Tables<"profiles">, "id" | "role" | "full_name">;
+type TrainingPlan = Pick<
+  Tables<"training_plans">,
+  "id" | "name" | "start_date" | "is_active"
+>;
 type Session = Tables<"sessions">;
 type SessionExercise = Tables<"session_exercises"> & {
   exercise?: {
@@ -43,13 +46,15 @@ async function fetchStudentSession(): Promise<StudentSessionResult> {
     };
   }
 
-  const { data: profile } = (await supabase
+  const { data: profile } = await supabase
     .from("profiles")
     .select("id, role, full_name")
-    .eq("id", user.id as any)
-    .single()) as any;
+    .eq("id", user.id as Database["public"]["Tables"]["profiles"]["Row"]["id"])
+    .single();
 
-  if (!profile || profile.role !== "STUDENT") {
+  const typedProfile = profile as Profile | null;
+
+  if (!typedProfile || typedProfile.role !== "STUDENT") {
     return {
       profile: null,
       plan: null,
@@ -58,19 +63,22 @@ async function fetchStudentSession(): Promise<StudentSessionResult> {
     };
   }
 
-  const { data: plans } = (await supabase
+  const { data: plans } = await supabase
     .from("training_plans")
     .select("id, name, start_date, is_active")
-    .eq("student_id", user.id as any)
-    .eq("is_active", true as any)
+    .eq(
+      "student_id",
+      user.id as Database["public"]["Tables"]["training_plans"]["Row"]["student_id"],
+    )
+    .eq("is_active", true as never)
     .order("created_at", { ascending: false })
-    .limit(1)) as any;
+    .limit(1);
 
   const plan = plans?.[0] ?? null;
 
   if (!plan) {
     return {
-      profile,
+      profile: typedProfile,
       plan: null,
       session: null,
       exercises: [],
@@ -79,21 +87,21 @@ async function fetchStudentSession(): Promise<StudentSessionResult> {
 
   const todayName = getTodayName();
 
-  const { data: rawSessions } = (await supabase
+  const { data: rawSessions } = await supabase
     .from("sessions")
-    .select("id, day_name, week_number, is_completed")
+    .select("id, day_name, week_number, is_completed, plan_id, order_index")
     .eq("plan_id", plan.id)
-    .eq("day_name", todayName as any)
+    .eq("day_name", todayName as never)
     .order("week_number", { ascending: true })
-    .order("order_index", { ascending: true })) as any;
+    .order("order_index", { ascending: true });
 
-  const sessions = (rawSessions ?? []) as any[];
+  const sessions = (rawSessions ?? []) as Tables<"sessions">[];
 
-  const session = sessions?.[0] ?? null;
+  const session = sessions[0] ?? null;
 
   if (!session) {
     return {
-      profile,
+      profile: typedProfile,
       plan,
       session: null,
       exercises: [],
@@ -105,11 +113,14 @@ async function fetchStudentSession(): Promise<StudentSessionResult> {
     .select(
       "id, sets, reps, rest_seconds, rpe_target, coach_notes, order_index, exercise:exercises(name, body_zone, category)",
     )
-    .eq("session_id", session.id)
+    .eq(
+      "session_id",
+      session.id as never,
+    )
     .order("order_index", { ascending: true });
 
   return {
-    profile,
+    profile: typedProfile,
     plan,
     session,
     exercises: (sessionExercises ?? []) as SessionExercise[],

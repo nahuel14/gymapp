@@ -17,6 +17,9 @@ type LibraryPageProps = {
 type BodyZone = Database["public"]["Enums"]["body_zone"];
 type ExerciseCategory = Database["public"]["Enums"]["exercise_category"];
 type Exercise = Tables<"exercises">;
+type ExercisesResponse = {
+  data: Exercise[] | null;
+};
 
 async function ensureCoach() {
   const supabase = await createSupabaseServerClient();
@@ -26,20 +29,28 @@ async function ensureCoach() {
   } = await supabase.auth.getUser();
 
   if (!user) {
-    redirect("/login");
+    redirect("/auth?view=login");
   }
 
-  const { data: profile } = (await supabase
+  const { data: profile } = await supabase
     .from("profiles")
     .select("role, full_name")
-    .eq("id", user.id as any)
-    .single()) as any;
+    .eq("id", user.id as never)
+    .single();
 
-  if (!profile || profile.role !== "COACH") {
-    redirect("/login");
+  const coachProfile =
+    profile as
+      | {
+          role: Database["public"]["Enums"]["user_role"] | null;
+          full_name: string | null;
+        }
+      | null;
+
+  if (!coachProfile || coachProfile.role !== "COACH") {
+    redirect("/auth?view=login");
   }
 
-  return { supabase, coach: profile };
+  return { supabase, coach: coachProfile };
 }
 
 async function createExercise(formData: FormData) {
@@ -89,7 +100,7 @@ async function createExercise(formData: FormData) {
     video_url: videoUrl,
   };
 
-  const { error } = await supabase.from("exercises").insert(insert as any);
+  const { error } = await supabase.from("exercises").insert(insert as never);
 
   if (error) {
     redirect("/coach/library?error=save");
@@ -102,14 +113,14 @@ async function createExercise(formData: FormData) {
 async function getExercises(): Promise<Exercise[]> {
   const { supabase } = await ensureCoach();
 
-  const response = await supabase
+  const response = (await supabase
     .from("exercises")
     .select("id, name, body_zone, category, created_at")
-    .order("created_at", { ascending: false });
+    .order("created_at", { ascending: false })) as ExercisesResponse;
 
-  const data = (response.data ?? []) as any[];
+  const data = response.data ?? [];
 
-  return data as Exercise[];
+  return data;
 }
 
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
@@ -126,18 +137,18 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   }
 
   return (
-    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-6 py-8">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-zinc-900">
+        <h1 className="text-2xl font-semibold text-foreground">
           Librería de ejercicios
         </h1>
-        <p className="text-sm text-zinc-500">
+        <p className="text-sm text-muted-foreground">
           Crea y gestiona los ejercicios disponibles para tus planes.
         </p>
       </header>
 
-      <section className="rounded-lg bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-900">
+      <section className="rounded-lg bg-card p-4 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
           Nuevo ejercicio
         </h2>
 
@@ -151,7 +162,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           <div className="space-y-1 md:col-span-2">
             <label
               htmlFor="name"
-              className="block text-xs font-medium text-zinc-800"
+              className="block text-xs font-medium text-foreground"
             >
               Nombre
             </label>
@@ -159,14 +170,14 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               id="name"
               name="name"
               required
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             />
           </div>
 
           <div className="space-y-1 md:col-span-2">
             <label
               htmlFor="description"
-              className="block text-xs font-medium text-zinc-800"
+              className="block text-xs font-medium text-foreground"
             >
               Descripción
             </label>
@@ -174,21 +185,21 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               id="description"
               name="description"
               rows={3}
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             />
           </div>
 
           <div className="space-y-1">
             <label
               htmlFor="body_zone"
-              className="block text-xs font-medium text-zinc-800"
+              className="block text-xs font-medium text-foreground"
             >
               Zona del cuerpo
             </label>
             <select
               id="body_zone"
               name="body_zone"
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             >
               <option value="">Sin especificar</option>
               {Object.entries(BODY_ZONE_LABELS).map(([value, label]) => (
@@ -202,14 +213,14 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           <div className="space-y-1">
             <label
               htmlFor="category"
-              className="block text-xs font-medium text-zinc-800"
+              className="block text-xs font-medium text-foreground"
             >
               Categoría
             </label>
             <select
               id="category"
               name="category"
-              className="mt-1 w-full rounded-md border border-zinc-300 bg-white px-3 py-2 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             >
               <option value="">Sin especificar</option>
               {Object.entries(EXERCISE_CATEGORY_LABELS).map(([value, label]) => (
@@ -223,7 +234,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
           <div className="space-y-1 md:col-span-2">
             <label
               htmlFor="video_url"
-              className="block text-xs font-medium text-zinc-800"
+              className="block text-xs font-medium text-foreground"
             >
               URL de video (opcional)
             </label>
@@ -231,14 +242,14 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               id="video_url"
               name="video_url"
               type="url"
-              className="mt-1 w-full rounded-md border border-zinc-300 px-3 py-2 text-sm outline-none focus:border-zinc-900 focus:ring-1 focus:ring-zinc-900"
+              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
             />
           </div>
 
           <div className="md:col-span-2">
             <button
               type="submit"
-              className="mt-2 inline-flex items-center rounded-md bg-zinc-900 px-4 py-2 text-sm font-medium text-white transition hover:bg-zinc-800"
+              className="mt-2 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
             >
               Guardar ejercicio
             </button>
@@ -246,8 +257,8 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
         </form>
       </section>
 
-      <section className="rounded-lg bg-white p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-semibold text-zinc-900">
+      <section className="rounded-lg bg-card p-4 shadow-sm">
+        <h2 className="mb-3 text-sm font-semibold text-foreground">
           Ejercicios creados
         </h2>
 
