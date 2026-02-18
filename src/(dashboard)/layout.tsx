@@ -1,0 +1,114 @@
+import type { ReactNode } from "react";
+import { redirect } from "next/navigation";
+import { Dumbbell, BookOpen, CalendarClock } from "lucide-react";
+import { createSupabaseServerClient } from "@/lib/supabase";
+import type { Database } from "@/types/supabase";
+
+type UserRole = Database["public"]["Enums"]["user_role"];
+
+type DashboardLayoutProps = {
+  children: ReactNode;
+};
+
+type NavItem = {
+  href: string;
+  label: string;
+};
+
+async function getCurrentUserRole() {
+  const supabase = await createSupabaseServerClient();
+
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  if (!user) {
+    redirect("/login");
+  }
+
+  const { data: profile } = (await supabase
+    .from("profiles")
+    .select("full_name, role")
+    .eq("id", user.id as any)
+    .single()) as any;
+
+  if (!profile?.role) {
+    redirect("/login");
+  }
+
+  return {
+    role: profile.role as UserRole,
+    fullName: profile.full_name ?? "",
+  };
+}
+
+function getNavItems(role: UserRole): NavItem[] {
+  if (role === "COACH") {
+    return [
+      { href: "/coach", label: "Estudiantes" },
+      { href: "/coach/library", label: "Librería de ejercicios" },
+    ];
+  }
+
+  return [{ href: "/student", label: "Sesión de hoy" }];
+}
+
+function getRoleLabel(role: UserRole) {
+  if (role === "COACH") {
+    return "Coach";
+  }
+  return "Estudiante";
+}
+
+export default async function DashboardLayout({
+  children,
+}: DashboardLayoutProps) {
+  const { role, fullName } = await getCurrentUserRole();
+  const navItems = getNavItems(role);
+
+  return (
+    <div className="flex min-h-screen bg-zinc-100">
+      <aside className="flex w-64 flex-col border-r border-zinc-200 bg-white px-4 py-6">
+        <div className="mb-8 flex items-center gap-2">
+          <Dumbbell className="h-6 w-6 text-zinc-900" />
+          <div>
+            <p className="text-sm font-semibold text-zinc-900">Gymapp</p>
+            <p className="text-xs text-zinc-500">{getRoleLabel(role)}</p>
+          </div>
+        </div>
+
+        <nav className="flex flex-1 flex-col gap-1">
+          {navItems.map((item) => (
+            <a
+              key={item.href}
+              href={item.href}
+              className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-zinc-700 transition hover:bg-zinc-100 hover:text-zinc-900"
+            >
+              {role === "COACH" && item.href === "/coach" ? (
+                <CalendarClock className="h-4 w-4" />
+              ) : null}
+              {role === "COACH" && item.href === "/coach/library" ? (
+                <BookOpen className="h-4 w-4" />
+              ) : null}
+              {role === "STUDENT" && item.href === "/student" ? (
+                <CalendarClock className="h-4 w-4" />
+              ) : null}
+              <span>{item.label}</span>
+            </a>
+          ))}
+        </nav>
+
+        <div className="mt-6 border-t border-zinc-200 pt-4">
+          <p className="text-xs font-medium uppercase tracking-wide text-zinc-400">
+            Sesión
+          </p>
+          <p className="mt-1 text-sm font-medium text-zinc-800">
+            {fullName || "Usuario"}
+          </p>
+        </div>
+      </aside>
+
+      <main className="flex-1">{children}</main>
+    </div>
+  );
+}
