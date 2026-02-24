@@ -9,9 +9,9 @@ import type { Database, Tables, TablesInsert } from "@/types/supabase";
 import { ExerciseListClient } from "./ExerciseListClient";
 
 type LibraryPageProps = {
-  searchParams?: {
+  searchParams: Promise<{
     error?: string;
-  };
+  }>;
 };
 
 type BodyZone = Database["public"]["Enums"]["body_zone"];
@@ -124,9 +124,10 @@ async function getExercises(): Promise<Exercise[]> {
 }
 
 export default async function LibraryPage({ searchParams }: LibraryPageProps) {
+  const params = await searchParams;
   const exercises = await getExercises();
 
-  const errorKey = searchParams?.error;
+  const errorKey = params.error;
 
   let errorMessage = "";
 

@@ -4,9 +4,9 @@ import type { Database } from "@/types/supabase";
 import { CoachDashboardClient } from "./CoachDashboardClient";
 
 export type CoachPageProps = {
-  searchParams?: {
+  searchParams: Promise<{
     error?: string;
-  };
+  }>;
 };
 
 async function ensureCoach() {
@@ -40,11 +40,12 @@ async function ensureCoach() {
 }
 
 export default async function CoachPage({ searchParams }: CoachPageProps) {
+  const params = await searchParams;
   await ensureCoach();
 
   return (
     <div className="bg-background">
-      <CoachDashboardClient errorKey={searchParams?.error} />
+      <CoachDashboardClient errorKey={params.error} />
     </div>
   );
 }

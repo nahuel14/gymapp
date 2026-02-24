@@ -1,5 +1,6 @@
  "use client";
 import { useCoachStudents } from "@/hooks/useCoachStudents";
+import Link from "next/link";
 
 type Props = {
   errorKey?: string;
@@ -77,12 +78,12 @@ export function CoachDashboardClient({ errorKey }: Props) {
                   </p>
                 ) : null}
               </div>
-              <button
-                type="button"
+              <Link
+                href={`/coach/student/${student.studentId}`}
                 className="rounded-md border border-border px-3 py-1.5 text-xs font-medium text-foreground transition hover:bg-primary hover:text-primary-foreground"
               >
                 Ver detalle
-              </button>
+              </Link>
             </div>
           ))}
         </div>
