@@ -34,7 +34,7 @@ async function ensureCoach() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("role, full_name")
+    .select("role, name, last_name")
     .eq("id", user.id as never)
     .single();
 
@@ -42,11 +42,12 @@ async function ensureCoach() {
     profile as
       | {
           role: Database["public"]["Enums"]["user_role"] | null;
-          full_name: string | null;
+          name: string | null;
+          last_name: string | null;
         }
       | null;
 
-  if (!coachProfile || coachProfile.role !== "COACH") {
+  if (!coachProfile || (coachProfile.role !== "COACH" && coachProfile.role !== "ADMIN")) {
     redirect("/auth?view=login");
   }
 

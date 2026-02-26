@@ -25,7 +25,7 @@ export default async function CoachStudentPage({ params }: PageProps) {
     .eq("id", user.id as any)
     .single();
 
-  if (!profile || profile.role !== "COACH") {
+  if (!profile || (profile.role !== "COACH" && profile.role !== "ADMIN")) {
     redirect("/auth?view=login");
   }
 

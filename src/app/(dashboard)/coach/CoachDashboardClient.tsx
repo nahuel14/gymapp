@@ -42,8 +42,8 @@ export function CoachDashboardClient({ errorKey }: Props) {
           Panel de estudiantes
         </h1>
         <p className="text-sm text-muted-foreground">
-          {coach.full_name
-            ? `Hola, ${coach.full_name}.`
+          {(coach as any).name
+            ? `Hola, ${(coach as any).name}.`
             : "Hola, revisa el estado de tus estudiantes."}
         </p>
       </header>

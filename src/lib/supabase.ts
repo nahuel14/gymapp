@@ -40,3 +40,18 @@ export async function createSupabaseServerClient() {
     },
   });
 }
+
+export function createSupabaseAdminClient() {
+  const serviceRoleKey = process.env.SUPABASE_SERVICE_ROLE_KEY;
+
+  if (!supabaseUrl || !serviceRoleKey) {
+    throw new Error("Missing Supabase Admin environment variables");
+  }
+
+  return createServerClient<Database>(supabaseUrl, serviceRoleKey, {
+    cookies: {
+      getAll() { return [] },
+      setAll() { }
+    },
+  });
+}

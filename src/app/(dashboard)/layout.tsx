@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { Dumbbell, BookOpen, CalendarClock } from "lucide-react";
+import { Dumbbell, BookOpen, CalendarClock, LayoutDashboard } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase";
 import type { Database } from "@/types/supabase";
 
@@ -28,14 +28,15 @@ async function getCurrentUserRole() {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("full_name, role")
+    .select("name, last_name, role")
     .eq("id", user.id as never)
     .single();
 
   const typedProfile =
     profile as
       | {
-          full_name: string | null;
+          name: string | null;
+          last_name: string | null;
           role: UserRole | null;
         }
       | null;
@@ -46,11 +47,19 @@ async function getCurrentUserRole() {
 
   return {
     role: typedProfile.role,
-    fullName: typedProfile.full_name ?? "",
+    fullName: `${typedProfile.name || ""} ${typedProfile.last_name || ""}`.trim(),
   };
 }
 
 function getNavItems(role: UserRole): NavItem[] {
+  if (role === "ADMIN") {
+    return [
+      { href: "/admin", label: "Administración" },
+      { href: "/coach", label: "Estudiantes" },
+      { href: "/coach/library", label: "Librería de ejercicios" },
+    ];
+  }
+
   if (role === "COACH") {
     return [
       { href: "/coach", label: "Estudiantes" },
@@ -62,6 +71,9 @@ function getNavItems(role: UserRole): NavItem[] {
 }
 
 function getRoleLabel(role: UserRole) {
+  if (role === "ADMIN") {
+    return "Administrador";
+  }
   if (role === "COACH") {
     return "Coach";
   }
@@ -92,10 +104,13 @@ export default async function DashboardLayout({
               href={item.href}
               className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-primary/10 hover:text-foreground"
             >
-              {role === "COACH" && item.href === "/coach" ? (
+              {item.href === "/admin" ? (
+                <LayoutDashboard className="h-4 w-4 text-primary" />
+              ) : null}
+              {(role === "COACH" || role === "ADMIN") && item.href === "/coach" ? (
                 <CalendarClock className="h-4 w-4 text-primary" />
               ) : null}
-              {role === "COACH" && item.href === "/coach/library" ? (
+              {(role === "COACH" || role === "ADMIN") && item.href === "/coach/library" ? (
                 <BookOpen className="h-4 w-4 text-primary" />
               ) : null}
               {role === "STUDENT" && item.href === "/student" ? (

@@ -47,6 +47,10 @@ async function loginWithPassword(formData: FormData) {
 
   const role = existingProfile?.role;
 
+  if (role === "ADMIN") {
+    redirect("/admin");
+  }
+
   if (role === "COACH") {
     redirect("/coach");
   }
@@ -93,6 +97,12 @@ async function signUpWithPassword(formData: FormData) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
+    options: {
+      data: {
+        name: firstName,
+        last_name: lastName,
+      },
+    },
   });
 
   if (error) {
@@ -123,11 +133,16 @@ async function signUpWithPassword(formData: FormData) {
       {
         id: data.user.id,
         email: data.user.email ?? null,
-        full_name: `${firstName} ${lastName}`.trim(),
+        name: firstName,
+        last_name: lastName,
         role,
-      },
+      } as any,
       { onConflict: "id" },
     );
+  }
+
+  if (role === "ADMIN") {
+    redirect("/admin");
   }
 
   if (role === "COACH") {
@@ -173,6 +188,8 @@ export default async function AuthPage({
   if (successKey === "signupPending") {
     successMessage =
       "Te enviamos un correo para confirmar tu cuenta. Revisa tu bandeja de entrada.";
+  } else if (successKey === "passwordUpdated") {
+    successMessage = "¡Contraseña actualizada! Ya puedes iniciar sesión con tu nueva clave.";
   } else if (errorKey === "password_mismatch") {
     errorMessage = "Las contraseñas no coinciden. Vuelve a intentarlo.";
   }
@@ -251,6 +268,15 @@ export default async function AuthPage({
               name="password"
               label="Contraseña"
             />
+
+            <div className="flex justify-end">
+              <a
+                href="/auth/forgot-password"
+                className="text-xs font-medium text-primary hover:underline"
+              >
+                ¿Olvidaste tu contraseña?
+              </a>
+            </div>
 
             <button
               type="submit"

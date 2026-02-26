@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import type { Database, Tables } from "@/types/supabase";
 
-type Profile = Pick<Tables<"profiles">, "id" | "role" | "full_name">;
+type Profile = Pick<Tables<"profiles">, "id" | "role" | "name" | "last_name">;
 type TrainingPlan = Pick<
   Tables<"training_plans">,
   "id" | "name" | "start_date" | "is_active"
@@ -48,7 +48,7 @@ async function fetchStudentSession(): Promise<StudentSessionResult> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, role, full_name")
+    .select("id, role, name, last_name")
     .eq("id", user.id as Database["public"]["Tables"]["profiles"]["Row"]["id"])
     .single();
 

@@ -41,7 +41,7 @@ type SessionExercise = Tables<"session_exercises"> & {
 
 type RoutineCalendarClientProps = {
   role: "COACH" | "STUDENT";
-  profile: { id: string; full_name: string | null } | null;
+  profile: { id: string; name: string | null; last_name: string | null } | null;
   plan: { id: number; name: string; start_date: string | null } | null;
   sessions: Session[];
   exercisesBySession: Record<number, SessionExercise[]>;
@@ -176,7 +176,7 @@ export function RoutineCalendarClient({
           {plan?.name || "Sin plan activo"}
         </h2>
         <p className="text-xs text-muted-foreground">
-          {profile?.full_name ? `Alumno: ${profile.full_name}` : ""}
+          {profile?.name ? `Alumno: ${profile.name} ${profile.last_name || ""}` : ""}
         </p>
       </div>
 

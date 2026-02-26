@@ -7,7 +7,7 @@ type TrainingPlan = Tables<"training_plans">;
 type Profile = Tables<"profiles">;
 
 type CoachStudentsResult = {
-  coach: Pick<Profile, "full_name" | "id" | "role">;
+  coach: Pick<Profile, "id" | "role"> & { name: string | null; last_name: string | null };
   students: {
     planId: TrainingPlan["id"];
     planName: TrainingPlan["name"];
@@ -30,24 +30,43 @@ async function fetchCoachStudents(): Promise<CoachStudentsResult | null> {
 
   const { data: profile } = await supabase
     .from("profiles")
-    .select("id, role, full_name")
+    .select("id, role, name, last_name")
     .eq("id", user.id)
     .single();
 
-  if (!profile || profile.role !== "COACH") {
+  if (!profile || ((profile as any).role !== "COACH" && (profile as any).role !== "ADMIN")) {
     return null;
   }
 
-  const { data: plans } = await supabase
+  const typedProfile = profile as any;
+
+  let plansQuery = supabase
     .from("training_plans")
     .select("id, name, student_id, is_active, start_date")
-    .eq("coach_id", user.id)
-    .eq("is_active", true)
-    .order("created_at", { ascending: false });
+    .eq("is_active", true);
+
+  if ((profile as any).role === "COACH") {
+    // Si es COACH, filtrar por la tabla intermedia coach_students
+    const { data: studentAssignments } = await (supabase as any)
+      .from("coach_students")
+      .select("student_id")
+      .eq("coach_id", user.id);
+
+    const assignedStudentIds = (studentAssignments as any[])?.map(a => a.student_id) || [];
+    
+    if (assignedStudentIds.length === 0) {
+      return { coach: typedProfile, students: [] };
+    }
+
+    plansQuery = plansQuery.in("student_id", assignedStudentIds);
+  }
+  // Si es ADMIN, no filtramos (ve todos los planes activos)
+
+  const { data: plans } = await plansQuery.order("created_at", { ascending: false });
 
   if (!plans || plans.length === 0) {
     return {
-      coach: profile,
+      coach: typedProfile,
       students: [],
     };
   }
@@ -56,37 +75,38 @@ async function fetchCoachStudents(): Promise<CoachStudentsResult | null> {
     new Set(plans.map((plan) => plan.student_id).filter(Boolean)),
   ) as string[];
 
-  let studentsById = new Map<string, { full_name: string | null }>();
+  let studentsById = new Map<string, { name: string | null; last_name: string | null }>();
 
   if (studentIds.length > 0) {
     const { data: students } = await supabase
       .from("profiles")
-      .select("id, full_name")
+      .select("id, name, last_name")
       .in("id", studentIds);
 
     if (students) {
       studentsById = new Map(
-        students.map((student) => [student.id, { full_name: student.full_name }]),
+        (students as any[]).map((student) => [student.id, { name: student.name, last_name: student.last_name }]),
       );
     }
   }
 
   const students = plans.map((plan) => {
     const student = studentsById.get(plan.student_id) ?? {
-      full_name: null,
+      name: null,
+      last_name: null,
     };
 
     return {
       planId: plan.id,
       planName: plan.name,
       studentId: plan.student_id,
-      studentName: student.full_name ?? "Sin nombre",
+      studentName: `${student.name || ""} ${student.last_name || ""}`.trim() || "Sin nombre",
       startDate: plan.start_date,
     };
   });
 
   return {
-    coach: profile,
+    coach: typedProfile,
     students,
   };
 }
