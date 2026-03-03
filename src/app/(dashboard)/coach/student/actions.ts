@@ -1,6 +1,6 @@
  "use server";
 
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
 
 export async function addWeekToPlan(planId: number, nextWeekNumber: number) {
@@ -94,6 +94,41 @@ export async function deleteExerciseFromSession(exerciseSessionId: number) {
   revalidatePath("/coach/student/[studentId]", "page");
   revalidatePath("/student", "page");
   return { success: true };
+}
+
+export async function createTrainingPlan(studentId: string, planName: string, startDate: string) {
+  // 1. Cliente normal: Lee las cookies y averigua quién está logueado
+  const supabaseAuth = await createSupabaseServerClient();
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  
+  if (!user) throw new Error("No autenticado");
+
+  // 2. Cliente administrador: Usa la llave maestra para saltar la seguridad (RLS)
+  const supabaseAdmin = createSupabaseAdminClient();
+
+  // Desactivar planes anteriores del estudiante
+  await supabaseAdmin
+    .from("training_plans")
+    .update({ is_active: false } as any)
+    .eq("student_id", studentId as any);
+
+  // Insertar nuevo plan
+  const { data: plan, error } = await supabaseAdmin
+    .from("training_plans")
+    .insert({
+      student_id: studentId,
+      coach_id: user.id, // Acá usamos el ID que sacamos en el paso 1
+      name: planName,
+      start_date: startDate,
+      is_active: true
+    } as any)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  revalidatePath("/coach");
+  return { success: true, planId: plan.id };
 }
 
 export async function updateExerciseInSession(
