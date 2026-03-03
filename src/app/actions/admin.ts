@@ -88,6 +88,46 @@ export async function updateUserRole(userId: string, newRole: UserRole) {
   return { success: true };
 }
 
+export async function updateOwnProfile(name: string, lastName: string) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await supabase
+    .from("profiles")
+    .update({ name, last_name: lastName } as any)
+    .eq("id", user.id as any);
+
+  if (error) throw error;
+
+  revalidatePath("/profile");
+  revalidatePath("/", "layout");
+  return { success: true };
+}
+
+export async function updateUserAsAdmin(userId: string, name: string, lastName: string, role: UserRole) {
+  await ensureAdmin();
+  const adminClient = createSupabaseAdminClient();
+
+  const { error } = await adminClient
+    .from("profiles")
+    .update({ 
+      name, 
+      last_name: lastName, 
+      role: role as any 
+    } as any)
+    .eq("id", userId as any);
+
+  if (error) {
+    console.error("Error updating user as admin:", error);
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/admin/dashboard");
+  return { success: true };
+}
+
 export async function getCoachStudentAssignments() {
   const { supabase } = await ensureAdmin();
 

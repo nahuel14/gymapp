@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { Dumbbell, BookOpen, CalendarClock, LayoutDashboard } from "lucide-react";
+import { Dumbbell, BookOpen, CalendarClock, LayoutDashboard, UserCircle } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase";
 import type { Database } from "@/types/supabase";
 
@@ -52,11 +52,16 @@ async function getCurrentUserRole() {
 }
 
 function getNavItems(role: UserRole): NavItem[] {
+  const commonItems: NavItem[] = [
+    { href: "/profile", label: "Mi Perfil" },
+  ];
+
   if (role === "ADMIN") {
     return [
-      { href: "/admin", label: "Administración" },
+      { href: "/admin/dashboard", label: "Administración" },
       { href: "/coach", label: "Estudiantes" },
       { href: "/coach/library", label: "Librería de ejercicios" },
+      ...commonItems,
     ];
   }
 
@@ -64,10 +69,14 @@ function getNavItems(role: UserRole): NavItem[] {
     return [
       { href: "/coach", label: "Estudiantes" },
       { href: "/coach/library", label: "Librería de ejercicios" },
+      ...commonItems,
     ];
   }
 
-  return [{ href: "/student", label: "Sesión de hoy" }];
+  return [
+    { href: "/student", label: "Sesión de hoy" },
+    ...commonItems,
+  ];
 }
 
 function getRoleLabel(role: UserRole) {
@@ -104,7 +113,7 @@ export default async function DashboardLayout({
               href={item.href}
               className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium text-muted-foreground transition hover:bg-primary/10 hover:text-foreground"
             >
-              {item.href === "/admin" ? (
+              {item.href === "/admin/dashboard" ? (
                 <LayoutDashboard className="h-4 w-4 text-primary" />
               ) : null}
               {(role === "COACH" || role === "ADMIN") && item.href === "/coach" ? (
@@ -115,6 +124,9 @@ export default async function DashboardLayout({
               ) : null}
               {role === "STUDENT" && item.href === "/student" ? (
                 <CalendarClock className="h-4 w-4 text-primary" />
+              ) : null}
+              {item.href === "/profile" ? (
+                <UserCircle className="h-4 w-4 text-primary" />
               ) : null}
               <span>{item.label}</span>
             </a>
