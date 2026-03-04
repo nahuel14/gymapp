@@ -28,7 +28,7 @@ export async function addWeekToPlan(planId: number, nextWeekNumber: number) {
   return { success: true };
 }
 
-export async function addDayToWeek(planId: number, weekNumber: number, nextOrderIndex: number, dayName: string = "Monday") {
+export async function addDayToWeek(planId: number, weekNumber: number, nextOrderIndex: number, dayName: string = "Monday", date?: string) {
   const supabase = await createSupabaseServerClient();
 
   const { error } = await supabase
@@ -38,14 +38,159 @@ export async function addDayToWeek(planId: number, weekNumber: number, nextOrder
       week_number: weekNumber,
       day_name: dayName,
       order_index: nextOrderIndex,
-      is_completed: false
-    });
+      is_completed: false,
+      date: date || null
+    } as any);
 
   if (error) throw error;
 
   revalidatePath("/coach/student/[studentId]", "page");
   revalidatePath("/student", "page");
   return { success: true };
+}
+
+export async function duplicateSession(sessionId: number, targetDate: string) {
+  const supabase = await createSupabaseServerClient();
+
+  // 1. Obtener sesión original
+  const { data: originalSession, error: fetchSessionError } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .single();
+
+  if (fetchSessionError || !originalSession) throw new Error("No se encontró la sesión original");
+
+  // 2. Crear nueva sesión
+  const { data: newSession, error: createSessionError } = await supabase
+    .from("sessions")
+    .insert({
+      plan_id: originalSession.plan_id,
+      week_number: originalSession.week_number,
+      day_name: originalSession.day_name,
+      order_index: (originalSession.order_index ?? 0) + 1, // O alguna lógica de orden
+      is_completed: false,
+      date: targetDate
+    } as any)
+    .select()
+    .single();
+
+  if (createSessionError || !newSession) throw createSessionError;
+
+  // 3. Obtener ejercicios originales
+  const { data: exercises, error: fetchExError } = await supabase
+    .from("session_exercises")
+    .select("*")
+    .eq("session_id", sessionId);
+
+  if (fetchExError) throw fetchExError;
+
+  // 4. Duplicar ejercicios
+  if (exercises && exercises.length > 0) {
+    const duplicatedExercises = exercises.map((ex: any) => ({
+      session_id: newSession.id,
+      exercise_id: ex.exercise_id,
+      target_sets: ex.target_sets,
+      target_reps: ex.target_reps,
+      target_weight: ex.target_weight,
+      target_rpe: ex.target_rpe,
+      rest_seconds: ex.rest_seconds,
+      coach_notes: ex.coach_notes,
+      order_index: ex.order_index
+    }));
+
+    const { error: insertExError } = await supabase
+      .from("session_exercises")
+      .insert(duplicatedExercises as any);
+
+    if (insertExError) throw insertExError;
+  }
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+  return { success: true, newSessionId: newSession.id };
+}
+
+export async function duplicatePlan(planId: number, targetStudentId?: string) {
+  const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
+
+  // 1. Obtener plan original
+  const { data: originalPlan, error: fetchPlanError } = await supabase
+    .from("training_plans")
+    .select("*")
+    .eq("id", planId)
+    .single();
+
+  if (fetchPlanError || !originalPlan) throw new Error("No se encontró el plan original");
+
+  // 2. Crear nuevo plan
+  const { data: newPlan, error: createPlanError } = await adminClient
+    .from("training_plans")
+    .insert({
+      name: targetStudentId ? originalPlan.name : `${originalPlan.name} (Copia)`,
+      coach_id: originalPlan.coach_id,
+      student_id: targetStudentId || null,
+      is_active: !!targetStudentId,
+      is_template: !targetStudentId,
+      start_date: originalPlan.start_date
+    } as any)
+    .select()
+    .single();
+
+  if (createPlanError || !newPlan) throw createPlanError;
+
+  // 3. Obtener sesiones originales
+  const { data: sessions, error: fetchSessionsError } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("plan_id", planId);
+
+  if (fetchSessionsError) throw fetchSessionsError;
+
+  // 4. Duplicar sesiones y sus ejercicios en cascada
+  for (const session of (sessions || [])) {
+    const s = session as any;
+    const { data: newSession, error: sErr } = await adminClient
+      .from("sessions")
+      .insert({
+        plan_id: newPlan.id,
+        week_number: s.week_number,
+        day_name: s.day_name,
+        order_index: s.order_index,
+        is_completed: false,
+        date: s.date
+      } as any)
+      .select()
+      .single();
+
+    if (sErr || !newSession) continue;
+
+    const { data: exercises } = await supabase
+      .from("session_exercises")
+      .select("*")
+      .eq("session_id", session.id);
+
+    if (exercises && exercises.length > 0) {
+      const duplicatedEx = exercises.map((ex: any) => ({
+        session_id: newSession.id,
+        exercise_id: ex.exercise_id,
+        target_sets: ex.target_sets,
+        target_reps: ex.target_reps,
+        target_weight: ex.target_weight,
+        target_rpe: ex.target_rpe,
+        rest_seconds: ex.rest_seconds,
+        coach_notes: ex.coach_notes,
+        order_index: ex.order_index
+      }));
+
+      await adminClient.from("session_exercises").insert(duplicatedEx as any);
+    }
+  }
+
+  revalidatePath("/coach");
+  revalidatePath("/coach/student/[studentId]", "page");
+  return { success: true, newPlanId: newPlan.id };
 }
 
 export async function addExerciseToSession(
