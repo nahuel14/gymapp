@@ -29,6 +29,7 @@ import {
   updateExerciseInSession 
 } from "./actions";
 import { useExercises } from "@/hooks/useExercises";
+import { ExerciseExcelGrid } from "./ExerciseExcelGrid";
 
 type Session = Tables<"sessions">;
 type SessionExercise = Tables<"session_exercises"> & {
@@ -66,9 +67,10 @@ export function RoutineCalendarClient({
   // State for new exercise form
   const [newExForm, setNewExForm] = useState({
     exerciseId: "",
-    sets: 3,
-    reps: "10-12",
-    rpe: 8,
+    target_sets: 3,
+    target_reps: [10, 10, 10],
+    target_weight: [null, null, null] as (number | null)[],
+    target_rpe: 8,
     rest: 60,
     notes: ""
   });
@@ -116,19 +118,33 @@ export function RoutineCalendarClient({
 
   const handleAddExercise = async () => {
     if (!selectedDayId || !newExForm.exerciseId) return;
+
     startTransition(async () => {
-      await addExerciseToSession(
-        selectedDayId,
-        Number(newExForm.exerciseId),
-        newExForm.sets,
-        newExForm.reps,
-        newExForm.rpe,
-        newExForm.rest,
-        newExForm.notes
-      );
-      await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
-      setIsAddingExercise(false);
-      setNewExForm({ exerciseId: "", sets: 3, reps: "10-12", rpe: 8, rest: 60, notes: "" });
+      try {
+        await addExerciseToSession(
+          selectedDayId,
+          Number(newExForm.exerciseId),
+          newExForm.target_sets,
+          newExForm.target_reps,
+          newExForm.target_weight,
+          newExForm.target_rpe,
+          newExForm.rest,
+          newExForm.notes
+        );
+        setIsAddingExercise(false);
+        setNewExForm({
+          exerciseId: "",
+          target_sets: 3,
+          target_reps: ["10-12", "10-12", "10-12"],
+          target_weight: ["", "", ""],
+          target_rpe: 8,
+          rest: 60,
+          notes: ""
+        });
+        await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      } catch (error) {
+        console.error("Error adding exercise:", error);
+      }
     });
   };
 
@@ -274,206 +290,156 @@ export function RoutineCalendarClient({
               </button>
             </div>
             
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-black uppercase text-muted-foreground">Ejercicio</label>
-                <select 
-                  className="w-full rounded-lg border border-border bg-background p-2 text-sm outline-none focus:ring-2 focus:ring-primary"
-                  value={newExForm.exerciseId}
-                  onChange={(e) => setNewExForm({...newExForm, exerciseId: e.target.value})}
-                >
-                  <option value="">Seleccionar...</option>
-                  {allExercises.map(ex => (
-                    <option key={ex.id} value={ex.id}>{ex.name}</option>
-                  ))}
-                </select>
-              </div>
-              <div className="grid grid-cols-4 gap-2">
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-black uppercase text-muted-foreground text-center">Sets</label>
-                  <input type="number" className="w-full rounded-lg border border-border bg-background p-2 text-sm text-center" value={newExForm.sets} onChange={e => setNewExForm({...newExForm, sets: Number(e.target.value)})} />
+            <div className="flex flex-col gap-5">
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {/* Selección de Ejercicio */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Ejercicio</label>
+                  <select 
+                    className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-bold text-zinc-100 outline-none focus:border-yellow-400 transition-all appearance-none"
+                    value={newExForm.exerciseId}
+                    onChange={(e) => setNewExForm({...newExForm, exerciseId: e.target.value})}
+                  >
+                    <option value="">Seleccionar ejercicio...</option>
+                    {allExercises.map(ex => (
+                      <option key={ex.id} value={ex.id}>{ex.name}</option>
+                    ))}
+                  </select>
                 </div>
-                <div className="flex flex-col gap-1 col-span-2">
-                  <label className="text-[10px] font-black uppercase text-muted-foreground text-center">Reps</label>
-                  <input type="text" className="w-full rounded-lg border border-border bg-background p-2 text-sm text-center" value={newExForm.reps} onChange={e => setNewExForm({...newExForm, reps: e.target.value})} />
+
+                {/* Configuración Base */}
+                <div className="grid grid-cols-3 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Sets</label>
+                    <input 
+                      type="number" 
+                      className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-black text-center text-yellow-400 outline-none focus:border-yellow-400 transition-all" 
+                      value={newExForm.target_sets} 
+                      onChange={e => {
+                        const sets = Math.max(1, Math.min(10, Number(e.target.value)));
+                        setNewExForm({
+                          ...newExForm, 
+                          target_sets: sets,
+                          target_reps: Array(sets).fill(newExForm.target_reps[0] || 10),
+                          target_weight: Array(sets).fill(null)
+                        });
+                      }} 
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE</label>
+                    <input 
+                      type="number" 
+                      step="0.5"
+                      className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-black text-center text-zinc-100 outline-none focus:border-yellow-400 transition-all" 
+                      value={newExForm.target_rpe} 
+                      onChange={e => setNewExForm({...newExForm, target_rpe: Number(e.target.value)})} 
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Pausa</label>
+                    <input 
+                      type="number" 
+                      className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-black text-center text-zinc-100 outline-none focus:border-yellow-400 transition-all" 
+                      value={newExForm.rest} 
+                      onChange={e => setNewExForm({...newExForm, rest: Number(e.target.value)})} 
+                    />
+                  </div>
                 </div>
-                <div className="flex flex-col gap-1">
-                  <label className="text-[10px] font-black uppercase text-muted-foreground text-center">RPE</label>
-                  <input type="number" className="w-full rounded-lg border border-border bg-background p-2 text-sm text-center" value={newExForm.rpe} onChange={e => setNewExForm({...newExForm, rpe: Number(e.target.value)})} />
-                </div>
               </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-black uppercase text-muted-foreground">Pausa (seg)</label>
-                <input type="number" className="w-full rounded-lg border border-border bg-background p-2 text-sm" value={newExForm.rest} onChange={e => setNewExForm({...newExForm, rest: Number(e.target.value)})} />
-              </div>
-              <div className="flex flex-col gap-1">
-                <label className="text-[10px] font-black uppercase text-muted-foreground">Notas Coach</label>
-                <input type="text" className="w-full rounded-lg border border-border bg-background p-2 text-sm" value={newExForm.notes} onChange={e => setNewExForm({...newExForm, notes: e.target.value})} />
-              </div>
-            </div>
-            <button 
-              onClick={handleAddExercise}
-              disabled={isPending || !newExForm.exerciseId}
-              className="w-full rounded-lg bg-primary py-3 text-sm font-black text-primary-foreground shadow-lg shadow-primary/20 active:scale-[0.98] transition disabled:opacity-50"
-            >
-              {isPending ? "Guardando..." : "GUARDAR EN RUTINA"}
-            </button>
-          </div>
-        )}
 
-        {/* Exercises List - Column View */}
-        {exercises.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-16 text-muted-foreground bg-muted/20 rounded-3xl border-2 border-dashed border-border">
-            <Dumbbell className="mb-4 h-12 w-12 opacity-10" />
-            <p className="text-sm font-medium">No hay ejercicios para esta sesión.</p>
-          </div>
-        ) : (
-          <div className="flex flex-col gap-6">
-            {exercises.map((ex, idx) => {
-              const isEditing = editingExerciseId === ex.id;
-              
-              return (
-                <div key={ex.id} className="relative flex flex-col gap-4 rounded-3xl bg-card p-5 shadow-sm border border-border group">
-                  {/* Number Badge */}
-                  <div className="absolute -left-2 -top-2 flex h-7 w-7 items-center justify-center rounded-full bg-foreground text-[10px] font-black text-background shadow-md">
-                    {idx + 1}
-                  </div>
-
-                  {/* Header Row */}
-                  <div className="flex items-start justify-between border-b border-border pb-3">
-                    <div className="flex flex-col gap-0.5">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-primary">
-                        {ex.exercise?.body_zone ? BODY_ZONE_LABELS[ex.exercise.body_zone as keyof typeof BODY_ZONE_LABELS] : "General"}
-                      </span>
-                      <h4 className="text-base font-black text-foreground">
-                        {ex.exercise?.name || "Ejercicio"}
-                      </h4>
-                    </div>
-                    {role === "COACH" && !isEditing && (
-                      <div className="flex gap-1">
-                        <button 
-                          onClick={() => startEditing(ex)}
-                          className="rounded-full p-2 text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                        >
-                          <Settings2 className="h-4 w-4" />
-                        </button>
-                        <button 
-                          onClick={() => handleDeleteExercise(ex.id)}
-                          className="rounded-full p-2 text-muted-foreground transition hover:bg-red-50 hover:text-red-500"
-                        >
-                          <Trash2 className="h-4 w-4" />
-                        </button>
-                      </div>
-                    )}
-                    {isEditing && (
-                      <div className="flex gap-1">
-                        <button 
-                          onClick={() => handleUpdateExercise(ex.id)}
-                          className="rounded-full p-2 text-primary transition hover:bg-primary/10"
-                        >
-                          <Save className="h-5 w-5" />
-                        </button>
-                        <button 
-                          onClick={() => setEditingExerciseId(null)}
-                          className="rounded-full p-2 text-muted-foreground transition hover:bg-muted"
-                        >
-                          <X className="h-5 w-5" />
-                        </button>
-                      </div>
-                    )}
-                  </div>
-
-                  {/* Columns Content */}
-                  <div className="grid grid-cols-2 sm:grid-cols-5 gap-4">
-                    {/* Series Column */}
-                    <div className="flex flex-col gap-1 items-center sm:items-start">
-                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">Series</span>
-                      {isEditing ? (
-                        <input type="number" className="w-full rounded-md border border-border bg-muted/50 p-1 text-xs font-bold text-center sm:text-left" value={editExForm.sets} onChange={e => setEditExForm({...editExForm, sets: Number(e.target.value)})} />
-                      ) : (
-                        <span className="text-sm font-black text-foreground">{ex.sets}</span>
-                      )}
-                    </div>
-                    
-                    {/* Reps Column */}
-                    <div className="flex flex-col gap-1 items-center sm:items-start">
-                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">Reps</span>
-                      {isEditing ? (
-                        <input type="text" className="w-full rounded-md border border-border bg-muted/50 p-1 text-xs font-bold text-center sm:text-left" value={editExForm.reps} onChange={e => setEditExForm({...editExForm, reps: e.target.value})} />
-                      ) : (
-                        <span className="text-sm font-black text-foreground">{ex.reps}</span>
-                      )}
-                    </div>
-
-                    {/* Weight Column (Planned/Real) */}
-                    <div className="flex flex-col gap-1 items-center sm:items-start">
-                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">Peso</span>
-                      <div className="flex items-center gap-1.5">
-                        <span className="text-sm font-black text-foreground">--</span>
-                        {role === "STUDENT" && (
-                          <input type="number" placeholder="Kg" className="w-14 rounded-md border border-border bg-muted/50 p-1 text-[10px] text-center" />
-                        )}
-                      </div>
-                    </div>
-
-                    {/* RPE Column */}
-                    <div className="flex flex-col gap-1 items-center sm:items-start">
-                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">RPE</span>
-                      <div className="flex items-center gap-1.5">
-                        {isEditing ? (
-                          <input type="number" className="w-full rounded-md border border-border bg-muted/50 p-1 text-xs font-bold text-center sm:text-left" value={editExForm.rpe_target} onChange={e => setEditExForm({...editExForm, rpe_target: Number(e.target.value)})} />
-                        ) : (
-                          <span className="text-sm font-black text-primary">{ex.rpe_target || "-"}</span>
-                        )}
-                      </div>
-                    </div>
-
-                    {/* Pausa Column */}
-                    <div className="flex flex-col gap-1 items-center sm:items-start col-span-2 sm:col-span-1">
-                      <span className="text-[9px] font-black uppercase text-muted-foreground tracking-tighter">Pausa</span>
-                      <div className="flex items-center gap-1.5">
-                        <Clock className="h-3 w-3 text-muted-foreground" />
-                        {isEditing ? (
-                          <input type="number" className="w-full rounded-md border border-border bg-muted/50 p-1 text-xs font-bold" value={editExForm.rest_seconds} onChange={e => setEditExForm({...editExForm, rest_seconds: Number(e.target.value)})} />
-                        ) : (
-                          <span className="text-xs font-bold text-foreground">{ex.rest_seconds || "0"}s</span>
-                        )}
-                      </div>
-                    </div>
-                  </div>
-
-                  {/* Notes Row */}
-                  {(ex.coach_notes || isEditing) && (
-                    <div className="mt-2 flex flex-col gap-1.5 rounded-2xl bg-muted/40 p-3 border border-border/50">
-                      <span className="flex items-center gap-1.5 text-[9px] font-black uppercase text-muted-foreground">
-                        <MessageSquare className="h-3 w-3" /> Observaciones del Coach
-                      </span>
-                      {isEditing ? (
-                        <textarea 
-                          className="w-full rounded-lg border border-border bg-background p-2 text-xs outline-none focus:ring-1 focus:ring-primary" 
-                          rows={2}
-                          value={editExForm.coach_notes}
-                          onChange={e => setEditExForm({...editExForm, coach_notes: e.target.value})}
+              {/* Inputs Dinámicos por Serie */}
+              <div className="flex flex-col gap-4 rounded-3xl bg-zinc-950 p-6 border-2 border-zinc-900">
+                <div className="flex flex-col gap-3">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Repeticiones por serie</label>
+                  <div className="flex flex-wrap gap-2">
+                    {newExForm.target_reps.map((rep, idx) => (
+                      <div key={idx} className="flex flex-col gap-1">
+                        <span className="text-[8px] font-black text-zinc-600 text-center uppercase">S{idx+1}</span>
+                        <input 
+                          required
+                          type="number"
+                          min="1"
+                          className="w-12 h-12 rounded-xl border-2 border-zinc-800 bg-zinc-900 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all"
+                          value={rep}
+                          onChange={e => {
+                            const newReps = [...newExForm.target_reps];
+                            newReps[idx] = Number(e.target.value);
+                            setNewExForm({...newExForm, target_reps: newReps});
+                          }}
                         />
-                      ) : (
-                        <p className="text-xs text-foreground/80 leading-relaxed font-medium">
-                          {ex.coach_notes}
-                        </p>
-                      )}
-                    </div>
-                  )}
-
-                  {/* Student Log Button */}
-                  {role === "STUDENT" && (
-                    <button className="mt-2 w-full rounded-xl bg-foreground py-2.5 text-[11px] font-black text-background transition active:scale-[0.98]">
-                      REGISTRAR SERIE
-                    </button>
-                  )}
+                      </div>
+                    ))}
+                  </div>
                 </div>
-              );
-            })}
+
+                <div className="flex flex-col gap-3">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Kilos por serie</label>
+                  <div className="flex flex-wrap gap-2">
+                    {newExForm.target_weight.map((weight, idx) => (
+                      <div key={idx} className="flex flex-col gap-1">
+                        <span className="text-[8px] font-black text-zinc-600 text-center uppercase">S{idx+1}</span>
+                        <input 
+                          type="number"
+                          step="0.5"
+                          placeholder="Kg"
+                          className="w-12 h-12 rounded-xl border-2 border-zinc-800 bg-zinc-900 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all"
+                          value={weight === null ? "" : weight}
+                          onChange={e => {
+                            const newWeights = [...newExForm.target_weight];
+                            const val = e.target.value === "" ? null : Number(e.target.value);
+                            newWeights[idx] = val;
+                            setNewExForm({...newExForm, target_weight: newWeights});
+                          }}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Notas para el alumno</label>
+                <textarea 
+                  className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-medium text-zinc-100 outline-none focus:border-yellow-400 transition-all resize-none"
+                  rows={2}
+                  placeholder="Ej: Controlar el descenso, 2 segundos..."
+                  value={newExForm.notes}
+                  onChange={(e) => setNewExForm({...newExForm, notes: e.target.value})}
+                />
+              </div>
+
+              <button 
+                onClick={handleAddExercise}
+                disabled={isPending || !newExForm.exerciseId}
+                className="w-full rounded-[1.5rem] bg-yellow-400 py-5 text-sm font-black text-black shadow-xl shadow-yellow-400/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-30 disabled:grayscale uppercase tracking-widest"
+              >
+                {isPending ? "Procesando..." : "Guardar en Rutina"}
+              </button>
+            </div>
           </div>
         )}
+
+        {/* Exercise List - NEW EXCEL GRID */}
+        <div className="flex flex-col gap-4">
+          {exercises.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 rounded-[2rem] border-2 border-dashed border-zinc-800 bg-zinc-950/50">
+              <Dumbbell className="h-12 w-12 text-zinc-700 mb-4" />
+              <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">Sin ejercicios para este día</p>
+            </div>
+          ) : (
+            <ExerciseExcelGrid exercises={exercises} role={role} />
+          )}
+
+          {role === "COACH" && !isAddingExercise && (
+            <button
+              onClick={() => setIsAddingExercise(true)}
+              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-800 p-4 text-xs font-black text-zinc-500 hover:border-yellow-400 hover:text-yellow-400 transition-all uppercase tracking-widest"
+            >
+              <Plus className="h-4 w-4" /> Agregar Ejercicio
+            </button>
+          )}
+        </div>
       </div>
     </div>
   );

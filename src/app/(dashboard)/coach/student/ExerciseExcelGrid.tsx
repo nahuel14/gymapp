@@ -1,0 +1,273 @@
+ "use client";
+
+import { useState, useTransition } from "react";
+import { 
+  Play, 
+  MessageSquare, 
+  Trash2, 
+  Save, 
+  X, 
+  Settings2,
+  ExternalLink
+} from "lucide-react";
+import { BODY_ZONE_LABELS, EXERCISE_CATEGORY_LABELS } from "@/lib/constants";
+import { updateExerciseInSession, deleteExerciseFromSession } from "./actions";
+import { useQueryClient } from "@tanstack/react-query";
+
+type SessionExercise = any; // Will use any for now until types are refreshed
+
+interface Props {
+  exercises: SessionExercise[];
+  role: "COACH" | "STUDENT";
+}
+
+export function ExerciseExcelGrid({ exercises, role }: Props) {
+  const queryClient = useQueryClient();
+  const [isPending, startTransition] = useTransition();
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editForm, setEditForm] = useState<any>(null);
+
+  const getRpeColor = (rpe: number | null) => {
+    if (!rpe) return "text-muted-foreground";
+    if (rpe <= 6) return "text-emerald-400";
+    if (rpe === 7) return "text-yellow-400";
+    if (rpe === 8) return "text-orange-400";
+    if (rpe === 9) return "text-red-400";
+    if (rpe >= 10) return "text-red-600 font-bold";
+    return "text-muted-foreground";
+  };
+
+  const handleStartEdit = (ex: any) => {
+    setEditingId(ex.id);
+    setEditForm({
+      target_sets: ex.target_sets || 0,
+      target_reps: ex.target_reps || Array(ex.target_sets || 0).fill(10),
+      target_weight: ex.target_weight || Array(ex.target_sets || 0).fill(null),
+      target_rpe: ex.target_rpe || 0,
+      rest_seconds: ex.rest_seconds || 0,
+      coach_notes: ex.coach_notes || "",
+      actual_sets: ex.actual_sets || ex.target_sets || 0,
+      actual_reps: ex.actual_reps || Array(ex.actual_sets || ex.target_sets || 0).fill(10),
+      actual_weight: ex.actual_weight || Array(ex.actual_sets || ex.target_sets || 0).fill(null),
+      actual_rpe: ex.actual_rpe || 0,
+      student_notes: ex.student_notes || ""
+    });
+  };
+
+  const handleSave = async (id: number) => {
+    startTransition(async () => {
+      await updateExerciseInSession(id, editForm);
+      await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      setEditingId(null);
+    });
+  };
+
+  const handleDelete = async (id: number) => {
+    if (!confirm("¿Eliminar ejercicio?")) return;
+    startTransition(async () => {
+      await deleteExerciseFromSession(id);
+      await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+    });
+  };
+
+  const updateArrayField = (field: string, index: number, value: string) => {
+    setEditForm((prev: any) => {
+      const newArray = [...(prev[field] || [])];
+      // Si el valor es vacío y el campo es de peso, ponemos null
+      if (value === "" && field.includes("weight")) {
+        newArray[index] = null;
+      } else {
+        newArray[index] = Number(value);
+      }
+      return { ...prev, [field]: newArray };
+    });
+  };
+
+  return (
+    <div className="w-full overflow-x-auto rounded-xl border border-zinc-800 bg-black shadow-2xl no-scrollbar">
+      <table className="w-full border-collapse text-[11px] font-medium min-w-[1000px]">
+        <thead>
+          {/* Super Headers */}
+          <tr className="border-b border-zinc-800">
+            <th colSpan={4} className="bg-zinc-950 px-4 py-2 text-left text-zinc-500 uppercase tracking-widest font-black border-r border-zinc-800">Ejercicio</th>
+            <th colSpan={6} className="bg-zinc-900 px-4 py-2 text-center text-yellow-400 uppercase tracking-widest font-black border-r border-zinc-800">Coach (Prescrito)</th>
+            <th colSpan={5} className="bg-zinc-800 px-4 py-2 text-center text-emerald-400 uppercase tracking-widest font-black">Student (Ejecutado)</th>
+          </tr>
+          {/* Sub Headers */}
+          <tr className="border-b border-zinc-800 bg-zinc-950/50 text-zinc-400">
+            <th className="px-3 py-2 text-left border-r border-zinc-800 w-16">BZ</th>
+            <th className="px-3 py-2 text-left border-r border-zinc-800 w-24">TIPO</th>
+            <th className="px-3 py-2 text-left border-r border-zinc-800">NOMBRE</th>
+            <th className="px-3 py-2 text-center border-r border-zinc-800 w-10">VID</th>
+            
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-8 bg-zinc-900/50">S</th>
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-32 bg-zinc-900/50">REPS</th>
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-32 bg-zinc-900/50">KILOS</th>
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-12 bg-zinc-900/50">RPE</th>
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-12 bg-zinc-900/50">PAUSA</th>
+            <th className="px-2 py-2 text-left border-r border-zinc-800 bg-zinc-900/50">OBS</th>
+
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-8 bg-zinc-800/50">S</th>
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-32 bg-zinc-800/50">REPS</th>
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-32 bg-zinc-800/50">KILOS</th>
+            <th className="px-2 py-2 text-center border-r border-zinc-800 w-12 bg-zinc-800/50 text-emerald-400">RPE</th>
+            <th className="px-2 py-2 text-left bg-zinc-800/50">NOTAS</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-zinc-800">
+          {exercises.map((ex) => {
+            const isEditing = editingId === ex.id;
+            const data = isEditing ? editForm : ex;
+            const coachSets = Number(data.target_sets || 0);
+            const studentSets = Number(data.actual_sets || coachSets);
+
+            return (
+              <tr key={ex.id} className="hover:bg-zinc-900/30 transition-colors group">
+                {/* Ejercicio Info */}
+                <td className="px-3 py-3 border-r border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase whitespace-nowrap">
+                  {ex.exercise?.body_zone ? BODY_ZONE_LABELS[ex.exercise.body_zone as keyof typeof BODY_ZONE_LABELS]?.substring(0, 5) : "--"}
+                </td>
+                <td className="px-3 py-3 border-r border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase whitespace-nowrap">
+                  {ex.exercise?.category ? EXERCISE_CATEGORY_LABELS[ex.exercise.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
+                </td>
+                <td className="px-3 py-3 border-r border-zinc-800">
+                  <div className="flex items-center justify-between gap-2">
+                    <span className="text-zinc-100 font-black uppercase truncate max-w-[150px]">{ex.exercise?.name}</span>
+                    {role === "COACH" && (
+                      <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
+                        {isEditing ? (
+                          <div className="flex gap-1">
+                            <button onClick={() => handleSave(ex.id)} disabled={isPending} className="p-1 text-emerald-400 hover:bg-emerald-400/10 rounded"><Save className="h-3 w-3" /></button>
+                            <button onClick={() => setEditingId(null)} className="p-1 text-zinc-500 hover:bg-zinc-500/10 rounded"><X className="h-3 w-3" /></button>
+                          </div>
+                        ) : (
+                          <div className="flex gap-1">
+                            <button onClick={() => handleStartEdit(ex)} className="p-1 text-zinc-500 hover:bg-yellow-400/10 hover:text-yellow-400 rounded"><Settings2 className="h-3 w-3" /></button>
+                            <button onClick={() => handleDelete(ex.id)} className="p-1 text-zinc-500 hover:bg-red-400/10 hover:text-red-400 rounded"><Trash2 className="h-3 w-3" /></button>
+                          </div>
+                        )}
+                      </div>
+                    )}
+                  </div>
+                </td>
+                <td className="px-2 py-3 border-r border-zinc-800 text-center">
+                  {ex.exercise?.video_url && (
+                    <a href={ex.exercise.video_url} target="_blank" rel="noopener noreferrer" className="inline-block p-1.5 rounded-full bg-zinc-900 text-yellow-400 hover:bg-yellow-400 hover:text-black transition-all">
+                      <Play className="h-3 w-3 fill-current" />
+                    </a>
+                  )}
+                </td>
+
+                {/* Coach Columns */}
+                <td className="px-2 py-3 border-r border-zinc-800 text-center bg-zinc-900/20 font-black text-yellow-400">
+                  {isEditing && role === "COACH" ? (
+                    <input type="number" className="w-full bg-transparent text-center outline-none" value={data.target_sets} onChange={e => setEditForm({...editForm, target_sets: Number(e.target.value)})} />
+                  ) : data.target_sets}
+                </td>
+                <td className="px-2 py-3 border-r border-zinc-800 bg-zinc-900/20">
+                  <div className="flex gap-1 justify-center">
+                    {Array.from({ length: coachSets }).map((_, i) => (
+                      <input 
+                        key={i}
+                        type="number"
+                        min="1"
+                        disabled={!isEditing || role !== "COACH"}
+                        className="w-8 h-6 bg-zinc-950 border border-zinc-800 rounded text-center outline-none focus:border-yellow-400 transition-colors text-zinc-300 disabled:opacity-50"
+                        value={data.target_reps?.[i] ?? 10}
+                        onChange={e => updateArrayField("target_reps", i, e.target.value)}
+                      />
+                    ))}
+                  </div>
+                </td>
+                <td className="px-2 py-3 border-r border-zinc-800 bg-zinc-900/20">
+                  <div className="flex gap-1 justify-center">
+                    {Array.from({ length: coachSets }).map((_, i) => (
+                      <input 
+                        key={i}
+                        type="number"
+                        step="0.5"
+                        disabled={!isEditing || role !== "COACH"}
+                        className="w-8 h-6 bg-zinc-950 border border-zinc-800 rounded text-center outline-none focus:border-yellow-400 transition-colors text-zinc-300 disabled:opacity-50"
+                        placeholder="Kg"
+                        value={data.target_weight?.[i] ?? ""}
+                        onChange={e => updateArrayField("target_weight", i, e.target.value)}
+                      />
+                    ))}
+                  </div>
+                </td>
+                <td className={`px-2 py-3 border-r border-zinc-800 text-center bg-zinc-900/20 font-black ${getRpeColor(data.target_rpe)}`}>
+                  {isEditing && role === "COACH" ? (
+                    <input type="number" className="w-full bg-transparent text-center outline-none" value={data.target_rpe} onChange={e => setEditForm({...editForm, target_rpe: Number(e.target.value)})} />
+                  ) : data.target_rpe || "--"}
+                </td>
+                <td className="px-2 py-3 border-r border-zinc-800 text-center bg-zinc-900/20 text-zinc-400 font-bold">
+                  {isEditing && role === "COACH" ? (
+                    <input type="number" className="w-full bg-transparent text-center outline-none" value={data.rest_seconds} onChange={e => setEditForm({...editForm, rest_seconds: Number(e.target.value)})} />
+                  ) : `${data.rest_seconds || 0}s`}
+                </td>
+                <td className="px-3 py-3 border-r border-zinc-800 bg-zinc-900/20 text-zinc-500 italic max-w-[150px] truncate">
+                  {isEditing && role === "COACH" ? (
+                    <input className="w-full bg-transparent outline-none" value={data.coach_notes} onChange={e => setEditForm({...editForm, coach_notes: e.target.value})} />
+                  ) : data.coach_notes || "--"}
+                </td>
+
+                {/* Student Columns */}
+                <td className="px-2 py-3 border-r border-zinc-800 text-center bg-zinc-800/20 font-black text-emerald-400">
+                  {isEditing && role === "STUDENT" ? (
+                    <input type="number" className="w-full bg-transparent text-center outline-none" value={data.actual_sets} onChange={e => setEditForm({...editForm, actual_sets: Number(e.target.value)})} />
+                  ) : data.actual_sets || "--"}
+                </td>
+                <td className="px-2 py-3 border-r border-zinc-800 bg-zinc-800/20">
+                  <div className="flex gap-1 justify-center">
+                    {Array.from({ length: studentSets }).map((_, i) => (
+                      <input 
+                        key={i}
+                        type="number"
+                        min="1"
+                        disabled={!isEditing || role !== "STUDENT"}
+                        className="w-8 h-6 bg-zinc-900 border border-zinc-700 rounded text-center outline-none focus:border-emerald-400 transition-colors text-zinc-100 disabled:opacity-50"
+                        value={data.actual_reps?.[i] ?? 10}
+                        onChange={e => updateArrayField("actual_reps", i, e.target.value)}
+                      />
+                    ))}
+                  </div>
+                </td>
+                <td className="px-2 py-3 border-r border-zinc-800 bg-zinc-800/20">
+                  <div className="flex gap-1 justify-center">
+                    {Array.from({ length: studentSets }).map((_, i) => (
+                      <input 
+                        key={i}
+                        type="number"
+                        step="0.5"
+                        disabled={!isEditing || role !== "STUDENT"}
+                        className="w-8 h-6 bg-zinc-900 border border-zinc-700 rounded text-center outline-none focus:border-emerald-400 transition-colors text-zinc-100 disabled:opacity-50"
+                        placeholder="Kg"
+                        value={data.actual_weight?.[i] ?? ""}
+                        onChange={e => updateArrayField("actual_weight", i, e.target.value)}
+                      />
+                    ))}
+                  </div>
+                </td>
+                <td className={`px-2 py-3 border-r border-zinc-800 text-center bg-zinc-800/20 font-black ${getRpeColor(data.actual_rpe)}`}>
+                  {isEditing && role === "STUDENT" ? (
+                    <input type="number" className="w-full bg-transparent text-center outline-none" value={data.actual_rpe} onChange={e => setEditForm({...editForm, actual_rpe: Number(e.target.value)})} />
+                  ) : data.actual_rpe || "--"}
+                </td>
+                <td className="px-3 py-3 bg-zinc-800/20 text-zinc-400 italic max-w-[150px] truncate">
+                  <div className="flex items-center justify-between gap-2">
+                    {isEditing && role === "STUDENT" ? (
+                      <input className="w-full bg-transparent outline-none" value={data.student_notes} onChange={e => setEditForm({...editForm, student_notes: e.target.value})} />
+                    ) : data.student_notes || "--"}
+                    {role === "STUDENT" && !isEditing && (
+                      <button onClick={() => handleStartEdit(ex)} className="p-1 text-emerald-400/50 hover:text-emerald-400 transition-colors"><Settings2 className="h-3 w-3" /></button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    </div>
+  );
+}

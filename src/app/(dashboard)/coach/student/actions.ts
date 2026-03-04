@@ -48,7 +48,16 @@ export async function addDayToWeek(planId: number, weekNumber: number, nextOrder
   return { success: true };
 }
 
-export async function addExerciseToSession(sessionId: number, exerciseId: number, sets: number, reps: string, rpe: number, rest: number, notes: string) {
+export async function addExerciseToSession(
+  sessionId: number, 
+  exerciseId: number, 
+  targetSets: number, 
+  targetReps: number[], 
+  targetWeight: (number | null)[],
+  targetRpe: number, 
+  rest: number, 
+  notes: string
+) {
   const supabase = await createSupabaseServerClient();
 
   // Obtener el último order_index
@@ -66,13 +75,14 @@ export async function addExerciseToSession(sessionId: number, exerciseId: number
     .insert({
       session_id: sessionId,
       exercise_id: exerciseId,
-      sets,
-      reps,
-      rpe_target: rpe,
+      target_sets: targetSets,
+      target_reps: targetReps,
+      target_weight: targetWeight,
+      target_rpe: targetRpe,
       rest_seconds: rest,
       coach_notes: notes,
       order_index: nextOrder
-    });
+    } as any);
 
   if (error) throw error;
 
@@ -134,18 +144,24 @@ export async function createTrainingPlan(studentId: string, planName: string, st
 export async function updateExerciseInSession(
   id: number, 
   data: { 
-    sets: number; 
-    reps: string; 
-    rpe_target: number; 
-    rest_seconds: number; 
-    coach_notes: string 
+    target_sets?: number; 
+    target_reps?: number[]; 
+    target_weight?: (number | null)[];
+    target_rpe?: number; 
+    rest_seconds?: number; 
+    coach_notes?: string;
+    actual_sets?: number;
+    actual_reps?: number[];
+    actual_weight?: (number | null)[];
+    actual_rpe?: number;
+    student_notes?: string;
   }
 ) {
   const supabase = await createSupabaseServerClient();
 
   const { error } = await supabase
     .from("session_exercises")
-    .update(data)
+    .update(data as any)
     .eq("id", id);
 
   if (error) throw error;
