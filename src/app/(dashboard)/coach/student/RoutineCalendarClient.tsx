@@ -64,7 +64,11 @@ export function RoutineCalendarClient({
   const { data: allExercises = [] } = useExercises();
 
   const [selectedWeek, setSelectedWeek] = useState(1);
-  const [selectedDayId, setSelectedDayId] = useState<number | null>(null);
+  // Inicializar selectedDayId con la primera sesión disponible de la semana actual
+  const [selectedDayId, setSelectedDayId] = useState<number | null>(() => {
+    const firstWeekSessions = sessions.filter((s) => s.week_number === 1);
+    return firstWeekSessions.length > 0 ? firstWeekSessions[0].id : null;
+  });
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [isAddingDay, setIsAddingDay] = useState(false);
   const [newDayForm, setNewDayForm] = useState({ date: new Date().toISOString().split('T')[0] });
@@ -112,7 +116,18 @@ export function RoutineCalendarClient({
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
       const dateStr = d.toISOString().split('T')[0];
-      const session = currentWeekSessions.find(s => (s as any).date === dateStr);
+      // Corregir comparación de fechas para evitar timezone issues
+      const session = currentWeekSessions.find(s => {
+        // 1. Defensa: Si la sesión por algún motivo no tiene fecha, la ignoramos
+        if (!(s as any).date) return false;
+        
+        // 2. Extracción segura: Supabase suele devolver 'YYYY-MM-DD'. 
+        // Hacemos un split por 'T' por si viene con timezone, y nos quedamos con la fecha.
+        const sessionDate = (s as any).date.split('T')[0]; 
+        
+        // 3. Comparamos peras con peras (String contra String)
+        return sessionDate === dateStr;
+      });
       return { date: dateStr, session };
     });
   };
@@ -122,18 +137,18 @@ export function RoutineCalendarClient({
     ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(new Date(weeklyDays[0].date + 'T00:00:00'))
     : "";
 
+  // Efecto para sincronizar selectedDayId cuando cambia la semana
   useEffect(() => {
     if (currentWeekSessions.length > 0) {
-      // Si la sesión seleccionada no está en la semana actual, seleccionar la primera disponible
-      const isSelectedInCurrentWeek = currentWeekSessions.some(s => s.id === selectedDayId);
-      if (!isSelectedInCurrentWeek) {
+      // Si no hay sesión seleccionada o no está en la semana actual, seleccionar la primera disponible
+      if (!selectedDayId || !currentWeekSessions.some(s => s.id === selectedDayId)) {
         setSelectedDayId(currentWeekSessions[0].id);
       }
     } else {
       // Si no hay sesiones en la semana, limpiar selección
       setSelectedDayId(null);
     }
-  }, [selectedWeek, currentWeekSessions]); // Removido selectedDayId de dependencias para evitar loops
+  }, [selectedWeek, currentWeekSessions.length]); // Solo depender de cambios relevantes
 
   const selectedSession = sessions.find((s) => s.id === selectedDayId);
   const exercises = selectedDayId ? exercisesBySession[selectedDayId] || [] : [];
@@ -329,6 +344,9 @@ export function RoutineCalendarClient({
                   } else if (role === "COACH") {
                     setNewDayForm({ date: day.date });
                     setIsAddingDay(true);
+                  } else {
+                    // Para STUDENT: mostrar día de descanso
+                    setSelectedDayId(null);
                   }
                 }}
                 className={`flex flex-col items-center gap-1 rounded-2xl py-3 border-2 transition-all duration-200 ${
@@ -358,9 +376,12 @@ export function RoutineCalendarClient({
       <div className="flex flex-col gap-4 px-4">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
           <div className="flex flex-col">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Sesión del día</h3>
+            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+              {selectedSession ? "Sesión del día" : role === "STUDENT" ? "Día de descanso" : "Sin sesión"}
+            </h3>
             <p className="text-lg font-bold text-zinc-100 uppercase tracking-tight">
-              {selectedSession ? ((selectedSession as any).date ? new Date((selectedSession as any).date + 'T00:00:00').toLocaleDateString('es-AR', { dateStyle: 'long' }) : `Día ${selectedSession.order_index}`) : "Selecciona un día"}
+              {selectedSession ? ((selectedSession as any).date ? new Date((selectedSession as any).date + 'T00:00:00').toLocaleDateString('es-AR', { dateStyle: 'long' }) : `Día ${selectedSession.order_index}`) : 
+               role === "STUDENT" ? "Descanso y recuperación" : "Selecciona un día"}
             </p>
           </div>
           {role === "COACH" && selectedDayId && (
@@ -551,7 +572,23 @@ export function RoutineCalendarClient({
 
         {/* Exercise List - NEW EXCEL GRID */}
         <div className="flex flex-col gap-4">
-          {exercises.length === 0 ? (
+          {exercises.length === 0 && !selectedSession ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 rounded-[2rem] border-2 border-dashed border-zinc-800 bg-zinc-950/50">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-16 w-16 rounded-full bg-zinc-900/50 flex items-center justify-center">
+                  <Calendar className="h-8 w-8 text-zinc-600" />
+                </div>
+                <p className="text-zinc-500 font-black uppercase tracking-widest text-xs text-center">
+                  {role === "STUDENT" ? "Día de Descanso" : "Sin ejercicios para este día"}
+                </p>
+                {role === "STUDENT" && (
+                  <p className="text-zinc-600 text-xs text-center max-w-[200px]">
+                    Hoy no hay entrenamiento programado. ¡Aprovecha para recuperarte!
+                  </p>
+                )}
+              </div>
+            </div>
+          ) : exercises.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 rounded-[2rem] border-2 border-dashed border-zinc-800 bg-zinc-950/50">
               <Dumbbell className="h-12 w-12 text-zinc-700 mb-4" />
               <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">Sin ejercicios para este día</p>
