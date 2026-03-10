@@ -286,6 +286,243 @@ export async function createTrainingPlan(studentId: string, planName: string, st
   return { success: true, planId: plan.id };
 }
 
+export async function createTemplatePlan(planName: string, coachId: string) {
+  const adminClient = createSupabaseAdminClient();
+
+  try {
+    const payload = {
+      name: planName,
+      coach_id: coachId,
+      student_id: null,
+      is_active: false,
+      start_date: null,
+      is_template: true 
+    };
+    
+    console.log("Creando plantilla con payload:", payload);
+
+    const { data: template, error } = await adminClient
+      .from("training_plans")
+      .insert(payload as any)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error creando plantilla:", error);
+      throw error;
+    }
+
+    console.log("Plantilla creada exitosamente:", template);
+
+    revalidatePath("/coach/templates");
+    return { success: true, templateId: template.id };
+
+  } catch (error) {
+    console.error("Error creating template:", error);
+    throw error;
+  }
+}
+
+export async function deleteTemplatePlan(templateId: number) {
+  const adminClient = createSupabaseAdminClient();
+
+  try {
+    console.log("Eliminando plantilla:", templateId);
+
+    // First, get all session IDs for this template
+    const { data: sessions, error: sessionsError } = await adminClient
+      .from("sessions")
+      .select("id")
+      .eq("plan_id", templateId);
+
+    if (sessionsError) {
+      console.error("Error obteniendo sesiones de la plantilla:", sessionsError);
+      throw sessionsError;
+    }
+
+    // Delete all session_exercises for these sessions
+    if (sessions && sessions.length > 0) {
+      const sessionIds = sessions.map(s => s.id);
+      const { error: exercisesError } = await adminClient
+        .from("session_exercises")
+        .delete()
+        .in("session_id", sessionIds);
+
+      if (exercisesError) {
+        console.error("Error eliminando ejercicios de la plantilla:", exercisesError);
+        throw exercisesError;
+      }
+    }
+
+    // Then, delete all sessions for this template
+    const { error: deleteSessionsError } = await adminClient
+      .from("sessions")
+      .delete()
+      .eq("plan_id", templateId);
+
+    if (deleteSessionsError) {
+      console.error("Error eliminando sesiones de la plantilla:", deleteSessionsError);
+      throw deleteSessionsError;
+    }
+
+    // Finally, delete the template
+    const { data: template, error } = await adminClient
+      .from("training_plans")
+      .delete()
+      .eq("id", templateId)
+      .select()
+      .single();
+
+    if (error) {
+      console.error("Error eliminando plantilla:", error);
+      throw error;
+    }
+
+    console.log("Plantilla eliminada exitosamente:", template);
+
+    revalidatePath("/coach/templates");
+    return { success: true };
+
+  } catch (error) {
+    console.error("Error deleting template:", error);
+    throw error;
+  }
+}
+
+export async function instantiateTemplateToStudent(
+  templatePlanId: number,
+  studentId: string,
+  startDate: string,
+  preferredDaysOfWeek: number[]
+) {
+  const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
+
+  try {
+    // 1. Verificar permisos
+    const { data: { user } } = await supabase.auth.getUser();
+    if (!user) throw new Error("No autenticado");
+
+    // 2. Obtener plantilla original
+    const { data: templatePlan, error: fetchTemplateError } = await supabase
+      .from("training_plans")
+      .select("*")
+      .eq("id", templatePlanId)
+      .eq("is_template", true)
+      .single();
+
+    if (fetchTemplateError || !templatePlan) throw new Error("No se encontró la plantilla");
+
+    // 3. Desactivar planes anteriores del estudiante
+    await adminClient
+      .from("training_plans")
+      .update({ is_active: false } as any)
+      .eq("student_id", studentId);
+
+    // 4. Crear nuevo plan desde plantilla (Deep Copy)
+    const { data: newPlan, error: createPlanError } = await adminClient
+      .from("training_plans")
+      .insert({
+        name: templatePlan.name,
+        coach_id: templatePlan.coach_id,
+        student_id: studentId,
+        is_active: true,
+        is_template: false,
+        start_date: startDate
+      } as any)
+      .select()
+      .single();
+
+    if (createPlanError || !newPlan) throw createPlanError;
+
+    // 5. Obtener sesiones del template ordenadas
+    const { data: templateSessions, error: fetchSessionsError } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("plan_id", templatePlanId)
+      .order("week_number", { ascending: true })
+      .order("order_index", { ascending: true });
+
+    if (fetchSessionsError) throw fetchSessionsError;
+
+    // 6. Algoritmo de asignación de fechas
+    const sessionDates: string[] = [];
+    let currentDate = new Date(startDate + 'T00:00:00');
+    
+    for (let i = 0; i < (templateSessions?.length || 0); i++) {
+      // Encontrar el siguiente día que coincida con preferredDaysOfWeek
+      while (!preferredDaysOfWeek.includes(currentDate.getDay())) {
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      
+      // Formatear fecha como YYYY-MM-DD
+      sessionDates.push(currentDate.toISOString().split('T')[0]);
+      
+      // Avanzar al siguiente día para la próxima sesión
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // 7. Crear sesiones con fechas asignadas
+    const newSessionIds: number[] = [];
+    
+    for (let i = 0; i < (templateSessions?.length || 0); i++) {
+      const templateSession = templateSessions![i];
+      
+      const { data: newSession, error: sessionError } = await adminClient
+        .from("sessions")
+        .insert({
+          plan_id: newPlan.id,
+          week_number: templateSession.week_number,
+          day_name: templateSession.day_name,
+          order_index: templateSession.order_index,
+          is_completed: false,
+          date: sessionDates[i]
+        } as any)
+        .select()
+        .single();
+
+      if (sessionError || !newSession) throw sessionError;
+      newSessionIds.push(newSession.id);
+    }
+
+    // 8. Copiar ejercicios de todas las sesiones
+    for (let i = 0; i < templateSessions!.length; i++) {
+      const templateSessionId = templateSessions![i].id;
+      const newSessionId = newSessionIds[i];
+
+      const { data: templateExercises } = await supabase
+        .from("session_exercises")
+        .select("*")
+        .eq("session_id", templateSessionId);
+
+      if (templateExercises && templateExercises.length > 0) {
+        const duplicatedExercises = templateExercises.map((ex: any) => ({
+          session_id: newSessionId,
+          exercise_id: ex.exercise_id,
+          target_sets: ex.target_sets,
+          target_reps: ex.target_reps,
+          target_weight: ex.target_weight,
+          target_rpe: ex.target_rpe,
+          rest_seconds: ex.rest_seconds,
+          coach_notes: ex.coach_notes,
+          order_index: ex.order_index
+        }));
+
+        await adminClient.from("session_exercises").insert(duplicatedExercises as any);
+      }
+    }
+
+    revalidatePath("/coach/student/[studentId]", "page");
+    revalidatePath("/student", "page");
+    
+    return { success: true, planId: newPlan.id };
+
+  } catch (error) {
+    console.error("Error en instantiateTemplateToStudent:", error);
+    throw error;
+  }
+}
+
 export async function updateExerciseInSession(
   id: number, 
   data: { 
@@ -314,4 +551,30 @@ export async function updateExerciseInSession(
   revalidatePath("/coach/student/[studentId]", "page");
   revalidatePath("/student", "page");
   return { success: true };
+}
+
+export async function updateTemplatePlan(templateId: number, name: string) {
+  const adminClient = createSupabaseAdminClient();
+
+  try {
+    // Actualizar el nombre de la plantilla
+    const { error } = await adminClient
+      .from("training_plans")
+      .update({ name: name })
+      .eq("id", templateId)
+      .eq("is_template", true);
+
+    if (error) {
+      console.error("Error actualizando plantilla:", error);
+      throw error;
+    }
+
+    revalidatePath("/coach/templates");
+    revalidatePath(`/coach/templates/${templateId}/edit`);
+    return { success: true };
+
+  } catch (error) {
+    console.error("Error en updateTemplatePlan:", error);
+    throw error;
+  }
 }

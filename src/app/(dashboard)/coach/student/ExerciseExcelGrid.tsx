@@ -125,14 +125,14 @@ export function ExerciseExcelGrid({ exercises, role }: Props) {
               <tr key={ex.id} className="hover:bg-zinc-900/30 transition-colors group">
                 {/* Ejercicio Info */}
                 <td className="px-3 py-3 border-r border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase whitespace-nowrap">
-                  {ex.exercise?.body_zone ? BODY_ZONE_LABELS[ex.exercise.body_zone as keyof typeof BODY_ZONE_LABELS]?.substring(0, 5) : "--"}
+                  {ex.exercises?.body_zone ? BODY_ZONE_LABELS[ex.exercises.body_zone as keyof typeof BODY_ZONE_LABELS]?.substring(0, 5) : "--"}
                 </td>
                 <td className="px-3 py-3 border-r border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase whitespace-nowrap">
-                  {ex.exercise?.category ? EXERCISE_CATEGORY_LABELS[ex.exercise.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
+                  {ex.exercises?.category ? EXERCISE_CATEGORY_LABELS[ex.exercises.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
                 </td>
                 <td className="px-3 py-3 border-r border-zinc-800">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-zinc-100 font-black uppercase truncate max-w-[150px]">{ex.exercise?.name}</span>
+                    <span className="text-zinc-100 font-black uppercase truncate max-w-[150px]">{ex.exercises?.name}</span>
                     {role === "COACH" && (
                       <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
                         {isEditing ? (
@@ -151,8 +151,8 @@ export function ExerciseExcelGrid({ exercises, role }: Props) {
                   </div>
                 </td>
                 <td className="px-2 py-3 border-r border-zinc-800 text-center">
-                  {ex.exercise?.video_url && (
-                    <a href={ex.exercise.video_url} target="_blank" rel="noopener noreferrer" className="inline-block p-1.5 rounded-full bg-zinc-900 text-yellow-400 hover:bg-yellow-400 hover:text-black transition-all">
+                  {ex.exercises?.video_url && (
+                    <a href={ex.exercises.video_url} target="_blank" rel="noopener noreferrer" className="inline-block p-1.5 rounded-full bg-zinc-900 text-yellow-400 hover:bg-yellow-400 hover:text-black transition-all">
                       <Play className="h-3 w-3 fill-current" />
                     </a>
                   )}

@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
-import { Dumbbell, BookOpen, CalendarClock, LayoutDashboard, UserCircle } from "lucide-react";
+import { Dumbbell, BookOpen, CalendarClock, LayoutDashboard, UserCircle, LayoutTemplate } from "lucide-react";
 import { createSupabaseServerClient } from "@/lib/supabase";
 import type { Database } from "@/types/supabase";
 
@@ -60,6 +60,7 @@ function getNavItems(role: UserRole): NavItem[] {
     return [
       { href: "/admin/dashboard", label: "Administración" },
       { href: "/coach", label: "Estudiantes" },
+      { href: "/coach/templates", label: "Plantillas" },
       { href: "/coach/library", label: "Librería de ejercicios" },
       ...commonItems,
     ];
@@ -68,6 +69,7 @@ function getNavItems(role: UserRole): NavItem[] {
   if (role === "COACH") {
     return [
       { href: "/coach", label: "Estudiantes" },
+      { href: "/coach/templates", label: "Plantillas" },
       { href: "/coach/library", label: "Librería de ejercicios" },
       ...commonItems,
     ];
@@ -118,6 +120,9 @@ export default async function DashboardLayout({
               ) : null}
               {(role === "COACH" || role === "ADMIN") && item.href === "/coach" ? (
                 <CalendarClock className="h-4 w-4 text-primary" />
+              ) : null}
+              {(role === "COACH" || role === "ADMIN") && item.href === "/coach/templates" ? (
+                <LayoutTemplate className="h-4 w-4 text-primary" />
               ) : null}
               {(role === "COACH" || role === "ADMIN") && item.href === "/coach/library" ? (
                 <BookOpen className="h-4 w-4 text-primary" />
