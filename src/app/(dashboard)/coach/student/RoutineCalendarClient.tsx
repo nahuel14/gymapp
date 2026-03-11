@@ -7,19 +7,10 @@ import {
   ChevronRight, 
   Calendar, 
   Dumbbell, 
-  Clock, 
-  Target, 
   Plus, 
-  Trash2,
-  ChevronDown,
-  ChevronUp,
-  Settings2,
-  Save,
   X,
   PlusCircle,
-  MessageSquare,
-  Copy,
-  LayoutTemplate
+  Copy
 } from "lucide-react";
 import { BODY_ZONE_LABELS, EXERCISE_CATEGORY_LABELS } from "@/lib/constants";
 import type { Tables } from "@/types/supabase";
@@ -29,11 +20,11 @@ import {
   addExerciseToSession, 
   deleteExerciseFromSession, 
   updateExerciseInSession,
-  duplicateSession,
-  duplicatePlan
+  duplicateSession
 } from "./actions";
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "./ExerciseExcelGrid";
+import { ImportTemplateModal } from "./ImportTemplateModal";
 
 type Session = Tables<"sessions">;
 type SessionExercise = Tables<"session_exercises"> & {
@@ -45,6 +36,7 @@ type SessionExercise = Tables<"session_exercises"> & {
 };
 
 type RoutineCalendarClientProps = {
+  studentId?: string;
   role: "COACH" | "STUDENT";
   profile: { id: string; name: string | null; last_name: string | null } | null;
   plan: { id: number; name: string; start_date: string | null } | null;
@@ -53,6 +45,7 @@ type RoutineCalendarClientProps = {
 };
 
 export function RoutineCalendarClient({
+  studentId,
   role,
   profile,
   plan,
@@ -64,14 +57,11 @@ export function RoutineCalendarClient({
   const { data: allExercises = [] } = useExercises();
 
   const [selectedWeek, setSelectedWeek] = useState(1);
-  // Inicializar selectedDayId con la primera sesión disponible de la semana actual
-  const [selectedDayId, setSelectedDayId] = useState<number | null>(() => {
-    const firstWeekSessions = sessions.filter((s) => s.week_number === 1);
-    return firstWeekSessions.length > 0 ? firstWeekSessions[0].id : null;
-  });
+  const [selectedDate, setSelectedDate] = useState<string | null>(null);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [isAddingDay, setIsAddingDay] = useState(false);
-  const [newDayForm, setNewDayForm] = useState({ date: new Date().toISOString().split('T')[0] });
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [newDayForm, setNewDayForm] = useState<{ date: string } | null>(null);
   const [editingExerciseId, setEditingExerciseId] = useState<number | null>(null);
   
   // State for new exercise form
@@ -97,38 +87,62 @@ export function RoutineCalendarClient({
   const scrollRef = useRef<HTMLDivElement>(null);
 
   const maxWeeks = sessions.length > 0 ? Math.max(...sessions.map((s) => s.week_number)) : 0;
-  const currentWeekSessions = sessions.filter((s) => s.week_number === selectedWeek);
 
   // Lógica para el Calendario Semanal Real
-  const getDaysOfWeek = (weekNum: number, planStartDate: string | null) => {
-    if (!planStartDate) return [];
-    
+  const getWeekRange = (weekNum: number, planStartDate: string | null) => {
+    if (!planStartDate) return null;
+
     const start = new Date(planStartDate + 'T00:00:00');
-    // Ajustar al lunes de esa semana del plan
-    const dayOffset = (weekNum - 1) * 7;
-    const monday = new Date(start);
-    monday.setDate(start.getDate() + dayOffset);
-    
-    // Si el start_date no es lunes, opcionalmente podrías ajustar al lunes anterior
-    // Pero por ahora asumimos que el plan arranca el día definido.
-    
+    const startDay = start.getDay();
+    const diffToMonday = startDay === 0 ? -6 : 1 - startDay;
+    const firstMonday = new Date(start);
+    firstMonday.setDate(start.getDate() + diffToMonday);
+
+    const monday = new Date(firstMonday);
+    monday.setDate(firstMonday.getDate() + (weekNum - 1) * 7);
+
+    const sunday = new Date(monday);
+    sunday.setDate(monday.getDate() + 6);
+
+    return {
+      monday: monday.toISOString().split('T')[0],
+      sunday: sunday.toISOString().split('T')[0],
+    };
+  };
+
+  const weekRange = getWeekRange(selectedWeek, plan?.start_date || null);
+
+  const currentWeekSessions = sessions
+    .filter((session) => {
+      if (!weekRange || !(session as any).date) return false;
+      const sessionDate = (session as any).date.split('T')[0];
+      return sessionDate >= weekRange.monday && sessionDate <= weekRange.sunday;
+    })
+    .sort((a, b) => {
+      const dateA = ((a as any).date || "").split('T')[0];
+      const dateB = ((b as any).date || "").split('T')[0];
+      if (dateA !== dateB) return dateA.localeCompare(dateB);
+      return (a.order_index ?? 0) - (b.order_index ?? 0);
+    });
+
+  const getDaysOfWeek = (weekNum: number, planStartDate: string | null) => {
+    const range = getWeekRange(weekNum, planStartDate);
+    if (!range) return [];
+
+    const monday = new Date(range.monday + 'T00:00:00');
+
     return Array.from({ length: 7 }).map((_, i) => {
       const d = new Date(monday);
       d.setDate(monday.getDate() + i);
       const dateStr = d.toISOString().split('T')[0];
-      // Corregir comparación de fechas para evitar timezone issues
-      const session = currentWeekSessions.find(s => {
-        // 1. Defensa: Si la sesión por algún motivo no tiene fecha, la ignoramos
-        if (!(s as any).date) return false;
-        
-        // 2. Extracción segura: Supabase suele devolver 'YYYY-MM-DD'. 
-        // Hacemos un split por 'T' por si viene con timezone, y nos quedamos con la fecha.
-        const sessionDate = (s as any).date.split('T')[0]; 
-        
-        // 3. Comparamos peras con peras (String contra String)
-        return sessionDate === dateStr;
-      });
-      return { date: dateStr, session };
+      const daySessions = currentWeekSessions
+        .filter((session) => {
+          if (!(session as any).date) return false;
+          return (session as any).date.split('T')[0] === dateStr;
+        })
+        .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+
+      return { date: dateStr, sessions: daySessions };
     });
   };
 
@@ -137,21 +151,34 @@ export function RoutineCalendarClient({
     ? new Intl.DateTimeFormat('es-AR', { month: 'long', year: 'numeric' }).format(new Date(weeklyDays[0].date + 'T00:00:00'))
     : "";
 
-  // Efecto para sincronizar selectedDayId cuando cambia la semana
+  // Efecto para sincronizar selectedDate cuando cambia la semana visible
   useEffect(() => {
     if (currentWeekSessions.length > 0) {
-      // Si no hay sesión seleccionada o no está en la semana actual, seleccionar la primera disponible
-      if (!selectedDayId || !currentWeekSessions.some(s => s.id === selectedDayId)) {
-        setSelectedDayId(currentWeekSessions[0].id);
+      const selectedDateStillVisible = !!selectedDate && weeklyDays.some((day) => day.date === selectedDate);
+      if (!selectedDateStillVisible) {
+        const firstSessionDate = ((currentWeekSessions[0] as any).date || "").split('T')[0];
+        setSelectedDate(firstSessionDate || null);
+        setIsAddingDay(false);
+        setNewDayForm(null);
       }
     } else {
-      // Si no hay sesiones en la semana, limpiar selección
-      setSelectedDayId(null);
+      const firstVisibleDate = weeklyDays[0]?.date ?? null;
+      setSelectedDate(firstVisibleDate);
     }
-  }, [selectedWeek, currentWeekSessions.length]); // Solo depender de cambios relevantes
+  }, [selectedWeek, currentWeekSessions.length, selectedDate, weeklyDays]);
 
-  const selectedSession = sessions.find((s) => s.id === selectedDayId);
-  const exercises = selectedDayId ? exercisesBySession[selectedDayId] || [] : [];
+  const activeSessionsForDate = selectedDate
+    ? sessions
+        .filter((session) => {
+          if (!(session as any).date) return false;
+          return (session as any).date.split('T')[0] === selectedDate;
+        })
+        .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0))
+    : [];
+
+  const activeExercises = activeSessionsForDate
+    .flatMap((session) => exercisesBySession[session.id] || [])
+    .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
 
   const handleAddWeek = () => {
     if (!plan) return;
@@ -163,23 +190,26 @@ export function RoutineCalendarClient({
   };
 
   const handleAddDay = () => {
-    if (!plan) return;
+    if (!plan || !newDayForm) return;
     const nextOrder = (currentWeekSessions.length > 0 ? Math.max(...currentWeekSessions.map(s => s.order_index ?? 0)) : 0) + 1;
     startTransition(async () => {
       await addDayToWeek(plan.id, selectedWeek, nextOrder, "Day", newDayForm.date);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
       setIsAddingDay(false);
+      setSelectedDate(newDayForm.date);
+      setNewDayForm(null);
     });
   };
 
   const handleDuplicateDay = async () => {
-    if (!selectedDayId) return;
+    const sourceSessionId = activeSessionsForDate[0]?.id;
+    if (!sourceSessionId) return;
     const targetDate = prompt("Ingrese la fecha para el nuevo día (YYYY-MM-DD):", new Date().toISOString().split('T')[0]);
     if (!targetDate) return;
 
     startTransition(async () => {
       try {
-        await duplicateSession(selectedDayId, targetDate);
+        await duplicateSession(sourceSessionId, targetDate);
         await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
         alert("Día duplicado con éxito");
       } catch (error) {
@@ -188,27 +218,14 @@ export function RoutineCalendarClient({
     });
   };
 
-  const handleSaveAsTemplate = async () => {
-    if (!plan) return;
-    if (!confirm("¿Guardar este plan como una nueva plantilla?")) return;
-
-    startTransition(async () => {
-      try {
-        await duplicatePlan(plan.id);
-        alert("Plan guardado como plantilla con éxito");
-      } catch (error) {
-        console.error("Error saving as template:", error);
-      }
-    });
-  };
-
   const handleAddExercise = async () => {
-    if (!selectedDayId || !newExForm.exerciseId) return;
+    const targetSessionId = activeSessionsForDate[0]?.id;
+    if (!targetSessionId || !newExForm.exerciseId) return;
 
     startTransition(async () => {
       try {
         await addExerciseToSession(
-          selectedDayId,
+          targetSessionId,
           Number(newExForm.exerciseId),
           newExForm.target_sets,
           newExForm.target_reps,
@@ -271,6 +288,13 @@ export function RoutineCalendarClient({
 
   return (
     <div className="flex flex-col gap-4 pb-24">
+      {role === "COACH" && studentId && (
+        <ImportTemplateModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          studentId={studentId}
+        />
+      )}
       {/* Header Info */}
       <div className="flex items-center justify-between px-4">
         <div className="flex flex-col gap-1">
@@ -281,12 +305,12 @@ export function RoutineCalendarClient({
             {profile?.name ? `Alumno: ${profile.name} ${profile.last_name || ""}` : ""}
           </p>
         </div>
-        {role === "COACH" && plan && (
+        {role === "COACH" && studentId && (
           <button 
-            onClick={handleSaveAsTemplate}
-            className="flex items-center gap-2 rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2 text-[10px] font-black text-zinc-400 hover:text-yellow-400 transition-all uppercase tracking-widest"
+            onClick={() => setIsImportModalOpen(true)}
+            className="flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-2 text-[10px] font-black text-black transition-all uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98]"
           >
-            <LayoutTemplate className="h-3.5 w-3.5" /> Guardar Plantilla
+            📥 Importar Plantilla
           </button>
         )}
       </div>
@@ -331,22 +355,26 @@ export function RoutineCalendarClient({
         {/* 7-Day Weekly Grid */}
         <div className="grid grid-cols-7 gap-2">
           {weeklyDays.map((day, idx) => {
-            const isSelected = selectedDayId === day.session?.id;
+            const isSelected = selectedDate === day.date;
             const dateInfo = formatSessionDate(day.date);
-            const hasSession = !!day.session;
+            const hasSession = day.sessions.length > 0;
 
             return (
               <button
                 key={day.date}
                 onClick={() => {
                   if (hasSession) {
-                    setSelectedDayId(day.session!.id);
+                    setSelectedDate(day.date);
+                    setIsAddingDay(false);
+                    setNewDayForm(null);
                   } else if (role === "COACH") {
-                    setNewDayForm({ date: day.date });
+                    setSelectedDate(day.date);
                     setIsAddingDay(true);
+                    setNewDayForm({ date: day.date });
                   } else {
-                    // Para STUDENT: mostrar día de descanso
-                    setSelectedDayId(null);
+                    setSelectedDate(day.date);
+                    setIsAddingDay(false);
+                    setNewDayForm(null);
                   }
                 }}
                 className={`flex flex-col items-center gap-1 rounded-2xl py-3 border-2 transition-all duration-200 ${
@@ -366,6 +394,11 @@ export function RoutineCalendarClient({
                 {hasSession && !isSelected && (
                   <div className="h-1 w-1 rounded-full bg-yellow-400 mt-0.5 animate-pulse" />
                 )}
+                {day.sessions.length > 1 && (
+                  <span className="text-[8px] font-black uppercase tracking-widest opacity-60">
+                    {day.sessions.length}
+                  </span>
+                )}
               </button>
             );
           })}
@@ -377,14 +410,14 @@ export function RoutineCalendarClient({
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
           <div className="flex flex-col">
             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-              {selectedSession ? "Sesión del día" : role === "STUDENT" ? "Día de descanso" : "Sin sesión"}
+              {selectedDate ? (activeSessionsForDate.length > 0 ? "Entrenamiento" : role === "STUDENT" ? "Día de descanso" : "Sin sesión") : role === "STUDENT" ? "Día de descanso" : "Sin sesión"}
             </h3>
             <p className="text-lg font-bold text-zinc-100 uppercase tracking-tight">
-              {selectedSession ? ((selectedSession as any).date ? new Date((selectedSession as any).date + 'T00:00:00').toLocaleDateString('es-AR', { dateStyle: 'long' }) : `Día ${selectedSession.order_index}`) : 
+              {selectedDate ? new Date(selectedDate + 'T00:00:00').toLocaleDateString('es-AR', { dateStyle: 'long' }) : 
                role === "STUDENT" ? "Descanso y recuperación" : "Selecciona un día"}
             </p>
           </div>
-          {role === "COACH" && selectedDayId && (
+          {role === "COACH" && activeSessionsForDate.length > 0 && !isAddingDay && (
             <div className="flex gap-2">
               <button 
                 onClick={handleDuplicateDay}
@@ -407,7 +440,7 @@ export function RoutineCalendarClient({
           <div className="rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-950 p-6 flex flex-col gap-4 animate-in fade-in slide-in-from-top-2">
             <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Elegir fecha para el nuevo día</h4>
-              <button onClick={() => setIsAddingDay(false)} className="text-zinc-500 hover:text-white transition">
+              <button onClick={() => { setIsAddingDay(false); setNewDayForm(null); }} className="text-zinc-500 hover:text-white transition">
                 <X className="h-5 w-5" />
               </button>
             </div>
@@ -415,7 +448,7 @@ export function RoutineCalendarClient({
               <input 
                 type="date" 
                 className="flex-1 rounded-xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all"
-                value={newDayForm.date}
+                value={newDayForm?.date ?? ""}
                 onChange={e => setNewDayForm({ date: e.target.value })}
               />
               <button 
@@ -571,8 +604,9 @@ export function RoutineCalendarClient({
         )}
 
         {/* Exercise List - NEW EXCEL GRID */}
-        <div className="flex flex-col gap-4">
-          {exercises.length === 0 && !selectedSession ? (
+        {!isAddingDay && (
+          <div className="flex flex-col gap-4">
+            {activeExercises.length === 0 && activeSessionsForDate.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 rounded-[2rem] border-2 border-dashed border-zinc-800 bg-zinc-950/50">
               <div className="flex flex-col items-center gap-3">
                 <div className="h-16 w-16 rounded-full bg-zinc-900/50 flex items-center justify-center">
@@ -588,24 +622,25 @@ export function RoutineCalendarClient({
                 )}
               </div>
             </div>
-          ) : exercises.length === 0 ? (
+            ) : activeExercises.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 rounded-[2rem] border-2 border-dashed border-zinc-800 bg-zinc-950/50">
               <Dumbbell className="h-12 w-12 text-zinc-700 mb-4" />
               <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">Sin ejercicios para este día</p>
             </div>
-          ) : (
-            <ExerciseExcelGrid exercises={exercises} role={role} />
-          )}
+            ) : (
+              <ExerciseExcelGrid exercises={activeExercises} role={role} />
+            )}
 
-          {role === "COACH" && !isAddingExercise && (
-            <button
-              onClick={() => setIsAddingExercise(true)}
-              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-800 p-4 text-xs font-black text-zinc-500 hover:border-yellow-400 hover:text-yellow-400 transition-all uppercase tracking-widest"
-            >
-              <Plus className="h-4 w-4" /> Agregar Ejercicio
-            </button>
-          )}
-        </div>
+            {role === "COACH" && !isAddingExercise && activeSessionsForDate.length > 0 && (
+              <button
+                onClick={() => setIsAddingExercise(true)}
+                className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-800 p-4 text-xs font-black text-zinc-500 hover:border-yellow-400 hover:text-yellow-400 transition-all uppercase tracking-widest"
+              >
+                <Plus className="h-4 w-4" /> Agregar Ejercicio
+              </button>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );

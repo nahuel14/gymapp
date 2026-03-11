@@ -49,6 +49,7 @@ export function CoachStudentDetailClient({ studentId }: Props) {
       </div>
 
       <RoutineCalendarClient
+        studentId={studentId}
         role="COACH"
         profile={data.profile}
         plan={data.plan}

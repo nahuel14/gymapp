@@ -578,3 +578,174 @@ export async function updateTemplatePlan(templateId: number, name: string) {
     throw error;
   }
 }
+
+export async function importTemplateToStudent(
+  studentId: string,
+  templateId: number,
+  startDate: string,
+  selectedDays: number[]
+) {
+  const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+  if (!startDate) throw new Error("La fecha de inicio es obligatoria");
+  if (!selectedDays.length) throw new Error("Debes seleccionar al menos un día");
+
+  const normalizedDays = [...selectedDays].sort((a, b) => {
+    const normalizedA = a === 0 ? 7 : a;
+    const normalizedB = b === 0 ? 7 : b;
+    return normalizedA - normalizedB;
+  });
+
+  const { data: templatePlan, error: templateError } = await supabase
+    .from("training_plans")
+    .select("*")
+    .eq("id", templateId)
+    .eq("is_template", true)
+    .single();
+
+  if (templateError || !templatePlan) throw new Error("No se encontró la plantilla");
+
+  let { data: activePlan } = await supabase
+    .from("training_plans")
+    .select("*")
+    .eq("student_id", studentId as any)
+    .eq("is_template", false as any)
+    .eq("is_active", true as any)
+    .order("created_at", { ascending: false })
+    .limit(1)
+    .maybeSingle();
+
+  if (!activePlan) {
+    const { data: createdPlan, error: createPlanError } = await adminClient
+      .from("training_plans")
+      .insert({
+        student_id: studentId,
+        coach_id: templatePlan.coach_id ?? user.id,
+        name: templatePlan.name,
+        start_date: startDate,
+        is_active: true,
+        is_template: false
+      } as any)
+      .select()
+      .single();
+
+    if (createPlanError || !createdPlan) throw createPlanError;
+    activePlan = createdPlan;
+  }
+
+  const { data: existingSessions, error: existingSessionsError } = await supabase
+    .from("sessions")
+    .select("week_number")
+    .eq("plan_id", activePlan.id);
+
+  if (existingSessionsError) throw existingSessionsError;
+
+  const baseWeek = (existingSessions || []).reduce((max, session: any) => {
+    return Math.max(max, session.week_number || 0);
+  }, 0);
+
+  const { data: templateSessions, error: templateSessionsError } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("plan_id", templateId)
+    .order("week_number", { ascending: true })
+    .order("order_index", { ascending: true });
+
+  if (templateSessionsError) throw templateSessionsError;
+
+  if (!templateSessions || templateSessions.length === 0) {
+    revalidatePath("/coach/student/[studentId]", "page");
+    revalidatePath("/student", "page");
+    return { success: true, planId: activePlan.id };
+  }
+
+  const start = new Date(startDate + "T00:00:00");
+  const monday = new Date(start);
+  const startDay = monday.getDay();
+  const diffToMonday = startDay === 0 ? -6 : 1 - startDay;
+  monday.setDate(monday.getDate() + diffToMonday);
+
+  const sessionsByTemplateWeek = new Map<number, any[]>();
+  for (const session of templateSessions) {
+    const weekNumber = session.week_number || 1;
+    if (!sessionsByTemplateWeek.has(weekNumber)) {
+      sessionsByTemplateWeek.set(weekNumber, []);
+    }
+    sessionsByTemplateWeek.get(weekNumber)!.push(session);
+  }
+
+  const createdSessionIds = new Map<number, number>();
+
+  for (const [templateWeek, weekSessions] of sessionsByTemplateWeek.entries()) {
+    const sortedSessions = [...weekSessions].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+    const weekMonday = new Date(monday);
+    weekMonday.setDate(monday.getDate() + (templateWeek - 1) * 7);
+    const targetWeekNumber = baseWeek + templateWeek;
+
+    for (let index = 0; index < sortedSessions.length; index++) {
+      const templateSession = sortedSessions[index];
+      const selectedDay = normalizedDays[index % normalizedDays.length];
+      const dayOffset = selectedDay === 0 ? 6 : selectedDay - 1;
+      const sessionDate = new Date(weekMonday);
+      sessionDate.setDate(weekMonday.getDate() + dayOffset);
+      const formattedDate = sessionDate.toISOString().split("T")[0];
+
+      const { data: insertedSession, error: insertedSessionError } = await adminClient
+        .from("sessions")
+        .insert({
+          plan_id: activePlan.id,
+          week_number: targetWeekNumber,
+          day_name: templateSession.day_name,
+          order_index: templateSession.order_index,
+          is_completed: false,
+          date: formattedDate
+        } as any)
+        .select()
+        .single();
+
+      if (insertedSessionError || !insertedSession) throw insertedSessionError;
+      createdSessionIds.set(templateSession.id, insertedSession.id);
+    }
+  }
+
+  for (const templateSession of templateSessions) {
+    const newSessionId = createdSessionIds.get(templateSession.id);
+    if (!newSessionId) continue;
+
+    const { data: templateExercises, error: templateExercisesError } = await supabase
+      .from("session_exercises")
+      .select("*")
+      .eq("session_id", templateSession.id)
+      .order("order_index", { ascending: true });
+
+    if (templateExercisesError) throw templateExercisesError;
+
+    if (templateExercises && templateExercises.length > 0) {
+      const payload = templateExercises.map((exercise: any) => ({
+        session_id: newSessionId,
+        exercise_id: exercise.exercise_id,
+        target_sets: exercise.target_sets,
+        target_reps: exercise.target_reps,
+        target_weight: exercise.target_weight,
+        target_rpe: exercise.target_rpe,
+        rest_seconds: exercise.rest_seconds,
+        coach_notes: exercise.coach_notes,
+        order_index: exercise.order_index
+      }));
+
+      const { error: insertExercisesError } = await adminClient
+        .from("session_exercises")
+        .insert(payload as any);
+
+      if (insertExercisesError) throw insertExercisesError;
+    }
+  }
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+
+  return { success: true, planId: activePlan.id };
+}
