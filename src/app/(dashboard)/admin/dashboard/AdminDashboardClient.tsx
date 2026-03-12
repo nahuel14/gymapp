@@ -187,8 +187,56 @@ export function AdminDashboardClient({
         />
       </div>
 
+      <div className="flex flex-col gap-4 md:hidden">
+        {filteredProfiles.map((profile) => (
+          <div key={profile.id} className="rounded-[1.5rem] border-2 border-border bg-card p-5 shadow-sm">
+            <div className="flex flex-col gap-1">
+              <span className="text-lg font-black text-foreground">
+                {(profile as any).name} {(profile as any).last_name}
+              </span>
+              <span className="flex items-center gap-2 text-sm font-medium text-muted-foreground break-all">
+                <Mail className="h-4 w-4 shrink-0" /> {profile.email}
+              </span>
+            </div>
+
+            <div className="mt-4 flex items-center justify-between gap-3">
+              <span className={`inline-flex px-2.5 py-1 rounded-lg text-[10px] font-black tracking-wider uppercase border ${
+                profile.role === 'ADMIN' ? 'bg-purple-50 text-purple-600 border-purple-100' :
+                profile.role === 'COACH' ? 'bg-blue-50 text-blue-600 border-blue-100' :
+                'bg-orange-50 text-orange-600 border-orange-100'
+              }`}>
+                {profile.role}
+              </span>
+              {profile.role === "STUDENT" ? (
+                <span className="text-xs font-medium text-muted-foreground">
+                  {assignments.filter(a => a.student_id === profile.id).length} coach(es)
+                </span>
+              ) : (
+                <span className="text-xs font-medium italic text-muted-foreground">N/A</span>
+              )}
+            </div>
+
+            <div className="mt-5 flex items-center justify-end gap-2 border-t border-border pt-4">
+              <button 
+                onClick={() => handleEditClick(profile)}
+                className="p-2 rounded-xl bg-muted text-muted-foreground hover:bg-foreground hover:text-background transition-all active:scale-95"
+              >
+                <Pencil className="h-4 w-4" />
+              </button>
+              <button
+                onClick={() => handleDeleteUser(profile.id)}
+                disabled={isPending}
+                className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-95 disabled:opacity-50"
+              >
+                <Trash2 className="h-4 w-4" />
+              </button>
+            </div>
+          </div>
+        ))}
+      </div>
+
       {/* Users Table */}
-      <div className="bg-card border-2 border-border rounded-[2rem] overflow-hidden shadow-sm">
+      <div className="hidden bg-card border-2 border-border rounded-[2rem] overflow-hidden shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>

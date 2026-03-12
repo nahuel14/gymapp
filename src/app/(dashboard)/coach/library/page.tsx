@@ -149,7 +149,7 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
         </p>
       </header>
 
-      <section className="rounded-lg bg-card p-4 shadow-sm">
+      <section className="w-full max-w-lg rounded-lg bg-card p-4 shadow-sm">
         <h2 className="mb-3 text-sm font-semibold text-foreground">
           Nuevo ejercicio
         </h2>
