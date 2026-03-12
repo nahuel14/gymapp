@@ -128,6 +128,18 @@ export async function updateUserAsAdmin(userId: string, name: string, lastName: 
   return { success: true };
 }
 
+export async function deleteUser(userId: string) {
+  await ensureAdmin();
+  const adminClient = createSupabaseAdminClient();
+
+  const { error } = await adminClient.auth.admin.deleteUser(userId);
+
+  if (error) throw error;
+
+  revalidatePath("/admin/dashboard");
+  return { success: true };
+}
+
 export async function getCoachStudentAssignments() {
   const { supabase } = await ensureAdmin();
 

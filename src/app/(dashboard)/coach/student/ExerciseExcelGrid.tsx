@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import { 
@@ -19,9 +19,10 @@ type SessionExercise = any; // Will use any for now until types are refreshed
 interface Props {
   exercises: SessionExercise[];
   role: "COACH" | "STUDENT";
+  isTemplate?: boolean;
 }
 
-export function ExerciseExcelGrid({ exercises, role }: Props) {
+export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props) {
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -79,7 +80,7 @@ export function ExerciseExcelGrid({ exercises, role }: Props) {
       } else {
         newArray[index] = Number(value);
       }
-      return { ...prev, [field]: newArray };
+      return { ...prev, [field] : newArray };
     });
   };
 
@@ -91,7 +92,9 @@ export function ExerciseExcelGrid({ exercises, role }: Props) {
           <tr className="border-b border-zinc-800">
             <th colSpan={4} className="bg-zinc-950 px-4 py-2 text-left text-zinc-500 uppercase tracking-widest font-black border-r border-zinc-800">Ejercicio</th>
             <th colSpan={6} className="bg-zinc-900 px-4 py-2 text-center text-yellow-400 uppercase tracking-widest font-black border-r border-zinc-800">Coach (Prescrito)</th>
-            <th colSpan={5} className="bg-zinc-800 px-4 py-2 text-center text-emerald-400 uppercase tracking-widest font-black">Student (Ejecutado)</th>
+            {!isTemplate && (
+              <th colSpan={5} className="bg-zinc-800 px-4 py-2 text-center text-emerald-400 uppercase tracking-widest font-black">Student (Ejecutado)</th>
+            )}
           </tr>
           {/* Sub Headers */}
           <tr className="border-b border-zinc-800 bg-zinc-950/50 text-zinc-400">
@@ -107,15 +110,20 @@ export function ExerciseExcelGrid({ exercises, role }: Props) {
             <th className="px-2 py-2 text-center border-r border-zinc-800 w-12 bg-zinc-900/50">PAUSA</th>
             <th className="px-2 py-2 text-left border-r border-zinc-800 bg-zinc-900/50">OBS</th>
 
-            <th className="px-2 py-2 text-center border-r border-zinc-800 w-8 bg-zinc-800/50">S</th>
-            <th className="px-2 py-2 text-center border-r border-zinc-800 w-32 bg-zinc-800/50">REPS</th>
-            <th className="px-2 py-2 text-center border-r border-zinc-800 w-32 bg-zinc-800/50">KILOS</th>
-            <th className="px-2 py-2 text-center border-r border-zinc-800 w-12 bg-zinc-800/50 text-emerald-400">RPE</th>
-            <th className="px-2 py-2 text-left bg-zinc-800/50">NOTAS</th>
+            {!isTemplate && (
+              <>
+                <th className="px-2 py-2 text-center border-r border-zinc-800 w-8 bg-zinc-800/50">S</th>
+                <th className="px-2 py-2 text-center border-r border-zinc-800 w-32 bg-zinc-800/50">REPS</th>
+                <th className="px-2 py-2 text-center border-r border-zinc-800 w-32 bg-zinc-800/50">KILOS</th>
+                <th className="px-2 py-2 text-center border-r border-zinc-800 w-12 bg-zinc-800/50 text-emerald-400">RPE</th>
+                <th className="px-2 py-2 text-left bg-zinc-800/50">NOTAS</th>
+              </>
+            )}
           </tr>
         </thead>
         <tbody className="divide-y divide-zinc-800">
           {exercises.map((ex) => {
+            const exerciseData = ex.exercise || ex.exercises;
             const isEditing = editingId === ex.id;
             const data = isEditing ? editForm : ex;
             const coachSets = Number(data.target_sets || 0);
@@ -125,14 +133,14 @@ export function ExerciseExcelGrid({ exercises, role }: Props) {
               <tr key={ex.id} className="hover:bg-zinc-900/30 transition-colors group">
                 {/* Ejercicio Info */}
                 <td className="px-3 py-3 border-r border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase whitespace-nowrap">
-                  {ex.exercise?.body_zone ? BODY_ZONE_LABELS[ex.exercise.body_zone as keyof typeof BODY_ZONE_LABELS]?.substring(0, 5) : "--"}
+                  {exerciseData?.body_zone ? BODY_ZONE_LABELS[exerciseData.body_zone as keyof typeof BODY_ZONE_LABELS]?.substring(0, 5) : "--"}
                 </td>
                 <td className="px-3 py-3 border-r border-zinc-800 text-[10px] text-zinc-500 font-bold uppercase whitespace-nowrap">
-                  {ex.exercise?.category ? EXERCISE_CATEGORY_LABELS[ex.exercise.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
+                  {exerciseData?.category ? EXERCISE_CATEGORY_LABELS[exerciseData.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
                 </td>
                 <td className="px-3 py-3 border-r border-zinc-800">
                   <div className="flex items-center justify-between gap-2">
-                    <span className="text-zinc-100 font-black uppercase truncate max-w-[150px]">{ex.exercise?.name}</span>
+                    <span className="text-zinc-100 font-black uppercase truncate max-w-[150px]">{exerciseData?.name}</span>
                     {role === "COACH" && (
                       <div className="flex opacity-0 group-hover:opacity-100 transition-opacity">
                         {isEditing ? (
@@ -151,8 +159,8 @@ export function ExerciseExcelGrid({ exercises, role }: Props) {
                   </div>
                 </td>
                 <td className="px-2 py-3 border-r border-zinc-800 text-center">
-                  {ex.exercise?.video_url && (
-                    <a href={ex.exercise.video_url} target="_blank" rel="noopener noreferrer" className="inline-block p-1.5 rounded-full bg-zinc-900 text-yellow-400 hover:bg-yellow-400 hover:text-black transition-all">
+                  {exerciseData?.video_url && (
+                    <a href={exerciseData.video_url} target="_blank" rel="noopener noreferrer" className="inline-block p-1.5 rounded-full bg-zinc-900 text-yellow-400 hover:bg-yellow-400 hover:text-black transition-all">
                       <Play className="h-3 w-3 fill-current" />
                     </a>
                   )}
@@ -212,57 +220,71 @@ export function ExerciseExcelGrid({ exercises, role }: Props) {
                 </td>
 
                 {/* Student Columns */}
-                <td className="px-2 py-3 border-r border-zinc-800 text-center bg-zinc-800/20 font-black text-emerald-400">
-                  {isEditing && role === "STUDENT" ? (
-                    <input type="number" className="w-full bg-transparent text-center outline-none" value={data.actual_sets} onChange={e => setEditForm({...editForm, actual_sets: Number(e.target.value)})} />
-                  ) : data.actual_sets || "--"}
-                </td>
-                <td className="px-2 py-3 border-r border-zinc-800 bg-zinc-800/20">
-                  <div className="flex gap-1 justify-center">
-                    {Array.from({ length: studentSets }).map((_, i) => (
-                      <input 
-                        key={i}
-                        type="number"
-                        min="1"
-                        disabled={!isEditing || role !== "STUDENT"}
-                        className="w-8 h-6 bg-zinc-900 border border-zinc-700 rounded text-center outline-none focus:border-emerald-400 transition-colors text-zinc-100 disabled:opacity-50"
-                        value={data.actual_reps?.[i] ?? 10}
-                        onChange={e => updateArrayField("actual_reps", i, e.target.value)}
-                      />
-                    ))}
-                  </div>
-                </td>
-                <td className="px-2 py-3 border-r border-zinc-800 bg-zinc-800/20">
-                  <div className="flex gap-1 justify-center">
-                    {Array.from({ length: studentSets }).map((_, i) => (
-                      <input 
-                        key={i}
-                        type="number"
-                        step="0.5"
-                        disabled={!isEditing || role !== "STUDENT"}
-                        className="w-8 h-6 bg-zinc-900 border border-zinc-700 rounded text-center outline-none focus:border-emerald-400 transition-colors text-zinc-100 disabled:opacity-50"
-                        placeholder="Kg"
-                        value={data.actual_weight?.[i] ?? ""}
-                        onChange={e => updateArrayField("actual_weight", i, e.target.value)}
-                      />
-                    ))}
-                  </div>
-                </td>
-                <td className={`px-2 py-3 border-r border-zinc-800 text-center bg-zinc-800/20 font-black ${getRpeColor(data.actual_rpe)}`}>
-                  {isEditing && role === "STUDENT" ? (
-                    <input type="number" className="w-full bg-transparent text-center outline-none" value={data.actual_rpe} onChange={e => setEditForm({...editForm, actual_rpe: Number(e.target.value)})} />
-                  ) : data.actual_rpe || "--"}
-                </td>
-                <td className="px-3 py-3 bg-zinc-800/20 text-zinc-400 italic max-w-[150px] truncate">
-                  <div className="flex items-center justify-between gap-2">
-                    {isEditing && role === "STUDENT" ? (
-                      <input className="w-full bg-transparent outline-none" value={data.student_notes} onChange={e => setEditForm({...editForm, student_notes: e.target.value})} />
-                    ) : data.student_notes || "--"}
-                    {role === "STUDENT" && !isEditing && (
-                      <button onClick={() => handleStartEdit(ex)} className="p-1 text-emerald-400/50 hover:text-emerald-400 transition-colors"><Settings2 className="h-3 w-3" /></button>
-                    )}
-                  </div>
-                </td>
+                {!isTemplate && (
+                  <>
+                    <td className="px-2 py-3 border-r border-zinc-800 text-center bg-zinc-800/20 font-black text-emerald-400">
+                      {isEditing && role === "STUDENT" ? (
+                        <input type="number" className="w-full bg-transparent text-center outline-none" value={data.actual_sets} onChange={e => setEditForm({...editForm, actual_sets: Number(e.target.value)})} />
+                      ) : data.actual_sets || "--"}
+                    </td>
+                    <td className="px-2 py-3 border-r border-zinc-800 bg-zinc-800/20">
+                      <div className="flex gap-1 justify-center">
+                        {Array.from({ length: studentSets }).map((_, i) => (
+                          <input 
+                            key={i}
+                            type="number"
+                            min="1"
+                            disabled={!isEditing || role !== "STUDENT"}
+                            className="w-8 h-6 bg-zinc-900 border border-zinc-700 rounded text-center outline-none focus:border-emerald-400 transition-colors text-zinc-100 disabled:opacity-50"
+                            value={data.actual_reps?.[i] ?? 10}
+                            onChange={e => updateArrayField("actual_reps", i, e.target.value)}
+                          />
+                        ))}
+                      </div>
+                    </td>
+                    <td className="px-2 py-3 border-r border-zinc-800 bg-zinc-800/20">
+                      <div className="flex gap-1 justify-center">
+                        {Array.from({ length: studentSets }).map((_, i) => (
+                          <input 
+                            key={i}
+                            type="number"
+                            step="0.5"
+                            disabled={!isEditing || role !== "STUDENT"}
+                            className="w-8 h-6 bg-zinc-900 border border-zinc-700 rounded text-center outline-none focus:border-emerald-400 transition-colors text-zinc-100 disabled:opacity-50"
+                            placeholder="Kg"
+                            value={data.actual_weight?.[i] ?? ""}
+                            onChange={e => updateArrayField("actual_weight", i, e.target.value)}
+                          />
+                        ))}
+                      </div>
+                    </td>
+                    <td className={`px-2 py-3 border-r border-zinc-800 text-center bg-zinc-800/20 font-black ${getRpeColor(data.actual_rpe)}`}>
+                      {isEditing && role === "STUDENT" ? (
+                        <input type="number" className="w-full bg-transparent text-center outline-none" value={data.actual_rpe} onChange={e => setEditForm({...editForm, actual_rpe: Number(e.target.value)})} />
+                      ) : data.actual_rpe || "--"}
+                    </td>
+                    <td className="px-3 py-3 bg-zinc-800/20 text-zinc-400 italic max-w-[150px] truncate">
+                      <div className="flex items-center justify-between gap-2">
+                        {isEditing && role === "STUDENT" ? (
+                          <>
+                            <input className="w-full bg-transparent outline-none" value={data.student_notes} onChange={e => setEditForm({...editForm, student_notes: e.target.value})} />
+                            <div className="flex gap-1 shrink-0">
+                              <button onClick={() => handleSave(ex.id)} disabled={isPending} className="p-1 text-emerald-400 hover:bg-emerald-400/10 rounded">
+                                <Save className="h-3 w-3" />
+                              </button>
+                              <button onClick={() => setEditingId(null)} className="p-1 text-zinc-500 hover:bg-zinc-500/10 rounded">
+                                <X className="h-3 w-3" />
+                              </button>
+                            </div>
+                          </>
+                        ) : data.student_notes || "--"}
+                        {role === "STUDENT" && !isEditing && (
+                          <button onClick={() => handleStartEdit(ex)} className="p-1 text-emerald-400/50 hover:text-emerald-400 transition-colors"><Settings2 className="h-3 w-3" /></button>
+                        )}
+                      </div>
+                    </td>
+                  </>
+                )}
               </tr>
             );
           })}

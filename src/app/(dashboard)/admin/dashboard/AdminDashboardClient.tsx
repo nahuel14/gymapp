@@ -1,6 +1,7 @@
  "use client";
 
 import { useState, useTransition } from "react";
+import { useRouter } from "next/navigation";
 import { 
   UserPlus, 
   Users, 
@@ -15,7 +16,8 @@ import {
   CheckSquare,
   Pencil,
   Save,
-  Loader2
+  Loader2,
+  Trash2
 } from "lucide-react";
 import type { Tables, Database } from "@/types/supabase";
 import { 
@@ -23,7 +25,8 @@ import {
   updateUserRole, 
   assignCoachToStudent, 
   removeCoachFromStudent,
-  updateUserAsAdmin
+  updateUserAsAdmin,
+  deleteUser
 } from "@/app/actions/admin";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -40,6 +43,7 @@ export function AdminDashboardClient({
   assignments 
 }: AdminDashboardClientProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [searchTerm, setSearchTerm] = useState("");
   const [isInviteModalOpen, setIsInviteModalOpen] = useState(false);
@@ -141,6 +145,20 @@ export function AdminDashboardClient({
     });
   };
 
+  const handleDeleteUser = async (userId: string) => {
+    if (!window.confirm("¿Eliminar este usuario definitivamente?")) return;
+
+    startTransition(async () => {
+      try {
+        await deleteUser(userId);
+        await queryClient.invalidateQueries();
+        router.refresh();
+      } catch (error: any) {
+        alert("Error al eliminar usuario: " + error.message);
+      }
+    });
+  };
+
   return (
     <div className="flex flex-col gap-8 p-6 max-w-7xl mx-auto">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
@@ -233,12 +251,21 @@ export function AdminDashboardClient({
                     )}
                   </td>
                   <td className="px-6 py-5 text-right">
-                    <button 
-                      onClick={() => handleEditClick(profile)}
-                      className="p-2 rounded-xl bg-muted text-muted-foreground hover:bg-foreground hover:text-background transition-all active:scale-95"
-                    >
-                      <Pencil className="h-4 w-4" />
-                    </button>
+                    <div className="flex items-center justify-end gap-2">
+                      <button 
+                        onClick={() => handleEditClick(profile)}
+                        className="p-2 rounded-xl bg-muted text-muted-foreground hover:bg-foreground hover:text-background transition-all active:scale-95"
+                      >
+                        <Pencil className="h-4 w-4" />
+                      </button>
+                      <button
+                        onClick={() => handleDeleteUser(profile.id)}
+                        disabled={isPending}
+                        className="p-2 rounded-xl bg-red-500/10 text-red-500 hover:bg-red-500 hover:text-white transition-all active:scale-95 disabled:opacity-50"
+                      >
+                        <Trash2 className="h-4 w-4" />
+                      </button>
+                    </div>
                   </td>
                 </tr>
               ))}

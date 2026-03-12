@@ -251,6 +251,34 @@ export async function deleteExerciseFromSession(exerciseSessionId: number) {
   return { success: true };
 }
 
+export async function deleteDayFromPlan(sessionId: number) {
+  const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error: exercisesError } = await adminClient
+    .from("session_exercises")
+    .delete()
+    .eq("session_id", sessionId);
+
+  if (exercisesError) throw exercisesError;
+
+  const { error: sessionError } = await adminClient
+    .from("sessions")
+    .delete()
+    .eq("id", sessionId);
+
+  if (sessionError) throw sessionError;
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+  revalidatePath("/coach/templates/[id]", "page");
+  revalidatePath("/coach/templates/[id]/edit", "page");
+  return { success: true };
+}
+
 export async function createTrainingPlan(studentId: string, planName: string, startDate: string) {
   // 1. Cliente normal: Lee las cookies y averigua quién está logueado
   const supabaseAuth = await createSupabaseServerClient();
