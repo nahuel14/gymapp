@@ -76,11 +76,12 @@ export async function GET(
 
 export async function PATCH(
   request: Request,
-  { params }: { params: { id: string } }
+  { params }: { params: Promise<{ id: string }> }
 ) {
   try {
     const supabase = await createSupabaseServerClient();
-    const templateId = Number(params.id);
+    const { id } = await params;
+    const templateId = Number(id);
     const { name } = await request.json();
 
     // Get current user
