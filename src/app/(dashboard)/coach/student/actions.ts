@@ -279,7 +279,12 @@ export async function deleteDayFromPlan(sessionId: number) {
   return { success: true };
 }
 
-export async function createTrainingPlan(studentId: string, planName: string, startDate: string) {
+export async function createTrainingPlan(
+  studentId: string,
+  planName: string,
+  startDate: string,
+  durationWeeks: number = 4
+) {
   // 1. Cliente normal: Lee las cookies y averigua quién está logueado
   const supabaseAuth = await createSupabaseServerClient();
   const { data: { user } } = await supabaseAuth.auth.getUser();
@@ -296,6 +301,10 @@ export async function createTrainingPlan(studentId: string, planName: string, st
     .eq("student_id", studentId as any);
 
   // Insertar nuevo plan
+  const planStart = new Date(startDate + "T00:00:00");
+  const planEnd = new Date(planStart);
+  planEnd.setDate(planStart.getDate() + Math.max(durationWeeks, 1) * 7 - 1);
+
   const { data: plan, error } = await supabaseAdmin
     .from("training_plans")
     .insert({
@@ -311,7 +320,12 @@ export async function createTrainingPlan(studentId: string, planName: string, st
   if (error) throw error;
 
   revalidatePath("/coach");
-  return { success: true, planId: plan.id };
+  return {
+    success: true,
+    planId: plan.id,
+    durationWeeks,
+    endDate: planEnd.toISOString().split("T")[0]
+  };
 }
 
 export async function createTemplatePlan(planName: string, coachId: string) {

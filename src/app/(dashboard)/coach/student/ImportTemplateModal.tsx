@@ -8,6 +8,7 @@ import { importTemplateToStudent } from "./actions";
 type TemplateOption = {
   id: number;
   name: string;
+  training_days_count: number;
 };
 
 type ImportTemplateModalProps = {
@@ -25,6 +26,13 @@ const DAY_OPTIONS = [
   { label: "Sáb", value: 6 },
   { label: "Dom", value: 0 },
 ];
+
+const getDefaultDaysForCount = (count: number) => {
+  if (count === 2) return [1, 4];
+  if (count === 3) return [1, 3, 5];
+  if (count === 4) return [1, 2, 4, 5];
+  return [1, 3, 5].slice(0, Math.max(1, Math.min(count, 3)));
+};
 
 export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTemplateModalProps) {
   const queryClient = useQueryClient();
@@ -46,7 +54,11 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
           throw new Error("No se pudieron cargar las plantillas");
         }
         const data = await response.json();
-        setTemplates((data || []).map((item: any) => ({ id: item.id, name: item.name })));
+        setTemplates((data || []).map((item: any) => ({
+          id: item.id,
+          name: item.name,
+          training_days_count: item.training_days_count || 0
+        })));
       } catch (error) {
         console.error("Error fetching templates:", error);
       } finally {
@@ -76,6 +88,15 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
       return normalizedA - normalizedB;
     });
   }, [selectedDays]);
+  const selectedTemplate = templates.find((template) => String(template.id) === templateId) || null;
+  const templateDaysCount = selectedTemplate?.training_days_count || 0;
+  const hasExactSelectedDays = !templateDaysCount || selectedDaysSorted.length === templateDaysCount;
+
+  useEffect(() => {
+    if (!templateId) return;
+    if (!templateDaysCount) return;
+    setSelectedDays(getDefaultDaysForCount(templateDaysCount));
+  }, [templateId, templateDaysCount]);
 
   const toggleDay = (day: number) => {
     setSelectedDays((prev) => {
@@ -99,6 +120,11 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
 
     if (selectedDaysSorted.length === 0) {
       alert("Selecciona al menos un día de entrenamiento");
+      return;
+    }
+
+    if (templateDaysCount && selectedDaysSorted.length !== templateDaysCount) {
+      alert(`Esta plantilla requiere exactamente ${templateDaysCount} días por semana`);
       return;
     }
 
@@ -194,11 +220,16 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
                 );
               })}
             </div>
+            {templateDaysCount > 0 && (
+              <p className={`text-xs mt-1 ${hasExactSelectedDays ? "text-zinc-500" : "text-red-400"}`}>
+                Esta plantilla requiere exactamente {templateDaysCount} días por semana. Has seleccionado {selectedDaysSorted.length}.
+              </p>
+            )}
           </div>
 
           <button
             onClick={handleConfirm}
-            disabled={isPending}
+            disabled={isPending || !hasExactSelectedDays || !templateId}
             className="rounded-[1.5rem] bg-yellow-400 py-4 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
           >
             {isPending ? "Importando..." : "Confirmar Importación"}

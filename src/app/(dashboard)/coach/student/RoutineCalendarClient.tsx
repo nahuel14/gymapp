@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useRef, useEffect, useTransition } from "react";
+import { useState, useRef, useEffect, useTransition, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
   Calendar,
+  CalendarX,
   Dumbbell,
   Plus,
   X,
@@ -37,7 +38,7 @@ type SessionExercise = Tables<"session_exercises"> & {
 
 type RoutineCalendarClientProps = {
   studentId?: string;
-  role: "COACH" | "STUDENT";
+  role: "COACH" | "STUDENT" | "ADMIN";
   profile: { id: string; name: string | null; last_name: string | null } | null;
   plan: { id: number; name: string; start_date: string | null } | null;
   sessions: Session[];
@@ -61,8 +62,13 @@ export function RoutineCalendarClient({
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [isAddingDay, setIsAddingDay] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isPlanActionModalOpen, setIsPlanActionModalOpen] = useState(false);
   const [newDayForm, setNewDayForm] = useState<{ date: string } | null>(null);
   const [editingExerciseId, setEditingExerciseId] = useState<number | null>(null);
+  const [planAction, setPlanAction] = useState<"create" | "extend">("create");
+  const [draftPlanName, setDraftPlanName] = useState("");
+  const [selectedExistingPlanId, setSelectedExistingPlanId] = useState("");
+  const [deletedPlanId, setDeletedPlanId] = useState<string | null>(null);
 
   const [newExForm, setNewExForm] = useState({
     exerciseId: "",
@@ -83,6 +89,16 @@ export function RoutineCalendarClient({
   });
 
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const formatDateDisplay = (dateStr: string, options?: Intl.DateTimeFormatOptions) => {
+    return new Intl.DateTimeFormat("es-AR", options).format(new Date(dateStr + "T00:00:00"));
+  };
+
+  const shiftDate = (dateStr: string, days: number) => {
+    const nextDate = new Date(dateStr + "T00:00:00");
+    nextDate.setDate(nextDate.getDate() + days);
+    return nextDate.toISOString().split("T")[0];
+  };
 
   const getWeekRange = (weekNum: number, planStartDate: string | null) => {
     if (!planStartDate) return null;
@@ -105,9 +121,25 @@ export function RoutineCalendarClient({
     };
   };
 
-  const weekRange = getWeekRange(selectedWeek, plan?.start_date || null);
+  const getWeekNumberFromDate = (dateStr: string, planStartDate: string | null) => {
+    if (!planStartDate) return 1;
 
-  const currentWeekSessions = sessions
+    const start = new Date(planStartDate + "T00:00:00");
+    const startDay = start.getDay();
+    const diffToMonday = startDay === 0 ? -6 : 1 - startDay;
+    const firstMonday = new Date(start);
+    firstMonday.setDate(start.getDate() + diffToMonday);
+
+    const target = new Date(dateStr + "T00:00:00");
+    const diffInMs = target.getTime() - firstMonday.getTime();
+    return Math.floor(diffInMs / (7 * 24 * 60 * 60 * 1000)) + 1;
+  };
+
+  const effectivePlan = deletedPlanId === String(plan?.id) ? null : plan;
+  const effectiveSessions = deletedPlanId ? [] : sessions;
+  const weekRange = getWeekRange(selectedWeek, effectivePlan?.start_date || null);
+
+  const currentWeekSessions = effectiveSessions
     .filter((session) => {
       if (!weekRange || !(session as any).date) return false;
       const sessionDate = (session as any).date.split("T")[0];
@@ -141,13 +173,75 @@ export function RoutineCalendarClient({
     });
   };
 
-  const weeklyDays = getDaysOfWeek(selectedWeek, plan?.start_date || null);
+  const weeklyDays = getDaysOfWeek(selectedWeek, effectivePlan?.start_date || null);
   const currentMonthName =
     weeklyDays.length > 0
       ? new Intl.DateTimeFormat("es-AR", { month: "long", year: "numeric" }).format(
           new Date(weeklyDays[0].date + "T00:00:00")
         )
       : "";
+  const hasPlanInViewedWeek = currentWeekSessions.length > 0;
+  const mockPlans = effectivePlan
+    ? [
+        {
+          id: String(effectivePlan.id),
+          name: effectivePlan.name,
+          startDate: effectivePlan.start_date || new Date().toISOString().split("T")[0]
+        },
+        {
+          id: `history-${effectivePlan.id}-1`,
+          name: `${effectivePlan.name} · Bloque anterior`,
+          startDate: effectivePlan.start_date
+            ? new Date(new Date(effectivePlan.start_date + "T00:00:00").getTime() - 28 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .split("T")[0]
+            : new Date().toISOString().split("T")[0]
+        },
+        {
+          id: `history-${effectivePlan.id}-2`,
+          name: `${effectivePlan.name} · Base`,
+          startDate: effectivePlan.start_date
+            ? new Date(new Date(effectivePlan.start_date + "T00:00:00").getTime() - 56 * 24 * 60 * 60 * 1000)
+                .toISOString()
+                .split("T")[0]
+            : new Date().toISOString().split("T")[0]
+        }
+      ]
+    : [];
+  const availablePlans = useMemo(() => {
+    return mockPlans
+      .filter((mockPlan) => mockPlan.id !== deletedPlanId)
+      .sort((a, b) => a.startDate.localeCompare(b.startDate));
+  }, [mockPlans, deletedPlanId]);
+  const plansWithRanges = useMemo(() => {
+    return availablePlans.map((mockPlan, index) => {
+      const nextPlan = availablePlans[index + 1];
+      const endDate = nextPlan
+        ? shiftDate(nextPlan.startDate, -1)
+        : shiftDate(mockPlan.startDate, 27);
+      return {
+        ...mockPlan,
+        endDate
+      };
+    });
+  }, [availablePlans]);
+  const selectedPlanValue = availablePlans.find((mockPlan) => mockPlan.startDate === selectedDate)?.id || availablePlans[0]?.id || "";
+  const selectedPlan = plansWithRanges.find((mockPlan) => mockPlan.id === selectedPlanValue) || null;
+  const viewedWeekLabel = weekRange
+    ? `${formatDateDisplay(weekRange.monday, { day: "2-digit", month: "short" })} - ${formatDateDisplay(weekRange.sunday, { day: "2-digit", month: "short" })}`
+    : "Semana sin fechas";
+  const viewedWeekNumber = weekRange && effectivePlan?.start_date
+    ? getWeekNumberFromDate(weekRange.monday, effectivePlan.start_date)
+    : null;
+  const hasActivePlan = !!effectivePlan;
+  const effectivePlanEndDate = effectivePlan?.start_date ? shiftDate(effectivePlan.start_date, 27) : null;
+  const isViewedWeekWithinPlan = !!(
+    effectivePlan?.start_date &&
+    effectivePlanEndDate &&
+    weekRange &&
+    weekRange.monday <= effectivePlanEndDate &&
+    weekRange.sunday >= effectivePlan.start_date
+  );
 
   useEffect(() => {
     if (currentWeekSessions.length > 0) {
@@ -164,8 +258,15 @@ export function RoutineCalendarClient({
     }
   }, [selectedWeek, currentWeekSessions.length, selectedDate, weeklyDays]);
 
+  useEffect(() => {
+    if (!plan || !isViewedWeekWithinPlan) {
+      setIsAddingDay(false);
+      setNewDayForm(null);
+    }
+  }, [plan, isViewedWeekWithinPlan]);
+
   const activeSessionsForDate = selectedDate
-    ? sessions
+    ? effectiveSessions
         .filter((session) => {
           if (!(session as any).date) return false;
           return (session as any).date.split("T")[0] === selectedDate;
@@ -176,6 +277,53 @@ export function RoutineCalendarClient({
   const activeExercises = activeSessionsForDate
     .flatMap((session) => exercisesBySession[session.id] || [])
     .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+
+  const openPlanActionModal = () => {
+    if (!selectedDate) {
+      alert("Selecciona una fecha primero");
+      return;
+    }
+
+    const hasOverlap = plansWithRanges.some((existingPlan) => {
+      return selectedDate >= existingPlan.startDate && selectedDate <= existingPlan.endDate;
+    });
+
+    if (hasOverlap) {
+      alert("Ya existe un plan en esta fecha");
+      return;
+    }
+
+    setDraftPlanName(`Plan ${formatDateDisplay(selectedDate, { day: "2-digit", month: "2-digit" })}`);
+    setSelectedExistingPlanId(plansWithRanges[0]?.id || "");
+    setPlanAction("create");
+    setIsPlanActionModalOpen(true);
+  };
+
+  const handleConfirmPlanAction = () => {
+    if (planAction === "create" && !draftPlanName.trim()) {
+      alert("Ingresa un nombre para el nuevo plan");
+      return;
+    }
+
+    if (planAction === "extend" && !selectedExistingPlanId) {
+      alert("Selecciona un plan para extender");
+      return;
+    }
+
+    setIsPlanActionModalOpen(false);
+    setIsImportModalOpen(true);
+  };
+
+  const handleDeleteSelectedPlan = () => {
+    if (!selectedPlan) return;
+    if (!window.confirm("¿Estás seguro de eliminar todo este plan y sus rutinas asociadas?")) return;
+
+    setDeletedPlanId(selectedPlan.id);
+    setSelectedDate(weekRange?.monday || null);
+    setIsAddingDay(false);
+    setIsAddingExercise(false);
+    setNewDayForm(null);
+  };
 
   const handleAddDay = () => {
     if (!plan || !newDayForm) return;
@@ -302,7 +450,7 @@ export function RoutineCalendarClient({
 
   return (
     <div className="flex flex-col gap-4 pb-24">
-      {role === "COACH" && studentId && (
+      {(role === "COACH" || role === "ADMIN") && studentId && (
         <ImportTemplateModal
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
@@ -310,17 +458,117 @@ export function RoutineCalendarClient({
         />
       )}
 
+      {isPlanActionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
+          <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+            <div className="flex items-start justify-between gap-4">
+              <div className="flex flex-col gap-1">
+                <h3 className="text-lg font-black text-zinc-100">Gestionar plan desde esta fecha</h3>
+                <p className="text-sm text-zinc-400">
+                  {selectedDate ? `Fecha seleccionada: ${formatDateDisplay(selectedDate, { day: "2-digit", month: "short", year: "numeric" })}` : "Sin fecha seleccionada"}
+                </p>
+              </div>
+              <button
+                onClick={() => setIsPlanActionModalOpen(false)}
+                className="rounded-xl p-2 text-zinc-500 transition hover:bg-zinc-900 hover:text-white"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+              <button
+                type="button"
+                onClick={() => setPlanAction("create")}
+                className={`rounded-2xl border p-4 text-left transition ${
+                  planAction === "create"
+                    ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700"
+                }`}
+              >
+                <span className="block text-sm font-black">Crear Nuevo Plan</span>
+                <span className="mt-1 block text-xs text-zinc-500">Define un nombre y arranca un bloque nuevo.</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setPlanAction("extend")}
+                className={`rounded-2xl border p-4 text-left transition ${
+                  planAction === "extend"
+                    ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
+                    : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700"
+                }`}
+              >
+                <span className="block text-sm font-black">Extender Plan Existente</span>
+                <span className="mt-1 block text-xs text-zinc-500">Sumar semanas a un bloque ya creado.</span>
+              </button>
+            </div>
+
+            <div className="mt-5 flex flex-col gap-4">
+              {planAction === "create" ? (
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                    Nombre del plan
+                  </label>
+                  <input
+                    type="text"
+                    value={draftPlanName}
+                    onChange={(e) => setDraftPlanName(e.target.value)}
+                    className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-100 outline-none transition focus:border-yellow-400"
+                    placeholder="Ej: Hipertrofia Marzo"
+                  />
+                </div>
+              ) : (
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                    Plan a extender
+                  </label>
+                  <select
+                    value={selectedExistingPlanId}
+                    onChange={(e) => setSelectedExistingPlanId(e.target.value)}
+                    className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-100 outline-none transition focus:border-yellow-400"
+                  >
+                    <option value="">Seleccionar plan...</option>
+                    {plansWithRanges.map((existingPlan) => (
+                      <option key={existingPlan.id} value={existingPlan.id}>
+                        {existingPlan.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+            </div>
+
+            <div className="mt-6 flex items-center justify-end gap-3">
+              <button
+                type="button"
+                onClick={() => setIsPlanActionModalOpen(false)}
+                className="rounded-xl border border-zinc-800 px-4 py-2 text-sm font-bold text-zinc-300 transition hover:bg-zinc-900"
+              >
+                Cancelar
+              </button>
+              <button
+                type="button"
+                onClick={handleConfirmPlanAction}
+                className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-black text-black transition hover:scale-[1.02] active:scale-[0.98]"
+              >
+                Continuar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       <div className="flex items-center justify-between px-4">
         <div className="flex flex-col gap-1">
           <h2 className="text-lg font-bold text-foreground uppercase tracking-tight">
-            {plan?.name || "Sin plan activo"}
+            {effectivePlan?.name || "Sin plan activo"}
           </h2>
           <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
             {profile?.name ? `Alumno: ${profile.name} ${profile.last_name || ""}` : ""}
           </p>
         </div>
 
-        {role === "COACH" && studentId && (
+        {(role === "COACH" || role === "ADMIN") && studentId && (
           <button
             onClick={() => setIsImportModalOpen(true)}
             className="flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-2 text-[10px] font-black text-black transition-all uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98]"
@@ -331,6 +579,69 @@ export function RoutineCalendarClient({
       </div>
 
       <div className="flex flex-col gap-4 px-4 pt-2">
+        <div className="mb-6 flex flex-col gap-4 rounded-xl bg-zinc-900/50 p-4 md:flex-row md:items-center md:justify-between">
+          {hasPlanInViewedWeek ? (
+            <>
+              <div className="flex flex-col gap-1">
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  Historial de rutinas
+                </span>
+                <span className="text-sm font-bold text-zinc-100">
+                  {selectedPlan ? `${selectedPlan.name} - Semana ${viewedWeekNumber || selectedWeek}` : "Salta al inicio del bloque seleccionado"}
+                </span>
+              </div>
+
+              <div className="flex items-center gap-2 self-start md:self-auto">
+                <select
+                  value={selectedPlanValue}
+                  onChange={(e) => {
+                    const nextPlan = availablePlans.find((mockPlan) => mockPlan.id === e.target.value);
+                    if (!nextPlan) return;
+                    setSelectedWeek(getWeekNumberFromDate(nextPlan.startDate, effectivePlan?.start_date || null));
+                    setSelectedDate(nextPlan.startDate);
+                    setIsAddingDay(false);
+                    setNewDayForm(null);
+                  }}
+                  className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-100 outline-none focus:border-yellow-400"
+                >
+                  {availablePlans.map((mockPlan) => (
+                    <option key={mockPlan.id} value={mockPlan.id}>
+                      {mockPlan.name}
+                    </option>
+                  ))}
+                </select>
+
+                {(role === "COACH" || role === "ADMIN") && selectedPlan && (
+                  <button
+                    onClick={handleDeleteSelectedPlan}
+                    className="rounded-xl p-3 text-red-500 transition hover:bg-red-500/10"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="flex flex-col gap-1">
+                <span className="text-sm font-bold text-zinc-100">Sin plan asignado</span>
+                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  No hay sesiones en la semana visualizada
+                </span>
+              </div>
+
+              {(role === "COACH" || role === "ADMIN") && studentId && (
+                <button
+                  onClick={openPlanActionModal}
+                  className="flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
+                >
+                  <Plus className="h-4 w-4" /> Crear Plan
+                </button>
+              )}
+            </>
+          )}
+        </div>
+
         <div className="flex items-center justify-between">
           <h3 className="text-xl font-black text-zinc-100 uppercase tracking-tighter flex items-center gap-2">
             <Calendar className="h-5 w-5 text-yellow-400" />
@@ -339,15 +650,14 @@ export function RoutineCalendarClient({
 
           <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1">
             <button
-              onClick={() => setSelectedWeek((prev) => Math.max(1, prev - 1))}
-              disabled={selectedWeek === 1}
-              className="p-2 text-zinc-400 hover:text-white disabled:opacity-20 transition-all"
+              onClick={() => setSelectedWeek((prev) => prev - 1)}
+              className="p-2 text-zinc-400 hover:text-white transition-all"
             >
               <ChevronLeft className="h-4 w-4" />
             </button>
 
             <span className="px-3 text-[10px] font-black uppercase tracking-widest text-zinc-100">
-              Semana {selectedWeek}
+              {viewedWeekLabel}
             </span>
 
             <button
@@ -359,56 +669,68 @@ export function RoutineCalendarClient({
           </div>
         </div>
 
-        <div className="grid grid-cols-7 gap-2">
-          {weeklyDays.map((day, idx) => {
-            const isSelected = selectedDate === day.date;
-            const dateInfo = formatSessionDate(day.date);
-            const hasSession = day.sessions.length > 0;
+        {hasActivePlan ? (
+          <div className="grid grid-cols-7 gap-2">
+            {weeklyDays.map((day, idx) => {
+              const isSelected = selectedDate === day.date;
+              const dateInfo = formatSessionDate(day.date);
+              const hasSession = day.sessions.length > 0;
 
-            return (
-              <button
-                key={day.date}
-                onClick={() => {
-                  if (hasSession) {
-                    setSelectedDate(day.date);
-                    setIsAddingDay(false);
-                    setNewDayForm(null);
-                  } else if (role === "COACH") {
-                    setSelectedDate(day.date);
-                    setIsAddingDay(true);
-                    setNewDayForm({ date: day.date });
-                  } else {
-                    setSelectedDate(day.date);
-                    setIsAddingDay(false);
-                    setNewDayForm(null);
-                  }
-                }}
-                className={`flex flex-col items-center gap-1 rounded-2xl py-3 border-2 transition-all duration-200 ${
-                  isSelected
-                    ? "bg-yellow-400 border-yellow-400 text-black shadow-lg scale-105 z-10"
-                    : hasSession
-                    ? "bg-zinc-900 border-zinc-800 text-zinc-100 hover:border-yellow-400/50"
-                    : "bg-black/40 border-zinc-900 border-dashed text-zinc-600 hover:border-zinc-700"
-                }`}
-              >
-                <span className="text-[9px] font-black uppercase tracking-tighter opacity-60">
-                  {dateInfo?.day || ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][idx]}
-                </span>
-                <span className="text-sm font-black tracking-tight">
-                  {dateInfo?.num || new Date(day.date + "T00:00:00").getDate()}
-                </span>
-                {hasSession && !isSelected && <div className="h-1 w-1 rounded-full bg-yellow-400 mt-0.5 animate-pulse" />}
-                {day.sessions.length > 1 && (
-                  <span className="text-[8px] font-black uppercase tracking-widest opacity-60">
-                    {day.sessions.length}
+              return (
+                <button
+                  key={day.date}
+                  onClick={() => {
+                    if (hasSession) {
+                      setSelectedDate(day.date);
+                      setIsAddingDay(false);
+                      setNewDayForm(null);
+                    } else if (role === "COACH") {
+                      setSelectedDate(day.date);
+                      setIsAddingDay(true);
+                      setNewDayForm({ date: day.date });
+                    } else {
+                      setSelectedDate(day.date);
+                      setIsAddingDay(false);
+                      setNewDayForm(null);
+                    }
+                  }}
+                  className={`flex flex-col items-center gap-1 rounded-2xl py-3 border-2 transition-all duration-200 ${
+                    isSelected
+                      ? "bg-yellow-400 border-yellow-400 text-black shadow-lg scale-105 z-10"
+                      : hasSession
+                      ? "bg-zinc-900 border-zinc-800 text-zinc-100 hover:border-yellow-400/50"
+                      : "bg-black/40 border-zinc-900 border-dashed text-zinc-600 hover:border-zinc-700"
+                  }`}
+                >
+                  <span className="text-[9px] font-black uppercase tracking-tighter opacity-60">
+                    {dateInfo?.day || ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][idx]}
                   </span>
-                )}
-              </button>
-            );
-          })}
-        </div>
+                  <span className="text-sm font-black tracking-tight">
+                    {dateInfo?.num || new Date(day.date + "T00:00:00").getDate()}
+                  </span>
+                  {hasSession && !isSelected && <div className="h-1 w-1 rounded-full bg-yellow-400 mt-0.5 animate-pulse" />}
+                  {day.sessions.length > 1 && (
+                    <span className="text-[8px] font-black uppercase tracking-widest opacity-60">
+                      {day.sessions.length}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="flex min-h-[260px] flex-col items-center justify-center rounded-[2rem] border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-10 text-center">
+            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-900/80">
+              <CalendarX className="h-8 w-8 text-zinc-500" />
+            </div>
+            <p className="max-w-xl text-sm font-medium leading-relaxed text-zinc-400">
+              No hay un plan activo para esta semana. Crea o extiende un plan desde la cabecera para comenzar a agregar rutinas.
+            </p>
+          </div>
+        )}
       </div>
 
+      {hasActivePlan && (
       <div className="flex flex-col gap-4 px-4">
         <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
           <div className="flex flex-col">
@@ -458,7 +780,7 @@ export function RoutineCalendarClient({
           )}
         </div>
 
-        {isAddingDay && (
+        {plan && isViewedWeekWithinPlan && isAddingDay && (
           <div className="rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-950 p-6 flex flex-col gap-4 animate-in fade-in slide-in-from-top-2">
             <div className="flex items-center justify-between">
               <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
@@ -678,7 +1000,7 @@ export function RoutineCalendarClient({
                 </p>
               </div>
             ) : (
-              <ExerciseExcelGrid exercises={activeExercises} role={role} />
+              <ExerciseExcelGrid exercises={activeExercises} role={role === "ADMIN" ? "COACH" : role} />
             )}
 
             {role === "COACH" && !isAddingExercise && activeSessionsForDate.length > 0 && (
@@ -692,6 +1014,7 @@ export function RoutineCalendarClient({
           </div>
         )}
       </div>
+      )}
     </div>
   );
 }

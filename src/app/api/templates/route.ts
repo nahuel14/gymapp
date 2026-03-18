@@ -29,6 +29,11 @@ export async function GET() {
     // Get session and exercise counts for each template
     const transformedTemplates = await Promise.all(
       (templates || []).map(async (template) => {
+        const { data: templateSessions } = await supabase
+          .from("sessions")
+          .select("id, day_name")
+          .eq("plan_id", template.id);
+
         // Get session count
         const { count: sessionCount } = await supabase
           .from("sessions")
@@ -40,12 +45,22 @@ export async function GET() {
           .from("session_exercises")
           .select("*", { count: "exact", head: true })
           .in("session_id", 
-            (await supabase
-              .from("sessions")
-              .select("id")
-              .eq("plan_id", template.id)
-            ).data?.map(s => s.id) || []
+            templateSessions?.map(s => s.id) || []
           );
+
+        const distinctTrainingDays = new Set(
+          (templateSessions || []).map((session) => {
+            const normalizedDayName = (session.day_name || "").toLowerCase();
+            if (normalizedDayName.includes("monday") || normalizedDayName.includes("lunes")) return 1;
+            if (normalizedDayName.includes("tuesday") || normalizedDayName.includes("martes")) return 2;
+            if (normalizedDayName.includes("wednesday") || normalizedDayName.includes("miércoles") || normalizedDayName.includes("miercoles")) return 3;
+            if (normalizedDayName.includes("thursday") || normalizedDayName.includes("jueves")) return 4;
+            if (normalizedDayName.includes("friday") || normalizedDayName.includes("viernes")) return 5;
+            if (normalizedDayName.includes("saturday") || normalizedDayName.includes("sábado") || normalizedDayName.includes("sabado")) return 6;
+            if (normalizedDayName.includes("sunday") || normalizedDayName.includes("domingo")) return 0;
+            return normalizedDayName;
+          })
+        );
 
         return {
           id: template.id,
@@ -53,7 +68,8 @@ export async function GET() {
           created_at: template.created_at,
           coach_id: template.coach_id,
           session_count: sessionCount || 0,
-          exercise_count: exerciseCount || 0
+          exercise_count: exerciseCount || 0,
+          training_days_count: distinctTrainingDays.size
         };
       })
     );

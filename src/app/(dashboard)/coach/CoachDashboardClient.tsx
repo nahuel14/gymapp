@@ -10,6 +10,13 @@ type Props = {
   errorKey?: string;
 };
 
+const getDefaultDaysForCount = (count: number) => {
+  if (count === 2) return [1, 4];
+  if (count === 3) return [1, 3, 5];
+  if (count === 4) return [1, 2, 4, 5];
+  return [1, 3, 5].slice(0, Math.max(1, Math.min(count, 3)));
+};
+
 export function CoachDashboardClient({ errorKey }: Props) {
   const queryClient = useQueryClient();
   const { data, isLoading } = useCoachStudents();
@@ -17,8 +24,9 @@ export function CoachDashboardClient({ errorKey }: Props) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<{ id: string, name: string } | null>(null);
   const [newPlan, setNewPlan] = useState({ name: "", startDate: new Date().toISOString().split('T')[0] });
-  const [useTemplate, setUseTemplate] = useState(false);
+  const [creationMode, setCreationMode] = useState<'template' | 'blank'>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
+  const [durationWeeks, setDurationWeeks] = useState(4);
   const [preferredDays, setPreferredDays] = useState<number[]>([1, 3, 5]); // Lunes, Miércoles, Viernes
 
   // Fetch templates for the coach
@@ -29,8 +37,11 @@ export function CoachDashboardClient({ errorKey }: Props) {
       if (!response.ok) throw new Error("Error fetching templates");
       return response.json();
     },
-    enabled: isModalOpen && useTemplate
+    enabled: isModalOpen && creationMode === 'template'
   });
+  const selectedTemplateData = templates.find((template: any) => template.id === selectedTemplate) as any;
+  const templateDaysCount = selectedTemplateData?.training_days_count || 0;
+  const hasExactSelectedDays = creationMode !== 'template' || !templateDaysCount || preferredDays.length === templateDaysCount;
 
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -38,8 +49,11 @@ export function CoachDashboardClient({ errorKey }: Props) {
 
     startTransition(async () => {
       try {
-        if (useTemplate && selectedTemplate) {
-          // Instantiate template
+        if (creationMode === 'template') {
+          if (!selectedTemplate) {
+            return;
+          }
+
           await instantiateTemplateToStudent(
             selectedTemplate,
             selectedStudent.id,
@@ -47,16 +61,16 @@ export function CoachDashboardClient({ errorKey }: Props) {
             preferredDays
           );
         } else {
-          // Create regular plan
-          await createTrainingPlan(selectedStudent.id, newPlan.name, newPlan.startDate);
+          await createTrainingPlan(selectedStudent.id, newPlan.name, newPlan.startDate, durationWeeks);
         }
         
         await queryClient.invalidateQueries({ queryKey: ["coach", "students"] });
         setIsModalOpen(false);
         setSelectedStudent(null);
         setNewPlan({ name: "", startDate: new Date().toISOString().split('T')[0] });
-        setUseTemplate(false);
+        setCreationMode('template');
         setSelectedTemplate(null);
+        setDurationWeeks(4);
         setPreferredDays([1, 3, 5]);
       } catch (error) {
         console.error("Error creating plan:", error);
@@ -70,6 +84,16 @@ export function CoachDashboardClient({ errorKey }: Props) {
         ? prev.filter(d => d !== dayIndex)
         : [...prev, dayIndex].sort()
     );
+  };
+
+  const handleTemplateChange = (templateValue: string) => {
+    const nextTemplateId = Number(templateValue);
+    setSelectedTemplate(nextTemplateId);
+    const nextTemplate = templates.find((template: any) => template.id === nextTemplateId) as any;
+    const nextDaysCount = nextTemplate?.training_days_count || 0;
+    if (nextDaysCount > 0) {
+      setPreferredDays(getDefaultDaysForCount(nextDaysCount));
+    }
   };
 
   let errorMessage = "";
@@ -156,24 +180,12 @@ export function CoachDashboardClient({ errorKey }: Props) {
               </div>
               
               <div className="flex w-full items-center gap-2 md:w-auto">
-                {!student.planId ? (
-                  <button
-                    onClick={() => {
-                      setSelectedStudent({ id: student.studentId, name: student.studentName });
-                      setIsModalOpen(true);
-                    }}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl bg-primary px-4 py-2.5 text-xs font-black text-primary-foreground shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition md:flex-none"
-                  >
-                    <Plus className="h-4 w-4" /> CREAR PLAN
-                  </button>
-                ) : (
-                  <Link
-                    href={`/coach/student/${student.studentId}`}
-                    className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-border px-4 py-2.5 text-xs font-black text-foreground hover:bg-muted transition md:flex-none"
-                  >
-                    VER RUTINA <ChevronRight className="h-4 w-4" />
-                  </Link>
-                )}
+                <Link
+                  href={`/coach/student/${student.studentId}`}
+                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-border px-4 py-2.5 text-xs font-black text-foreground hover:bg-muted transition md:flex-none"
+                >
+                  <Calendar className="h-4 w-4" /> VER RUTINA <ChevronRight className="h-4 w-4" />
+                </Link>
               </div>
             </div>
           ))}
@@ -191,8 +203,9 @@ export function CoachDashboardClient({ errorKey }: Props) {
               </div>
               <button onClick={() => {
                 setIsModalOpen(false);
-                setUseTemplate(false);
+                setCreationMode('template');
                 setSelectedTemplate(null);
+                setDurationWeeks(4);
                 setPreferredDays([1, 3, 5]);
               }} className="p-2 rounded-full hover:bg-muted transition">
                 <X className="h-6 w-6" />
@@ -206,28 +219,28 @@ export function CoachDashboardClient({ errorKey }: Props) {
                 <div className="grid grid-cols-2 gap-3">
                   <button
                     type="button"
-                    onClick={() => setUseTemplate(false)}
+                    onClick={() => setCreationMode('template')}
                     className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all ${
-                      !useTemplate 
-                        ? "border-primary bg-primary/10 text-primary" 
-                        : "border-border bg-muted text-muted-foreground hover:border-primary/50"
-                    }`}
-                  >
-                    <Plus className="h-5 w-5" />
-                    <span className="text-xs font-black">Plan Personalizado</span>
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setUseTemplate(true)}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all ${
-                      useTemplate 
+                      creationMode === 'template' 
                         ? "border-primary bg-primary/10 text-primary" 
                         : "border-border bg-muted text-muted-foreground hover:border-primary/50"
                     }`}
                   >
                     <LayoutTemplate className="h-5 w-5" />
-                    <span className="text-xs font-black">Usar Plantilla</span>
+                    <span className="text-xs font-black">Importar Plantilla</span>
+                  </button>
+                  
+                  <button
+                    type="button"
+                    onClick={() => setCreationMode('blank')}
+                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all ${
+                      creationMode === 'blank' 
+                        ? "border-primary bg-primary/10 text-primary" 
+                        : "border-border bg-muted text-muted-foreground hover:border-primary/50"
+                    }`}
+                  >
+                    <Plus className="h-5 w-5" />
+                    <span className="text-xs font-black">Crear desde cero</span>
                   </button>
                 </div>
               </div>
@@ -241,34 +254,32 @@ export function CoachDashboardClient({ errorKey }: Props) {
                   required
                   type="text" 
                   className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
-                  placeholder={useTemplate ? "Ej: Hipertrofia Basada en Plantilla" : "Ej: Hipertrofia Marzo"}
+                  placeholder={creationMode === 'template' ? "Ej: Hipertrofia Basada en Plantilla" : "Ej: Hipertrofia Marzo"}
                   value={newPlan.name}
                   onChange={(e) => setNewPlan({...newPlan, name: e.target.value})}
                 />
               </div>
 
-              {/* Fecha de Inicio */}
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Fecha de Inicio</label>
-                <input 
-                  required
-                  type="date" 
-                  className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
-                  value={newPlan.startDate}
-                  onChange={(e) => setNewPlan({...newPlan, startDate: e.target.value})}
-                />
-              </div>
-
-              {/* Selección de Plantilla */}
-              {useTemplate && (
+              {creationMode === 'template' && (
                 <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Fecha de Inicio</label>
+                    <input 
+                      required
+                      type="date" 
+                      className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
+                      value={newPlan.startDate}
+                      onChange={(e) => setNewPlan({...newPlan, startDate: e.target.value})}
+                    />
+                  </div>
+
                   <div className="flex flex-col gap-1.5">
                     <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Plantilla</label>
                     <select 
                       required
                       className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
                       value={selectedTemplate || ""}
-                      onChange={(e) => setSelectedTemplate(Number(e.target.value))}
+                      onChange={(e) => handleTemplateChange(e.target.value)}
                     >
                       <option value="">Seleccionar plantilla...</option>
                       {templates.map((template: any) => (
@@ -301,27 +312,58 @@ export function CoachDashboardClient({ errorKey }: Props) {
                       ))}
                     </div>
                     <p className="text-xs text-muted-foreground mt-1">
-                      Selecciona los días para distribuir las sesiones
+                      {templateDaysCount > 0
+                        ? `Esta plantilla requiere exactamente ${templateDaysCount} días por semana. Has seleccionado ${preferredDays.length}.`
+                        : "Selecciona los días para distribuir las sesiones"}
                     </p>
                   </div>
                 </>
               )}
 
+              {creationMode === 'blank' && (
+                <>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Fecha de Inicio</label>
+                    <input 
+                      required
+                      type="date" 
+                      className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
+                      value={newPlan.startDate}
+                      onChange={(e) => setNewPlan({...newPlan, startDate: e.target.value})}
+                    />
+                  </div>
+
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">
+                      Duración (Semanas)
+                    </label>
+                    <input
+                      required
+                      min={1}
+                      type="number"
+                      className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
+                      value={durationWeeks}
+                      onChange={(e) => setDurationWeeks(Math.max(1, Number(e.target.value) || 1))}
+                    />
+                  </div>
+                </>
+              )}
+
               <button 
-                disabled={isPending || (useTemplate && (!selectedTemplate || preferredDays.length === 0))}
+                disabled={isPending || (creationMode === 'blank' && durationWeeks < 1) || (creationMode === 'template' && (!selectedTemplate || preferredDays.length === 0 || !hasExactSelectedDays))}
                 className="mt-4 bg-primary text-primary-foreground py-5 rounded-[1.5rem] font-black text-sm shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isPending ? (
                   <>
                     <Loader2 className="h-5 w-5 animate-spin" /> PROCESANDO...
                   </>
-                ) : useTemplate ? (
+                ) : creationMode === 'template' ? (
                   <>
                     <LayoutTemplate className="h-5 w-5" /> INSTANCIAR PLANTILLA
                   </>
                 ) : (
                   <>
-                    <Plus className="h-5 w-5" /> GUARDAR PLAN
+                    <Plus className="h-5 w-5" /> CREAR PLAN EN BLANCO
                   </>
                 )}
               </button>

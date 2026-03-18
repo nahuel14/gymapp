@@ -21,12 +21,17 @@ export default function TemplateEditPage() {
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [templateName, setTemplateName] = useState("");
+  const [planSessions, setPlanSessions] = useState<any[]>([]);
 
   useEffect(() => {
     if (template?.name) {
       setTemplateName(template.name);
     }
   }, [template?.name]);
+
+  useEffect(() => {
+    setPlanSessions(template?.sessions || []);
+  }, [template?.sessions]);
 
   const handleSaveTemplate = async () => {
     if (!templateName.trim()) {
@@ -48,6 +53,22 @@ export default function TemplateEditPage() {
     }
   };
 
+  const handleDeleteWeek = (weekNumber: number) => {
+    if (!window.confirm("¿Estás seguro de que deseas eliminar esta semana y todos sus ejercicios?")) {
+      return;
+    }
+
+    const sessionsToDelete = planSessions.filter((session: any) => session.week_number === weekNumber);
+    const sessionIdsToDelete = new Set(sessionsToDelete.map((session: any) => session.id));
+
+    setPlanSessions((prev) => prev.filter((session: any) => session.week_number !== weekNumber));
+
+    if (selectedSessionId && sessionIdsToDelete.has(selectedSessionId)) {
+      setSelectedSessionId(null);
+      setIsAddingExercise(false);
+    }
+  };
+
   const [newExForm, setNewExForm] = useState({
     exerciseId: "",
     target_sets: 3,
@@ -58,7 +79,7 @@ export default function TemplateEditPage() {
     coach_notes: ""
   });
 
-  const selectedSession = template?.sessions?.find((s: any) => s.id === selectedSessionId);
+  const selectedSession = planSessions.find((s: any) => s.id === selectedSessionId);
 
   const handleDeleteDay = async () => {
     if (!selectedSessionId) return;
@@ -81,9 +102,9 @@ export default function TemplateEditPage() {
   const addSession = async (weekNumber: number) => {
     if (!templateId || !template) return;
 
-    const sessionsInWeek = template.sessions.filter((s: any) => s.week_number === weekNumber);
+    const sessionsInWeek = planSessions.filter((s: any) => s.week_number === weekNumber);
     const dayNumber = sessionsInWeek.length + 1;
-    const nextOrder = template.sessions.length + 1;
+    const nextOrder = planSessions.length + 1;
 
     try {
       const response = await fetch("/api/template-sessions", {
@@ -199,7 +220,7 @@ export default function TemplateEditPage() {
               className="text-2xl font-black text-zinc-100 uppercase tracking-tight bg-transparent border-none outline-none focus:ring-2 focus:ring-yellow-400/50 rounded px-2 -ml-2 w-full"
               placeholder="Nombre de la plantilla"
             />
-            <p className="text-sm text-zinc-500 ml-2">Plantilla • {template.sessions?.length || 0} sesiones</p>
+            <p className="text-sm text-zinc-500 ml-2">Plantilla • {planSessions.length} sesiones</p>
           </div>
 
           <button
@@ -221,10 +242,10 @@ export default function TemplateEditPage() {
             </div>
 
             <div className="space-y-6">
-              {template.sessions && template.sessions.length > 0 ? (
+              {planSessions.length > 0 ? (
                 <>
                   {Object.entries(
-                    template.sessions.reduce((acc: Record<number, any[]>, session: any) => {
+                    planSessions.reduce((acc: Record<number, any[]>, session: any) => {
                       const week = session.week_number;
                       if (!acc[week]) acc[week] = [];
                       acc[week].push(session);
@@ -232,19 +253,27 @@ export default function TemplateEditPage() {
                     }, {})
                   )
                     .sort(([a], [b]) => Number(a) - Number(b))
-                    .map(([weekNumber, sessions]) => (
+                    .map(([weekNumber, sessions], index) => (
                       <div key={weekNumber} className="space-y-2">
                         <div className="flex items-center justify-between px-2 py-1 border-b border-zinc-800">
                           <h4 className="text-xs font-black text-zinc-400 uppercase tracking-widest">
-                            Semana {weekNumber}
+                            Semana {index + 1}
                           </h4>
-                          <button
-                            onClick={() => addSession(Number(weekNumber))}
-                            className="flex items-center gap-1 rounded-lg bg-zinc-900 border border-zinc-800 px-2 py-1 text-[10px] font-black text-zinc-400 hover:border-yellow-400 hover:text-yellow-400 transition-all"
-                          >
-                            <Plus className="h-3 w-3" />
-                            Día
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              onClick={() => addSession(Number(weekNumber))}
+                              className="flex items-center gap-1 rounded-lg bg-zinc-900 border border-zinc-800 px-2 py-1 text-[10px] font-black text-zinc-400 hover:border-yellow-400 hover:text-yellow-400 transition-all"
+                            >
+                              <Plus className="h-3 w-3" />
+                              Día
+                            </button>
+                            <button
+                              onClick={() => handleDeleteWeek(Number(weekNumber))}
+                              className="rounded-lg border border-zinc-800 bg-zinc-900 p-1.5 text-zinc-500 transition-all hover:border-red-500/40 hover:text-red-400"
+                            >
+                              <Trash2 className="h-3.5 w-3.5" />
+                            </button>
+                          </div>
                         </div>
 
                         <div className="space-y-2">
@@ -282,8 +311,8 @@ export default function TemplateEditPage() {
               <button
                 onClick={() => {
                   const maxWeek =
-                    template.sessions && template.sessions.length > 0
-                      ? Math.max(...template.sessions.map((s: any) => s.week_number))
+                    planSessions.length > 0
+                      ? Math.max(...planSessions.map((s: any) => s.week_number))
                       : 0;
                   addSession(maxWeek + 1);
                 }}
