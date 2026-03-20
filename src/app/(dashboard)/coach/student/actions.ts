@@ -328,6 +328,58 @@ export async function createTrainingPlan(
   };
 }
 
+export async function createBlankPlan(
+  studentId: string,
+  planName: string,
+  startDate: string,
+  weeksCount: number = 4
+) {
+  // 1. Cliente normal: Lee las cookies y averigua quién está logueado
+  const supabaseAuth = await createSupabaseServerClient();
+  const { data: { user } } = await supabaseAuth.auth.getUser();
+  
+  if (!user) throw new Error("No autenticado");
+
+  // 2. Cliente administrador: Usa la llave maestra para saltar la seguridad (RLS)
+  const supabaseAdmin = createSupabaseAdminClient();
+
+  // Desactivar planes anteriores del estudiante
+  await supabaseAdmin
+    .from("training_plans")
+    .update({ is_active: false } as any)
+    .eq("student_id", studentId as any);
+
+  // Insertar nuevo plan en blanco
+  const planStart = new Date(startDate + "T00:00:00");
+  const planEnd = new Date(planStart);
+  planEnd.setDate(planStart.getDate() + Math.max(weeksCount, 1) * 7 - 1);
+
+  const { data: plan, error } = await supabaseAdmin
+    .from("training_plans")
+    .insert({
+      student_id: studentId,
+      coach_id: user.id,
+      name: planName,
+      start_date: startDate,
+      is_active: true
+    } as any)
+    .select()
+    .single();
+
+  if (error) throw error;
+
+  revalidatePath("/coach");
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+  
+  return {
+    success: true,
+    planId: plan.id,
+    weeksCount,
+    endDate: planEnd.toISOString().split("T")[0]
+  };
+}
+
 export async function createTemplatePlan(planName: string, coachId: string) {
   const adminClient = createSupabaseAdminClient();
 

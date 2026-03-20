@@ -58,7 +58,7 @@ export function RoutineCalendarClient({
   const { data: allExercises = [] } = useExercises();
 
   const [selectedWeek, setSelectedWeek] = useState(1);
-  const [selectedDate, setSelectedDate] = useState<string | null>(null);
+  const [selectedDate, setSelectedDate] = useState<string | null>(() => new Date().toISOString().split("T")[0]);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [isAddingDay, setIsAddingDay] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
@@ -244,17 +244,24 @@ export function RoutineCalendarClient({
   );
 
   useEffect(() => {
-    if (currentWeekSessions.length > 0) {
-      const selectedDateStillVisible = !!selectedDate && weeklyDays.some((day) => day.date === selectedDate);
-      if (!selectedDateStillVisible) {
+    if (effectivePlan?.start_date) {
+      const today = new Date().toISOString().split("T")[0];
+      const currentWeekNumber = getWeekNumberFromDate(today, effectivePlan.start_date);
+      setSelectedWeek(Math.max(1, currentWeekNumber));
+    }
+  }, [plan, effectivePlan?.start_date]);
+
+  useEffect(() => {
+    if (!selectedDate || !weeklyDays.some((day) => day.date === selectedDate)) {
+      if (currentWeekSessions.length > 0) {
         const firstSessionDate = ((currentWeekSessions[0] as any).date || "").split("T")[0];
-        setSelectedDate(firstSessionDate || null);
+        setSelectedDate(firstSessionDate || weeklyDays[0]?.date || null);
         setIsAddingDay(false);
         setNewDayForm(null);
+      } else {
+        const firstVisibleDate = weeklyDays[0]?.date ?? null;
+        setSelectedDate(firstVisibleDate);
       }
-    } else {
-      const firstVisibleDate = weeklyDays[0]?.date ?? null;
-      setSelectedDate(firstVisibleDate);
     }
   }, [selectedWeek, currentWeekSessions.length, selectedDate, weeklyDays]);
 
@@ -279,13 +286,11 @@ export function RoutineCalendarClient({
     .sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
 
   const openPlanActionModal = () => {
-    if (!selectedDate) {
-      alert("Selecciona una fecha primero");
-      return;
-    }
+    const targetDate = selectedDate || new Date().toISOString().split("T")[0];
+    if (!selectedDate) setSelectedDate(targetDate);
 
     const hasOverlap = plansWithRanges.some((existingPlan) => {
-      return selectedDate >= existingPlan.startDate && selectedDate <= existingPlan.endDate;
+      return targetDate >= existingPlan.startDate && targetDate <= existingPlan.endDate;
     });
 
     if (hasOverlap) {
@@ -293,18 +298,20 @@ export function RoutineCalendarClient({
       return;
     }
 
-    setDraftPlanName(`Plan ${formatDateDisplay(selectedDate, { day: "2-digit", month: "2-digit" })}`);
-    setSelectedExistingPlanId(plansWithRanges[0]?.id || "");
     setPlanAction("create");
-    setIsPlanActionModalOpen(true);
+    
+    // Skip intermediate modal if no plans exist
+    if (availablePlans.length === 0) {
+      setIsPlanActionModalOpen(false);
+      setIsImportModalOpen(true);
+    } else {
+      setDraftPlanName(`Plan ${formatDateDisplay(targetDate, { day: "2-digit", month: "2-digit" })}`);
+      setSelectedExistingPlanId(plansWithRanges[0]?.id || "");
+      setIsPlanActionModalOpen(true);
+    }
   };
 
   const handleConfirmPlanAction = () => {
-    if (planAction === "create" && !draftPlanName.trim()) {
-      alert("Ingresa un nombre para el nuevo plan");
-      return;
-    }
-
     if (planAction === "extend" && !selectedExistingPlanId) {
       alert("Selecciona un plan para extender");
       return;
@@ -489,35 +496,24 @@ export function RoutineCalendarClient({
                 <span className="block text-sm font-black">Crear Nuevo Plan</span>
                 <span className="mt-1 block text-xs text-zinc-500">Define un nombre y arranca un bloque nuevo.</span>
               </button>
-              <button
-                type="button"
-                onClick={() => setPlanAction("extend")}
-                className={`rounded-2xl border p-4 text-left transition ${
-                  planAction === "extend"
-                    ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
-                    : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700"
-                }`}
-              >
-                <span className="block text-sm font-black">Extender Plan Existente</span>
-                <span className="mt-1 block text-xs text-zinc-500">Sumar semanas a un bloque ya creado.</span>
-              </button>
+              {availablePlans.length > 0 && (
+                <button
+                  type="button"
+                  onClick={() => setPlanAction("extend")}
+                  className={`rounded-2xl border p-4 text-left transition ${
+                    planAction === "extend"
+                      ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
+                      : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700"
+                  }`}
+                >
+                  <span className="block text-sm font-black">Extender Plan Existente</span>
+                  <span className="mt-1 block text-xs text-zinc-500">Sumar semanas a un bloque ya creado.</span>
+                </button>
+              )}
             </div>
 
             <div className="mt-5 flex flex-col gap-4">
-              {planAction === "create" ? (
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                    Nombre del plan
-                  </label>
-                  <input
-                    type="text"
-                    value={draftPlanName}
-                    onChange={(e) => setDraftPlanName(e.target.value)}
-                    className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-100 outline-none transition focus:border-yellow-400"
-                    placeholder="Ej: Hipertrofia Marzo"
-                  />
-                </div>
-              ) : (
+              {planAction === "extend" && (
                 <div className="flex flex-col gap-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
                     Plan a extender
@@ -568,15 +564,7 @@ export function RoutineCalendarClient({
           </p>
         </div>
 
-        {(role === "COACH" || role === "ADMIN") && studentId && (
-          <button
-            onClick={() => setIsImportModalOpen(true)}
-            className="flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-2 text-[10px] font-black text-black transition-all uppercase tracking-widest hover:scale-[1.02] active:scale-[0.98]"
-          >
-            📥 Importar Plantilla
-          </button>
-        )}
-      </div>
+              </div>
 
       <div className="flex flex-col gap-4 px-4 pt-2">
         <div className="mb-6 flex flex-col gap-4 rounded-xl bg-zinc-900/50 p-4 md:flex-row md:items-center md:justify-between">

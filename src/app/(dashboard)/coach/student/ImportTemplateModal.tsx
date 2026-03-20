@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { X } from "lucide-react";
-import { importTemplateToStudent } from "./actions";
+import { importTemplateToStudent, createBlankPlan } from "./actions";
 
 type TemplateOption = {
   id: number;
@@ -42,6 +42,8 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
   const [templateId, setTemplateId] = useState("");
   const [startDate, setStartDate] = useState("");
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 3, 5]);
+  const [planName, setPlanName] = useState("");
+  const [weeksCount, setWeeksCount] = useState(4);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -108,8 +110,8 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
   };
 
   const handleConfirm = () => {
-    if (!templateId) {
-      alert("Selecciona una plantilla");
+    if (!planName.trim()) {
+      alert("Ingresa un nombre para el plan");
       return;
     }
 
@@ -118,26 +120,46 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
       return;
     }
 
-    if (selectedDaysSorted.length === 0) {
-      alert("Selecciona al menos un día de entrenamiento");
-      return;
-    }
-
-    if (templateDaysCount && selectedDaysSorted.length !== templateDaysCount) {
-      alert(`Esta plantilla requiere exactamente ${templateDaysCount} días por semana`);
-      return;
-    }
-
-    startTransition(async () => {
-      try {
-        await importTemplateToStudent(studentId, Number(templateId), startDate, selectedDaysSorted);
-        await queryClient.invalidateQueries({ queryKey: ["student", "routine", studentId] });
-        onClose();
-      } catch (error) {
-        console.error("Error importing template:", error);
-        alert("No se pudo importar la plantilla");
+    if (!templateId) {
+      // Plan desde cero
+      if (weeksCount < 1) {
+        alert("La cantidad de semanas debe ser al menos 1");
+        return;
       }
-    });
+
+      startTransition(async () => {
+        try {
+          await createBlankPlan(studentId, planName, startDate, weeksCount);
+          await queryClient.invalidateQueries({ queryKey: ["student", "routine", studentId] });
+          onClose();
+        } catch (error) {
+          console.error("Error creating blank plan:", error);
+          alert("No se pudo crear el plan");
+        }
+      });
+    } else {
+      // Plantilla
+      if (selectedDaysSorted.length === 0) {
+        alert("Selecciona al menos un día de entrenamiento");
+        return;
+      }
+
+      if (templateDaysCount && selectedDaysSorted.length !== templateDaysCount) {
+        alert(`Esta plantilla requiere exactamente ${templateDaysCount} días por semana`);
+        return;
+      }
+
+      startTransition(async () => {
+        try {
+          await importTemplateToStudent(studentId, Number(templateId), startDate, selectedDaysSorted);
+          await queryClient.invalidateQueries({ queryKey: ["student", "routine", studentId] });
+          onClose();
+        } catch (error) {
+          console.error("Error importing template:", error);
+          alert("No se pudo importar la plantilla");
+        }
+      });
+    }
   };
 
   if (!isOpen) return null;
@@ -148,10 +170,10 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-black uppercase tracking-tight text-zinc-100">
-              Importar Plantilla
+              NUEVO PLAN
             </h3>
             <p className="text-xs font-medium text-zinc-500">
-              Elige plantilla, fecha de inicio y días de entrenamiento.
+              Crea un plan desde cero o importa una plantilla existente.
             </p>
           </div>
           <button
@@ -165,6 +187,20 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
         <div className="flex flex-col gap-5">
           <div className="flex flex-col gap-2">
             <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+              Nombre del plan
+            </label>
+            <input
+              required
+              type="text"
+              value={planName}
+              onChange={(e) => setPlanName(e.target.value)}
+              className="rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-bold text-zinc-100 outline-none transition-all focus:border-yellow-400"
+              placeholder="Ej: Hipertrofia Marzo"
+            />
+          </div>
+          
+          <div className="flex flex-col gap-2">
+            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
               Plantilla
             </label>
             <select
@@ -172,7 +208,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
               onChange={(e) => setTemplateId(e.target.value)}
               className="rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-bold text-zinc-100 outline-none transition-all focus:border-yellow-400"
             >
-              <option value="">{isLoadingTemplates ? "Cargando plantillas..." : "Seleccionar plantilla..."}</option>
+              <option value="">{isLoadingTemplates ? "Cargando plantillas..." : "Crear plan desde cero (sin plantilla)"}</option>
               {templates.map((template) => (
                 <option key={template.id} value={template.id}>
                   {template.name}
@@ -181,58 +217,91 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
             </select>
           </div>
 
-          <div className="flex flex-col gap-2">
-            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-              Fecha de inicio
-            </label>
-            <input
-              type="date"
-              value={startDate}
-              onChange={(e) => setStartDate(e.target.value)}
-              className="rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-bold text-zinc-100 outline-none transition-all focus:border-yellow-400"
-            />
-          </div>
+          {!templateId ? (
+            // Plan desde cero
+            <>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  Fecha de inicio
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-bold text-zinc-100 outline-none transition-all focus:border-yellow-400"
+                />
+              </div>
 
-          <div className="flex flex-col gap-3">
-            <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-              Días de entrenamiento
-            </label>
-            <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-              {DAY_OPTIONS.map((day) => {
-                const checked = selectedDays.includes(day.value);
-                return (
-                  <label
-                    key={day.value}
-                    className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-black transition-all ${
-                      checked
-                        ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
-                        : "border-zinc-800 bg-zinc-900 text-zinc-300"
-                    }`}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={checked}
-                      onChange={() => toggleDay(day.value)}
-                      className="h-4 w-4 accent-yellow-400"
-                    />
-                    <span>{day.label}</span>
-                  </label>
-                );
-              })}
-            </div>
-            {templateDaysCount > 0 && (
-              <p className={`text-xs mt-1 ${hasExactSelectedDays ? "text-zinc-500" : "text-red-400"}`}>
-                Esta plantilla requiere exactamente {templateDaysCount} días por semana. Has seleccionado {selectedDaysSorted.length}.
-              </p>
-            )}
-          </div>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  Cantidad de Semanas
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={weeksCount}
+                  onChange={(e) => setWeeksCount(Math.max(1, Number(e.target.value) || 1))}
+                  className="rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-bold text-zinc-100 outline-none transition-all focus:border-yellow-400"
+                />
+              </div>
+            </>
+          ) : (
+            // Plantilla
+            <>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  Fecha de inicio
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  className="rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-bold text-zinc-100 outline-none transition-all focus:border-yellow-400"
+                />
+              </div>
+
+              <div className="flex flex-col gap-3">
+                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                  Días de entrenamiento
+                </label>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+                  {DAY_OPTIONS.map((day) => {
+                    const checked = selectedDays.includes(day.value);
+                    return (
+                      <label
+                        key={day.value}
+                        className={`flex cursor-pointer items-center gap-3 rounded-2xl border px-4 py-3 text-sm font-black transition-all ${
+                          checked
+                            ? "border-yellow-400 bg-yellow-400/10 text-yellow-400"
+                            : "border-zinc-800 bg-zinc-900 text-zinc-300"
+                        }`}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={checked}
+                          onChange={() => toggleDay(day.value)}
+                          className="h-4 w-4 accent-yellow-400"
+                        />
+                        <span>{day.label}</span>
+                      </label>
+                    );
+                  })}
+                </div>
+                {templateDaysCount > 0 && (
+                  <p className={`text-xs mt-1 ${hasExactSelectedDays ? "text-zinc-500" : "text-red-400"}`}>
+                    Esta plantilla requiere exactamente {templateDaysCount} días por semana. Has seleccionado {selectedDaysSorted.length}.
+                  </p>
+                )}
+              </div>
+            </>
+          )}
 
           <button
             onClick={handleConfirm}
-            disabled={isPending || !hasExactSelectedDays || !templateId}
+            disabled={isPending || (templateId.length > 0 && !hasExactSelectedDays)}
             className="rounded-[1.5rem] bg-yellow-400 py-4 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
           >
-            {isPending ? "Importando..." : "Confirmar Importación"}
+            {isPending ? "Procesando..." : "CREAR PLAN"}
           </button>
         </div>
       </div>
