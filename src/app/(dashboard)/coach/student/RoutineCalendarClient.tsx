@@ -41,6 +41,7 @@ type RoutineCalendarClientProps = {
   role: "COACH" | "STUDENT" | "ADMIN";
   profile: { id: string; name: string | null; last_name: string | null } | null;
   plan: { id: number; name: string; start_date: string | null } | null;
+  allPlans: Tables<"training_plans">[];
   sessions: Session[];
   exercisesBySession: Record<number, SessionExercise[]>;
 };
@@ -50,6 +51,7 @@ export function RoutineCalendarClient({
   role,
   profile,
   plan,
+  allPlans,
   sessions,
   exercisesBySession
 }: RoutineCalendarClientProps) {
@@ -181,52 +183,35 @@ export function RoutineCalendarClient({
         )
       : "";
   const hasPlanInViewedWeek = currentWeekSessions.length > 0;
-  const mockPlans = effectivePlan
-    ? [
-        {
-          id: String(effectivePlan.id),
-          name: effectivePlan.name,
-          startDate: effectivePlan.start_date || new Date().toISOString().split("T")[0]
-        },
-        {
-          id: `history-${effectivePlan.id}-1`,
-          name: `${effectivePlan.name} · Bloque anterior`,
-          startDate: effectivePlan.start_date
-            ? new Date(new Date(effectivePlan.start_date + "T00:00:00").getTime() - 28 * 24 * 60 * 60 * 1000)
-                .toISOString()
-                .split("T")[0]
-            : new Date().toISOString().split("T")[0]
-        },
-        {
-          id: `history-${effectivePlan.id}-2`,
-          name: `${effectivePlan.name} · Base`,
-          startDate: effectivePlan.start_date
-            ? new Date(new Date(effectivePlan.start_date + "T00:00:00").getTime() - 56 * 24 * 60 * 60 * 1000)
-                .toISOString()
-                .split("T")[0]
-            : new Date().toISOString().split("T")[0]
-        }
-      ]
-    : [];
+
+  // REFACTOR: Use allPlans directly, no mock data
   const availablePlans = useMemo(() => {
-    return mockPlans
-      .filter((mockPlan) => mockPlan.id !== deletedPlanId)
+    return allPlans
+      .filter((p) => String(p.id) !== deletedPlanId)
+      .map((p) => ({
+        id: String(p.id),
+        name: p.name,
+        startDate: p.start_date || new Date().toISOString().split("T")[0],
+        is_active: p.is_active
+      }))
       .sort((a, b) => a.startDate.localeCompare(b.startDate));
-  }, [mockPlans, deletedPlanId]);
+  }, [allPlans, deletedPlanId]);
+
   const plansWithRanges = useMemo(() => {
-    return availablePlans.map((mockPlan, index) => {
+    return availablePlans.map((currentPlan, index) => {
       const nextPlan = availablePlans[index + 1];
       const endDate = nextPlan
         ? shiftDate(nextPlan.startDate, -1)
-        : shiftDate(mockPlan.startDate, 27);
+        : shiftDate(currentPlan.startDate, 27); // Assume 4 weeks by default if no later plan
       return {
-        ...mockPlan,
+        ...currentPlan,
         endDate
       };
     });
   }, [availablePlans]);
-  const selectedPlanValue = availablePlans.find((mockPlan) => mockPlan.startDate === selectedDate)?.id || availablePlans[0]?.id || "";
-  const selectedPlan = plansWithRanges.find((mockPlan) => mockPlan.id === selectedPlanValue) || null;
+
+  const selectedPlanValue = availablePlans.find((p) => p.is_active)?.id || availablePlans[0]?.id || "";
+  const selectedPlan = plansWithRanges.find((p) => p.id === selectedPlanValue) || null;
   const viewedWeekLabel = weekRange
     ? `${formatDateDisplay(weekRange.monday, { day: "2-digit", month: "short" })} - ${formatDateDisplay(weekRange.sunday, { day: "2-digit", month: "short" })}`
     : "Semana sin fechas";
@@ -300,7 +285,6 @@ export function RoutineCalendarClient({
 
     setPlanAction("create");
     
-    // Skip intermediate modal if no plans exist
     if (availablePlans.length === 0) {
       setIsPlanActionModalOpen(false);
       setIsImportModalOpen(true);
@@ -483,7 +467,7 @@ export function RoutineCalendarClient({
               </button>
             </div>
 
-            <div className="mt-6 grid grid-cols-1 gap-3 md:grid-cols-2">
+            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
               <button
                 type="button"
                 onClick={() => setPlanAction("create")}
@@ -563,8 +547,7 @@ export function RoutineCalendarClient({
             {profile?.name ? `Alumno: ${profile.name} ${profile.last_name || ""}` : ""}
           </p>
         </div>
-
-              </div>
+      </div>
 
       <div className="flex flex-col gap-4 px-4 pt-2">
         <div className="mb-6 flex flex-col gap-4 rounded-xl bg-zinc-900/50 p-4 md:flex-row md:items-center md:justify-between">
@@ -583,7 +566,7 @@ export function RoutineCalendarClient({
                 <select
                   value={selectedPlanValue}
                   onChange={(e) => {
-                    const nextPlan = availablePlans.find((mockPlan) => mockPlan.id === e.target.value);
+                    const nextPlan = availablePlans.find((p) => p.id === e.target.value);
                     if (!nextPlan) return;
                     setSelectedWeek(getWeekNumberFromDate(nextPlan.startDate, effectivePlan?.start_date || null));
                     setSelectedDate(nextPlan.startDate);
@@ -592,9 +575,9 @@ export function RoutineCalendarClient({
                   }}
                   className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-100 outline-none focus:border-yellow-400"
                 >
-                  {availablePlans.map((mockPlan) => (
-                    <option key={mockPlan.id} value={mockPlan.id}>
-                      {mockPlan.name}
+                  {availablePlans.map((p) => (
+                    <option key={p.id} value={p.id}>
+                      {p.name}
                     </option>
                   ))}
                 </select>

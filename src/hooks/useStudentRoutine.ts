@@ -21,6 +21,7 @@ type SessionExercise = Tables<"session_exercises"> & {
 type RoutineResult = {
   profile: Profile | null;
   plan: TrainingPlan | null;
+  allPlans: TrainingPlan[];
   sessions: Session[];
   exercisesBySession: Record<number, SessionExercise[]>;
 };
@@ -37,21 +38,20 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
 
   const typedProfile = profile as Profile | null;
 
-  // 2. Plan activo
-  const { data: plans } = await supabase
+  // 2. Todos los planes del estudiante, y el plan activo
+  const { data: allPlansData } = await supabase
     .from("training_plans")
     .select("id, name, start_date, is_active")
     .eq("student_id", studentId as any)
-    .eq("is_active", true as any)
-    .order("created_at", { ascending: false })
-    .limit(1);
+    .order("created_at", { ascending: false });
 
-  const plan = plans?.[0] ?? null;
-
+  const allPlans = (allPlansData ?? []) as TrainingPlan[];
+  const plan = allPlans.find((p) => p.is_active) ?? null;
   if (!plan) {
     return {
       profile: typedProfile,
       plan: null,
+      allPlans: allPlans,
       sessions: [],
       exercisesBySession: {},
     };
@@ -74,6 +74,7 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
     return {
       profile: typedProfile,
       plan,
+      allPlans: allPlans,
       sessions: typedSessions,
       exercisesBySession: {},
     };
@@ -102,6 +103,7 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
   return {
     profile: typedProfile,
     plan,
+    allPlans: allPlans,
     sessions: typedSessions,
     exercisesBySession,
   };
@@ -114,3 +116,5 @@ export function useStudentRoutine(studentId: string) {
     enabled: !!studentId,
   });
 }
+
+
