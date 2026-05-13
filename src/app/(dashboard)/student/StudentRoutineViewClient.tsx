@@ -32,6 +32,7 @@ export function StudentRoutineViewClient() {
         role="STUDENT"
         profile={data.profile}
         plan={data.plan}
+        allPlans={data.allPlans || []}
         sessions={data.sessions}
         exercisesBySession={data.exercisesBySession}
       />
