@@ -351,7 +351,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
 
               <button 
                 disabled={isPending || (creationMode === 'blank' && durationWeeks < 1) || (creationMode === 'template' && (!selectedTemplate || preferredDays.length === 0 || !hasExactSelectedDays))}
-                className="mt-4 bg-primary text-primary-foreground py-5 rounded-[1.5rem] font-black text-sm shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+                className="mt-4 bg-primary text-primary-foreground py-5 rounded-3xl font-black text-sm shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
               >
                 {isPending ? (
                   <>

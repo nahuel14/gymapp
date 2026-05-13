@@ -41,7 +41,7 @@ type RoutineCalendarClientProps = {
   role: "COACH" | "STUDENT" | "ADMIN";
   profile: { id: string; name: string | null; last_name: string | null } | null;
   plan: { id: number; name: string; start_date: string | null } | null;
-  allPlans: Tables<"training_plans">[];
+  allPlans: Pick<Tables<"training_plans">, "id" | "name" | "is_active" | "start_date">[];
   sessions: Session[];
   exercisesBySession: Record<number, SessionExercise[]>;
 };
@@ -690,7 +690,7 @@ export function RoutineCalendarClient({
             })}
           </div>
         ) : (
-          <div className="flex min-h-[260px] flex-col items-center justify-center rounded-[2rem] border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-10 text-center">
+          <div className="flex min-h-65 flex-col items-center justify-center rounded-4xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-10 text-center">
             <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-900/80">
               <CalendarX className="h-8 w-8 text-zinc-500" />
             </div>
@@ -937,7 +937,7 @@ export function RoutineCalendarClient({
               <button
                 onClick={handleAddExercise}
                 disabled={isPending || !newExForm.exerciseId}
-                className="w-full rounded-[1.5rem] bg-yellow-400 py-5 text-sm font-black text-black shadow-xl shadow-yellow-400/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-30 disabled:grayscale uppercase tracking-widest"
+                className="w-full rounded-3xl bg-yellow-400 py-5 text-sm font-black text-black shadow-xl shadow-yellow-400/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-30 disabled:grayscale uppercase tracking-widest"
               >
                 {isPending ? "Procesando..." : "Guardar en Rutina"}
               </button>
@@ -948,7 +948,7 @@ export function RoutineCalendarClient({
         {!isAddingDay && (
           <div className="flex flex-col gap-4">
             {activeExercises.length === 0 && activeSessionsForDate.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4 rounded-[2rem] border-2 border-dashed border-zinc-800 bg-zinc-950/50">
+              <div className="flex flex-col items-center justify-center py-12 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
                 <div className="flex flex-col items-center gap-3">
                   <div className="h-16 w-16 rounded-full bg-zinc-900/50 flex items-center justify-center">
                     <Calendar className="h-8 w-8 text-zinc-600" />
@@ -957,14 +957,14 @@ export function RoutineCalendarClient({
                     {role === "STUDENT" ? "Día de Descanso" : "Sin ejercicios para este día"}
                   </p>
                   {role === "STUDENT" && (
-                    <p className="text-zinc-600 text-xs text-center max-w-[200px]">
+                    <p className="text-zinc-600 text-xs text-center max-w-50">
                       Hoy no hay entrenamiento programado. ¡Aprovecha para recuperarte!
                     </p>
                   )}
                 </div>
               </div>
             ) : activeExercises.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4 rounded-[2rem] border-2 border-dashed border-zinc-800 bg-zinc-950/50">
+              <div className="flex flex-col items-center justify-center py-12 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
                 <Dumbbell className="h-12 w-12 text-zinc-700 mb-4" />
                 <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">
                   Sin ejercicios para este día
