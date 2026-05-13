@@ -1,16 +1,18 @@
 "use client";
 
 import type { ReactNode } from "react";
-import { useState } from "react";
+import { usePathname } from "next/navigation";
+import Link from "next/link";
 import {
   BookOpen,
   CalendarClock,
   Dumbbell,
   LayoutDashboard,
   LayoutTemplate,
-  Menu,
   UserCircle,
-  X,
+  Users,
+  ClipboardList,
+  Library,
 } from "lucide-react";
 import type { Database } from "@/types/supabase";
 
@@ -30,23 +32,25 @@ type DashboardShellProps = {
 };
 
 function NavIcon({ href, role }: { href: string; role: UserRole }) {
+  const iconClass = "h-4 w-4";
+  
   if (href === "/admin/dashboard") {
-    return <LayoutDashboard className="h-4 w-4 text-primary" />;
+    return <LayoutDashboard className={iconClass} />;
   }
   if ((role === "COACH" || role === "ADMIN") && href === "/coach") {
-    return <CalendarClock className="h-4 w-4 text-primary" />;
+    return <Users className={iconClass} />;
   }
   if ((role === "COACH" || role === "ADMIN") && href === "/coach/templates") {
-    return <LayoutTemplate className="h-4 w-4 text-primary" />;
+    return <ClipboardList className={iconClass} />;
   }
   if ((role === "COACH" || role === "ADMIN") && href === "/coach/library") {
-    return <BookOpen className="h-4 w-4 text-primary" />;
+    return <Library className={iconClass} />;
   }
   if (role === "STUDENT" && href === "/student") {
-    return <CalendarClock className="h-4 w-4 text-primary" />;
+    return <Dumbbell className={iconClass} />;
   }
   if (href === "/profile") {
-    return <UserCircle className="h-4 w-4 text-primary" />;
+    return <UserCircle className={iconClass} />;
   }
   return null;
 }
@@ -56,43 +60,49 @@ function SidebarContent({
   navItems,
   role,
   roleLabel,
-  onNavigate,
 }: {
   fullName: string;
   navItems: NavItem[];
   role: UserRole;
   roleLabel: string;
-  onNavigate?: () => void;
 }) {
   return (
     <>
       <div className="mb-8 flex items-center gap-2">
-        <Dumbbell className="h-6 w-6 text-primary" />
+        <Dumbbell className="h-6 w-6 text-yellow-400" />
         <div>
-          <p className="text-sm font-semibold text-foreground">Gymapp</p>
-          <p className="text-xs text-muted-foreground">{roleLabel}</p>
+          <p className="text-sm font-black uppercase tracking-wider text-zinc-100">Gymapp</p>
+          <p className="text-xs text-zinc-500 uppercase font-bold tracking-widest">{roleLabel}</p>
         </div>
       </div>
 
       <nav className="flex flex-1 flex-col gap-1">
-        {navItems.map((item) => (
-          <a
-            key={item.href}
-            href={item.href}
-            onClick={onNavigate}
-            className="flex items-center gap-2 rounded-md px-3 py-3 text-sm font-medium text-muted-foreground transition hover:bg-primary/10 hover:text-foreground"
-          >
-            <NavIcon href={item.href} role={role} />
-            <span>{item.label}</span>
-          </a>
-        ))}
+        {navItems.map((item) => {
+          const pathname = usePathname();
+          const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+          
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition ${
+                isActive 
+                  ? "bg-yellow-400/10 text-yellow-400" 
+                  : "text-zinc-400 hover:bg-yellow-400/10 hover:text-yellow-400"
+              }`}
+            >
+              <NavIcon href={item.href} role={role} />
+              <span>{item.label}</span>
+            </Link>
+          );
+        })}
       </nav>
 
-      <div className="mt-6 border-t border-border pt-4">
-        <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">
+      <div className="mt-6 border-t border-zinc-800 pt-4">
+        <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
           Sesión
         </p>
-        <p className="mt-1 text-sm font-medium text-foreground">
+        <p className="mt-1 text-sm font-medium text-zinc-100">
           {fullName || "Usuario"}
         </p>
       </div>
@@ -100,72 +110,106 @@ function SidebarContent({
   );
 }
 
-export function DashboardShell({ children, fullName, navItems, role, roleLabel }: DashboardShellProps) {
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+type BottomNavItem = {
+  href: string;
+  label: string;
+  icon: ReactNode;
+};
+
+function getBottomNavItems(role: UserRole): BottomNavItem[] {
+  if (role === "COACH" || role === "ADMIN") {
+    return [
+      {
+        href: "/coach",
+        label: "Alumnos",
+        icon: <Users className="h-6 w-6" />,
+      },
+      {
+        href: "/coach/templates",
+        label: "Plantillas",
+        icon: <ClipboardList className="h-6 w-6" />,
+      },
+      {
+        href: "/coach/library",
+        label: "Biblioteca",
+        icon: <Library className="h-6 w-6" />,
+      },
+      {
+        href: "/profile",
+        label: "Perfil",
+        icon: <UserCircle className="h-6 w-6" />,
+      },
+    ];
+  }
+
+  // STUDENT
+  return [
+    {
+      href: "/student",
+      label: "Rutina",
+      icon: <Dumbbell className="h-6 w-6" />,
+    },
+    {
+      href: "/profile",
+      label: "Perfil",
+      icon: <UserCircle className="h-6 w-6" />,
+    },
+  ];
+}
+
+function BottomNavigation({ role }: { role: UserRole }) {
+  const pathname = usePathname();
+  const navItems = getBottomNavItems(role);
 
   return (
-    <div className="flex min-h-screen bg-background">
-      <aside className="hidden w-64 flex-col border-r border-border bg-card px-4 py-6 md:flex">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)] md:hidden">
+      <div className="flex items-center justify-around px-2">
+        {navItems.map((item) => {
+          const isActive = pathname === item.href || (item.href !== "/profile" && pathname?.startsWith(item.href + "/"));
+          
+          return (
+            <Link
+              key={item.href}
+              href={item.href}
+              className="flex min-w-16 flex-1 flex-col items-center justify-center gap-1 py-3 transition-all active:scale-95"
+            >
+              <div className={`transition-all duration-200 ${
+                isActive ? "text-yellow-400 scale-110" : "text-zinc-500"
+              }`}>
+                {item.icon}
+              </div>
+              <span className={`text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${
+                isActive ? "text-yellow-400" : "text-zinc-500"
+              }`}>
+                {item.label}
+              </span>
+            </Link>
+          );
+        })}
+      </div>
+    </nav>
+  );
+}
+
+export function DashboardShell({ children, fullName, navItems, role, roleLabel }: DashboardShellProps) {
+  return (
+    <div className="flex min-h-screen bg-zinc-950">
+      {/* Desktop Sidebar - Se oculta en mobile */}
+      <aside className="hidden w-64 flex-col border-r border-zinc-800 bg-zinc-900 px-4 py-6 md:flex">
         <SidebarContent fullName={fullName} navItems={navItems} role={role} roleLabel={roleLabel} />
       </aside>
 
+      {/* Main Content */}
       <div className="flex min-h-screen w-full flex-1 flex-col">
-        <div className="fixed inset-x-0 top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-card px-4 md:hidden">
-          <div className="flex items-center gap-2">
-            <Dumbbell className="h-5 w-5 text-primary" />
-            <div>
-              <p className="text-sm font-semibold text-foreground">Gymapp</p>
-              <p className="text-[10px] text-muted-foreground">{roleLabel}</p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setIsMobileMenuOpen(true)}
-            className="inline-flex items-center justify-center rounded-lg border border-border bg-background p-2 text-foreground"
-            aria-label="Abrir menú"
-          >
-            <Menu className="h-5 w-5" />
-          </button>
-        </div>
-
-        {isMobileMenuOpen && (
-          <div className="fixed inset-0 z-50 md:hidden">
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              className="absolute inset-0 bg-black/60"
-              aria-label="Cerrar menú"
-            />
-            <div className="absolute left-0 top-0 flex h-full w-[85%] max-w-xs flex-col border-r border-border bg-card px-4 py-6 shadow-2xl">
-              <div className="mb-6 flex items-center justify-between">
-                <div className="flex items-center gap-2">
-                  <Dumbbell className="h-6 w-6 text-primary" />
-                  <div>
-                    <p className="text-sm font-semibold text-foreground">Gymapp</p>
-                    <p className="text-xs text-muted-foreground">{roleLabel}</p>
-                  </div>
-                </div>
-                <button
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className="inline-flex items-center justify-center rounded-lg border border-border bg-background p-2 text-foreground"
-                  aria-label="Cerrar menú"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <SidebarContent
-                fullName={fullName}
-                navItems={navItems}
-                role={role}
-                roleLabel={roleLabel}
-                onNavigate={() => setIsMobileMenuOpen(false)}
-              />
-            </div>
-          </div>
-        )}
-
-        <main className="w-full flex-1 bg-background pt-16 md:pt-0">{children}</main>
+        {/* pb-24 asegura que el contenido no quede tapado por la BottomBar en mobile */}
+        <main className="w-full flex-1 bg-zinc-950 pb-24 md:pb-0">
+          {children}
+        </main>
+        
+        {/* Bottom Navigation - Solo se muestra en mobile */}
+        <BottomNavigation role={role} />
       </div>
     </div>
   );
 }
+
