@@ -752,195 +752,142 @@ export function RoutineCalendarClient({
         </div>
 
         {plan && isViewedWeekWithinPlan && isAddingDay && (
-          <div className="rounded-2xl border-2 border-dashed border-zinc-800 bg-zinc-950 p-6 flex flex-col gap-4 animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-[10px] font-black uppercase tracking-widest text-zinc-400">
-                Elegir fecha para el nuevo día
-              </h4>
-              <button
-                onClick={() => {
-                  setIsAddingDay(false);
-                  setNewDayForm(null);
-                }}
-                className="text-zinc-500 hover:text-white transition"
-              >
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+            <div className="w-full bg-zinc-950 rounded-t-[2rem] sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
+              <div className="flex items-center justify-between">
+                <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">
+                  Agregar Día
+                </h4>
+                <button
+                  onClick={() => {
+                    setIsAddingDay(false);
+                    setNewDayForm(null);
+                  }}
+                  className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+                >
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
 
-            <div className="flex gap-3">
-              <input
-                type="date"
-                className="flex-1 rounded-xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all"
-                value={newDayForm?.date ?? ""}
-                onChange={(e) => setNewDayForm({ date: e.target.value })}
-              />
-              <button
-                onClick={handleAddDay}
-                className="rounded-xl bg-yellow-400 px-6 font-black text-xs text-black shadow-lg shadow-yellow-400/10 active:scale-95 transition"
-              >
-                AGREGAR
-              </button>
+              <div className="flex flex-col gap-5">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                    Fecha del entrenamiento
+                  </label>
+                  <input
+                    type="date"
+                    className="w-full h-14 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-sm font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all uppercase"
+                    value={newDayForm?.date ?? ""}
+                    onChange={(e) => setNewDayForm({ date: e.target.value })}
+                  />
+                </div>
+                
+                <button
+                  onClick={handleAddDay}
+                  className="h-14 w-full rounded-2xl bg-yellow-400 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-400/20 transition-all hover:bg-yellow-300 active:scale-95"
+                >
+                  Confirmar Día
+                </button>
+              </div>
             </div>
           </div>
         )}
 
         {isAddingExercise && role === "COACH" && (
-          <div className="rounded-xl border-2 border-primary/20 bg-primary/5 p-4 flex flex-col gap-4 animate-in fade-in slide-in-from-top-2">
-            <div className="flex items-center justify-between">
-              <h4 className="text-sm font-bold flex items-center gap-2">
-                <Plus className="h-4 w-4" /> Nuevo Ejercicio
-              </h4>
-              <button onClick={() => setIsAddingExercise(false)} className="text-muted-foreground">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
+          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+            <div className="w-full max-h-[90vh] overflow-y-auto bg-zinc-950 rounded-t-[1.5rem] sm:rounded-2xl border-t sm:border border-zinc-800 p-5 pb-6 flex flex-col gap-5 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-lg no-scrollbar">
+              
+              {/* Sticky Header del Modal */}
+              <div className="flex items-center justify-between sticky top-0 bg-zinc-950 py-2 z-10 border-b border-zinc-800/50 mb-1">
+                <h4 className="text-base font-black uppercase tracking-tight text-zinc-100 flex items-center gap-2">
+                  <Plus className="h-4 w-4 text-yellow-400" /> Nuevo Ejercicio
+                </h4>
+                <button 
+                  onClick={() => setIsAddingExercise(false)} 
+                  className="h-8 w-8 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+                >
+                  <X className="h-4 w-4" />
+                </button>
+              </div>
 
-            <div className="flex flex-col gap-5">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="flex flex-col gap-4">
+                {/* SELECT EJERCICIO */}
                 <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
-                    Ejercicio
-                  </label>
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Ejercicio</label>
                   <select
-                    className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-bold text-zinc-100 outline-none focus:border-yellow-400 transition-all appearance-none"
+                    className="w-full h-11 rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm font-bold text-zinc-100 outline-none focus:border-yellow-400 transition-all appearance-none"
                     value={newExForm.exerciseId}
                     onChange={(e) => setNewExForm({ ...newExForm, exerciseId: e.target.value })}
                   >
                     <option value="">Seleccionar ejercicio...</option>
                     {allExercises.map((ex) => (
-                      <option key={ex.id} value={ex.id}>
-                        {ex.name}
-                      </option>
+                      <option key={ex.id} value={ex.id}>{ex.name}</option>
                     ))}
                   </select>
                 </div>
 
+                {/* SETS, RPE, PAUSA */}
                 <div className="grid grid-cols-3 gap-3">
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">
-                      Sets
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-black text-center text-yellow-400 outline-none focus:border-yellow-400 transition-all"
-                      value={newExForm.target_sets}
-                      onChange={(e) => {
-                        const sets = Math.max(1, Math.min(10, Number(e.target.value)));
-                        setNewExForm({
-                          ...newExForm,
-                          target_sets: sets,
-                          target_reps: Array(sets).fill(newExForm.target_reps[0] || 10),
-                          target_weight: Array(sets).fill(null)
-                        });
-                      }}
-                    />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Sets</label>
+                    <input type="number" className="h-11 rounded-xl border border-zinc-800 bg-zinc-900 text-center text-base font-black text-yellow-400 outline-none focus:border-yellow-400 transition-all" value={newExForm.target_sets} onChange={(e) => {
+                      const sets = Math.max(1, Math.min(10, Number(e.target.value)));
+                      setNewExForm({
+                        ...newExForm, target_sets: sets,
+                        target_reps: Array(sets).fill(newExForm.target_reps[0] || 10),
+                        target_weight: Array(sets).fill(null)
+                      });
+                    }} />
                   </div>
-
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">
-                      RPE
-                    </label>
-                    <input
-                      type="number"
-                      step="0.5"
-                      className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-black text-center text-zinc-100 outline-none focus:border-yellow-400 transition-all"
-                      value={newExForm.target_rpe}
-                      onChange={(e) => setNewExForm({ ...newExForm, target_rpe: Number(e.target.value) })}
-                    />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE</label>
+                    <input type="number" step="0.5" className="h-11 rounded-xl border border-zinc-800 bg-zinc-900 text-center text-base font-black text-yellow-400 outline-none focus:border-yellow-400 transition-all" value={newExForm.target_rpe} onChange={(e) => setNewExForm({ ...newExForm, target_rpe: Number(e.target.value) })} />
                   </div>
-
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">
-                      Pausa
-                    </label>
-                    <input
-                      type="number"
-                      className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-black text-center text-zinc-100 outline-none focus:border-yellow-400 transition-all"
-                      value={newExForm.rest}
-                      onChange={(e) => setNewExForm({ ...newExForm, rest: Number(e.target.value) })}
-                    />
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Pausa</label>
+                    <input type="number" className="h-11 rounded-xl border border-zinc-800 bg-zinc-900 text-center text-base font-black text-yellow-400 outline-none focus:border-yellow-400 transition-all" value={newExForm.rest} onChange={(e) => setNewExForm({ ...newExForm, rest: Number(e.target.value) })} />
                   </div>
                 </div>
-              </div>
 
-              <div className="flex flex-col gap-4 rounded-3xl bg-zinc-950 p-6 border-2 border-zinc-900">
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
-                    Repeticiones por serie
-                  </label>
-                  <div className="flex flex-wrap gap-2">
+                {/* DETALLE DE SERIES (REPS & KILOS) */}
+                <div className="flex flex-col gap-2.5 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-3">
+                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Detalle por Serie</span>
+                  <div className="flex flex-col gap-2">
                     {newExForm.target_reps.map((rep, idx) => (
-                      <div key={idx} className="flex flex-col gap-1">
-                        <span className="text-[8px] font-black text-zinc-600 text-center uppercase">
-                          S{idx + 1}
-                        </span>
-                        <input
-                          required
-                          type="number"
-                          min="1"
-                          className="w-12 h-12 rounded-xl border-2 border-zinc-800 bg-zinc-900 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all"
-                          value={rep}
-                          onChange={(e) => {
+                      <div key={idx} className="flex items-center gap-2">
+                        <span className="w-6 text-[10px] font-black uppercase tracking-widest text-zinc-500">S{idx + 1}</span>
+                        <div className="flex-1 flex gap-2">
+                          <input type="number" min="1" placeholder="Reps" className="h-10 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-center text-sm font-black text-zinc-100 outline-none focus:border-yellow-400" value={rep} onChange={(e) => {
                             const newReps = [...newExForm.target_reps];
                             newReps[idx] = Number(e.target.value);
                             setNewExForm({ ...newExForm, target_reps: newReps });
-                          }}
-                        />
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                <div className="flex flex-col gap-3">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
-                    Kilos por serie
-                  </label>
-                  <div className="flex flex-wrap gap-2">
-                    {newExForm.target_weight.map((weight, idx) => (
-                      <div key={idx} className="flex flex-col gap-1">
-                        <span className="text-[8px] font-black text-zinc-600 text-center uppercase">
-                          S{idx + 1}
-                        </span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          placeholder="Kg"
-                          className="w-12 h-12 rounded-xl border-2 border-zinc-800 bg-zinc-900 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all"
-                          value={weight === null ? "" : weight}
-                          onChange={(e) => {
+                          }} />
+                          <input type="number" step="0.5" placeholder="Kg" className="h-10 flex-1 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-center text-sm font-black text-zinc-100 outline-none focus:border-yellow-400" value={newExForm.target_weight[idx] ?? ""} onChange={(e) => {
                             const newWeights = [...newExForm.target_weight];
-                            const val = e.target.value === "" ? null : Number(e.target.value);
-                            newWeights[idx] = val;
+                            newWeights[idx] = e.target.value === "" ? null : Number(e.target.value);
                             setNewExForm({ ...newExForm, target_weight: newWeights });
-                          }}
-                        />
+                          }} />
+                        </div>
                       </div>
                     ))}
                   </div>
                 </div>
-              </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">
-                  Notas para el alumno
-                </label>
-                <textarea
-                  className="w-full rounded-2xl border-2 border-zinc-800 bg-zinc-900 p-4 text-sm font-medium text-zinc-100 outline-none focus:border-yellow-400 transition-all resize-none"
-                  rows={2}
-                  placeholder="Ej: Controlar el descenso, 2 segundos..."
-                  value={newExForm.notes}
-                  onChange={(e) => setNewExForm({ ...newExForm, notes: e.target.value })}
-                />
-              </div>
+                {/* NOTAS */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Notas para el alumno</label>
+                  <textarea className="min-h-[60px] rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-100 outline-none focus:border-yellow-400 resize-none" placeholder="Ej: Controlar el descenso..." value={newExForm.notes} onChange={(e) => setNewExForm({ ...newExForm, notes: e.target.value })} />
+                </div>
 
-              <button
-                onClick={handleAddExercise}
-                disabled={isPending || !newExForm.exerciseId}
-                className="w-full rounded-3xl bg-yellow-400 py-5 text-sm font-black text-black shadow-xl shadow-yellow-400/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-30 disabled:grayscale uppercase tracking-widest"
-              >
-                {isPending ? "Procesando..." : "Guardar en Rutina"}
-              </button>
+                {/* BOTON GUARDAR */}
+                <button 
+                  onClick={handleAddExercise} 
+                  disabled={isPending || !newExForm.exerciseId} 
+                  className="h-11 w-full mt-1 rounded-xl bg-yellow-400 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-400/20 transition-all hover:bg-yellow-300 active:scale-95 disabled:opacity-50"
+                >
+                  {isPending ? "Procesando..." : "Guardar en Rutina"}
+                </button>
+              </div>
             </div>
           </div>
         )}
