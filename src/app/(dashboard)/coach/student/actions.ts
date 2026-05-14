@@ -1,7 +1,8 @@
- "use server";
+"use server";
 
 import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
+import type { Database } from "@/types/supabase";
 
 export async function addWeekToPlan(planId: number, nextWeekNumber: number) {
   const supabase = await createSupabaseServerClient();
@@ -842,4 +843,36 @@ export async function importTemplateToStudent(
   revalidatePath("/student", "page");
 
   return { success: true, planId: activePlan.id };
+}
+
+type BodyZone = Database["public"]["Enums"]["body_zone"];
+type ExerciseCategory = Database["public"]["Enums"]["exercise_category"];
+
+export async function createInlineExercise(data: { name: string; body_zone: string; category: string }) {
+  const supabase = await createSupabaseServerClient();
+
+  // 1. Verificar que haya un usuario logueado (Admin o Coach)
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  // 2. Insertar el ejercicio en la base de datos global
+  const { data: newExercise, error } = await supabase
+    .from("exercises")
+    .insert([{
+      name: data.name.trim(),
+      body_zone: data.body_zone || null,
+      category: data.category || null,
+    }] as any)
+    .select()
+    .single();
+
+  if (error) {
+    console.error("Error creating inline exercise:", error);
+    throw new Error("No se pudo crear el ejercicio");
+  }
+
+  // IMPORTANTE: Recargamos la caché de la librería global por las dudas
+  revalidatePath("/coach/library");
+
+  return newExercise;
 }

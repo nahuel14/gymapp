@@ -2,6 +2,7 @@
 
 import { useState, useRef, useEffect, useTransition, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { ExerciseFormModal } from "@/components/ExerciseFormModal";
 import {
   ChevronLeft,
   ChevronRight,
@@ -62,6 +63,8 @@ export function RoutineCalendarClient({
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [selectedDate, setSelectedDate] = useState<string | null>(() => new Date().toISOString().split("T")[0]);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
+  const [exerciseSearch, setExerciseSearch] = useState("");
+  const [isExerciseDropdownOpen, setIsExerciseDropdownOpen] = useState(false);
   const [isAddingDay, setIsAddingDay] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isPlanActionModalOpen, setIsPlanActionModalOpen] = useState(false);
@@ -794,106 +797,15 @@ export function RoutineCalendarClient({
         )}
 
         {isAddingExercise && role === "COACH" && (
-          <div className="fixed inset-0 z-[60] flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
-            <div className="w-full max-h-[85vh] flex flex-col bg-zinc-950 rounded-t-[1.5rem] sm:rounded-2xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-lg">
-              
-              {/* HEADER FIJO */}
-              <div className="flex items-center justify-between shrink-0 border-b border-zinc-800/50 p-4">
-                <h4 className="text-base font-black uppercase tracking-tight text-zinc-100 flex items-center gap-2">
-                  <Plus className="h-4 w-4 text-yellow-400" /> Nuevo Ejercicio
-                </h4>
-                <button 
-                  onClick={() => setIsAddingExercise(false)} 
-                  className="h-8 w-8 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
-                >
-                  <X className="h-4 w-4" />
-                </button>
-              </div>
-
-              {/* CUERPO SCROLLEABLE */}
-              <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 no-scrollbar">
-                {/* SELECT EJERCICIO */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Ejercicio</label>
-                  <select
-                    className="w-full h-10 min-h-[40px] rounded-xl border border-zinc-800 bg-zinc-900 px-3 text-sm font-bold text-zinc-100 outline-none focus:border-yellow-400 transition-all appearance-none"
-                    value={newExForm.exerciseId}
-                    onChange={(e) => setNewExForm({ ...newExForm, exerciseId: e.target.value })}
-                  >
-                    <option value="">Seleccionar...</option>
-                    {allExercises.map((ex) => (
-                      <option key={ex.id} value={ex.id}>{ex.name}</option>
-                    ))}
-                  </select>
-                </div>
-
-                {/* SETS, RPE, PAUSA */}
-                <div className="grid grid-cols-3 gap-2">
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Sets</label>
-                    <input type="number" className="h-10 w-full min-w-0 rounded-xl border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400 transition-all" value={newExForm.target_sets} onChange={(e) => {
-                      const sets = Math.max(1, Math.min(10, Number(e.target.value)));
-                      setNewExForm({
-                        ...newExForm, target_sets: sets,
-                        target_reps: Array(sets).fill(newExForm.target_reps[0] || 10),
-                        target_weight: Array(sets).fill(null)
-                      });
-                    }} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE</label>
-                    <input type="number" step="0.5" className="h-10 w-full min-w-0 rounded-xl border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400 transition-all" value={newExForm.target_rpe} onChange={(e) => setNewExForm({ ...newExForm, target_rpe: Number(e.target.value) })} />
-                  </div>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Pausa</label>
-                    <input type="number" className="h-10 w-full min-w-0 rounded-xl border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400 transition-all" value={newExForm.rest} onChange={(e) => setNewExForm({ ...newExForm, rest: Number(e.target.value) })} />
-                  </div>
-                </div>
-
-                {/* DETALLE DE SERIES (REPS & KILOS) */}
-                <div className="flex flex-col gap-2.5 bg-zinc-900/40 border border-zinc-800/80 rounded-2xl p-3">
-                  <span className="text-[10px] font-black uppercase tracking-widest text-zinc-400">Detalle por Serie</span>
-                  <div className="flex flex-col gap-2">
-                    {newExForm.target_reps.map((rep, idx) => (
-                      <div key={idx} className="flex items-center gap-2 w-full">
-                        <span className="w-5 shrink-0 text-[10px] font-black uppercase tracking-widest text-zinc-500">S{idx + 1}</span>
-                        <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
-                          <input type="number" min="1" placeholder="Reps" className="h-9 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-center text-sm font-black text-zinc-100 outline-none focus:border-yellow-400" value={rep} onChange={(e) => {
-                            const newReps = [...newExForm.target_reps];
-                            newReps[idx] = Number(e.target.value);
-                            setNewExForm({ ...newExForm, target_reps: newReps });
-                          }} />
-                          <input type="number" step="0.5" placeholder="Kg" className="h-9 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-center text-sm font-black text-zinc-100 outline-none focus:border-yellow-400" value={newExForm.target_weight[idx] ?? ""} onChange={(e) => {
-                            const newWeights = [...newExForm.target_weight];
-                            newWeights[idx] = e.target.value === "" ? null : Number(e.target.value);
-                            setNewExForm({ ...newExForm, target_weight: newWeights });
-                          }} />
-                        </div>
-                      </div>
-                    ))}
-                  </div>
-                </div>
-
-                {/* NOTAS */}
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Notas</label>
-                  <textarea className="min-h-[60px] rounded-xl border border-zinc-800 bg-zinc-900 p-3 text-sm text-zinc-100 outline-none focus:border-yellow-400 resize-none" placeholder="Ej: Controlar el descenso..." value={newExForm.notes} onChange={(e) => setNewExForm({ ...newExForm, notes: e.target.value })} />
-                </div>
-              </div>
-
-              {/* FOOTER FIJO (BOTÓN GUARDAR) */}
-              <div className="shrink-0 p-4 border-t border-zinc-800/50 bg-zinc-950 pb-[calc(1rem+env(safe-area-inset-bottom))] rounded-b-[1.5rem] sm:rounded-b-2xl">
-                <button 
-                  onClick={handleAddExercise} 
-                  disabled={isPending || !newExForm.exerciseId} 
-                  className="h-12 w-full rounded-xl bg-yellow-400 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-400/20 transition-all hover:bg-yellow-300 active:scale-95 disabled:opacity-50"
-                >
-                  {isPending ? "Procesando..." : "Guardar en Rutina"}
-                </button>
-              </div>
-
-            </div>
-          </div>
+          <ExerciseFormModal
+            isOpen={isAddingExercise}
+            onClose={() => setIsAddingExercise(false)}
+            formState={newExForm}
+            setFormState={setNewExForm}
+            onSave={handleAddExercise}
+            isPending={isPending}
+            allExercises={allExercises}
+          />
         )}
 
         {!isAddingDay && (

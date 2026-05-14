@@ -8,6 +8,7 @@ import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "@/app/(dashboard)/coach/student/ExerciseExcelGrid";
 import { deleteDayFromPlan, updateTemplatePlan } from "@/app/(dashboard)/coach/student/actions";
 import { useQueryClient } from "@tanstack/react-query";
+import { ExerciseFormModal } from "@/components/ExerciseFormModal";
 
 export default function TemplateEditPage() {
   const params = useParams();
@@ -19,6 +20,8 @@ export default function TemplateEditPage() {
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
+  const [exerciseSearch, setExerciseSearch] = useState("");
+  const [isExerciseDropdownOpen, setIsExerciseDropdownOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [planSessions, setPlanSessions] = useState<any[]>([]);
@@ -165,6 +168,7 @@ export default function TemplateEditPage() {
           coach_notes: ""
         });
         setIsAddingExercise(false);
+        setIsExerciseDropdownOpen(false);
         window.location.reload();
       }
     } catch (error) {
@@ -357,149 +361,15 @@ export default function TemplateEditPage() {
                 </div>
               </div>
 
-              {isAddingExercise && (
-                <div className="rounded-xl border-2 border-zinc-800 bg-zinc-950 p-6 space-y-4 mb-6">
-                  <div className="flex items-center justify-between">
-                    <h4 className="text-sm font-bold text-zinc-100">Nuevo Ejercicio</h4>
-                    <button onClick={() => setIsAddingExercise(false)} className="text-zinc-500 hover:text-white">
-                      <X className="h-5 w-5" />
-                    </button>
-                  </div>
-
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <div className="flex flex-col gap-1.5 md:col-span-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                        Ejercicio
-                      </label>
-                      <select
-                        className="w-full rounded-xl border-2 border-zinc-800 bg-zinc-900 p-3 text-sm font-bold text-zinc-100 outline-none focus:border-yellow-400"
-                        value={newExForm.exerciseId}
-                        onChange={(e) => setNewExForm({ ...newExForm, exerciseId: e.target.value })}
-                      >
-                        <option value="">Seleccionar ejercicio...</option>
-                        {allExercises.map((ex) => (
-                          <option key={ex.id} value={ex.id}>
-                            {ex.name}
-                          </option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">
-                        Sets
-                      </label>
-                      <input
-                        type="number"
-                        className="w-full rounded-xl border-2 border-zinc-800 bg-zinc-900 p-3 text-sm font-black text-center text-yellow-400 outline-none focus:border-yellow-400"
-                        value={newExForm.target_sets}
-                        onChange={(e) => {
-                          const sets = Math.max(1, Math.min(10, Number(e.target.value)));
-                          setNewExForm({
-                            ...newExForm,
-                            target_sets: sets,
-                            target_reps: Array(sets).fill(newExForm.target_reps[0] || 10),
-                            target_weight: Array(sets).fill(null)
-                          });
-                        }}
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">
-                        RPE
-                      </label>
-                      <input
-                        type="number"
-                        step="0.5"
-                        className="w-full rounded-xl border-2 border-zinc-800 bg-zinc-900 p-3 text-sm font-black text-center text-zinc-100 outline-none focus:border-yellow-400"
-                        value={newExForm.target_rpe}
-                        onChange={(e) => setNewExForm({ ...newExForm, target_rpe: Number(e.target.value) })}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="grid grid-cols-1 gap-4">
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                        Pausa (segundos)
-                      </label>
-                      <input
-                        type="number"
-                        className="w-full rounded-xl border-2 border-zinc-800 bg-zinc-900 p-3 text-sm font-black text-center text-zinc-100 outline-none focus:border-yellow-400"
-                        value={newExForm.rest}
-                        onChange={(e) => setNewExForm({ ...newExForm, rest: Number(e.target.value) })}
-                      />
-                    </div>
-                  </div>
-
-                  {newExForm.target_sets > 0 && (
-                    <div className="space-y-4">
-                      <div className="text-xs font-black uppercase tracking-widest text-zinc-500">
-                        Configuración por Set
-                      </div>
-
-                      <div className="w-full overflow-x-auto rounded-xl border border-zinc-800 bg-black shadow-2xl">
-                        <table className="w-full border-collapse text-[11px] font-medium">
-                          <thead>
-                            <tr className="border-b border-zinc-800 bg-zinc-950/50 text-zinc-400">
-                              <th className="px-2 py-2 text-center border-r border-zinc-800 w-8">SET</th>
-                              <th className="px-2 py-2 text-center border-r border-zinc-800 w-32">REPS</th>
-                              <th className="px-2 py-2 text-center border-r border-zinc-800 w-32">KILOS</th>
-                              <th className="px-3 py-2 text-left">OBS</th>
-                            </tr>
-                          </thead>
-                          <tbody className="divide-y divide-zinc-800">
-                            {Array.from({ length: newExForm.target_sets }).map((_, i) => (
-                              <tr key={i} className="hover:bg-zinc-900/30 transition-colors">
-                                <td className="px-2 py-2 border-r border-zinc-800 text-center font-black text-yellow-400">
-                                  {i + 1}
-                                </td>
-                                <td className="px-2 py-2 border-r border-zinc-800">
-                                  <input
-                                    type="number"
-                                    min="1"
-                                    className="w-full h-6 bg-zinc-950 border border-zinc-800 rounded text-center outline-none focus:border-yellow-400 transition-colors text-zinc-300"
-                                    value={newExForm.target_reps?.[i] ?? 10}
-                                    onChange={(e) => updateArrayField("target_reps", i, e.target.value)}
-                                  />
-                                </td>
-                                <td className="px-2 py-2 border-r border-zinc-800">
-                                  <input
-                                    type="number"
-                                    step="0.5"
-                                    className="w-full h-6 bg-zinc-950 border border-zinc-800 rounded text-center outline-none focus:border-yellow-400 transition-colors text-zinc-300"
-                                    placeholder="Kg"
-                                    value={newExForm.target_weight?.[i] ?? ""}
-                                    onChange={(e) => updateArrayField("target_weight", i, e.target.value)}
-                                  />
-                                </td>
-                                <td className="px-3 py-2">
-                                  <input
-                                    type="text"
-                                    className="w-full bg-transparent outline-none text-zinc-300 text-xs"
-                                    placeholder="Notas..."
-                                    value={newExForm.coach_notes || ""}
-                                    onChange={(e) => setNewExForm({ ...newExForm, coach_notes: e.target.value })}
-                                  />
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    </div>
-                  )}
-
-                  <button
-                    onClick={addExerciseToTemplate}
-                    disabled={!newExForm.exerciseId || newExForm.target_sets === 0}
-                    className="w-full rounded-xl bg-yellow-400 py-3 text-sm font-black text-black transition-all hover:scale-[1.02] active:scale-[0.98] disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Agregar Ejercicio
-                  </button>
-                </div>
-              )}
+              <ExerciseFormModal
+                isOpen={isAddingExercise}
+                onClose={() => setIsAddingExercise(false)}
+                formState={newExForm}
+                setFormState={setNewExForm}
+                onSave={addExerciseToTemplate}
+                isPending={isPending}
+                allExercises={allExercises}
+              />
 
               {selectedSession.session_exercises && selectedSession.session_exercises.length > 0 ? (
                 <ExerciseExcelGrid
