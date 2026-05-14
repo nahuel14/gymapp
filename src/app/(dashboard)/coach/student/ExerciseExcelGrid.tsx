@@ -6,7 +6,8 @@ import {
   Settings2, 
   Trash2, 
   Save, 
-  X
+  X,
+  PlusCircle
 } from "lucide-react";
 import { BODY_ZONE_LABELS, EXERCISE_CATEGORY_LABELS } from "@/lib/constants";
 import { updateExerciseInSession, deleteExerciseFromSession } from "./actions";
@@ -83,7 +84,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
   };
 
   return (
-    <div className="flex flex-col gap-5 w-full max-w-full">
+    <div className="flex flex-col gap-3 w-full max-w-full">
       {sortedExercises.map((ex) => {
         const exerciseData = ex.exercise || ex.exercises;
         const isEditing = editingId === ex.id;
@@ -91,103 +92,107 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
         const coachSets = Number(data.target_sets || 0);
         const studentSets = Number(data.actual_sets || coachSets);
 
+        // Verificamos si el alumno ya guardó datos
+        const hasStudentData = ex.actual_sets && ex.actual_sets > 0;
+
         return (
-          <div key={ex.id} className="bg-zinc-900/40 rounded-2xl border border-zinc-800/80 p-4 flex flex-col gap-4 shadow-lg relative overflow-hidden">
+          <div key={ex.id} className="bg-zinc-900/40 rounded-xl border border-zinc-800/80 p-3 flex flex-col gap-2.5 shadow-md relative overflow-hidden">
             {/* Cabecera del Ejercicio */}
-            <div className="flex items-start justify-between gap-3">
-              <div className="flex-1 min-w-0 flex flex-col gap-1.5">
-                <div className="flex flex-wrap items-center gap-2">
-                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0 flex flex-col gap-1">
+                <div className="flex flex-wrap items-center gap-1.5">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
                     {exerciseData?.body_zone ? BODY_ZONE_LABELS[exerciseData.body_zone as keyof typeof BODY_ZONE_LABELS] : "--"}
                   </span>
-                  <span className="text-[9px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-2 py-1 rounded border border-zinc-800">
+                  <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
                     {exerciseData?.category ? EXERCISE_CATEGORY_LABELS[exerciseData.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
                   </span>
                 </div>
-                <h3 className="text-lg font-black uppercase tracking-tight text-zinc-100 mt-0.5 leading-tight">
+                {/* SOLUCIÓN 2: Texto más chico (text-sm) y sin 'truncate' para que baje de línea si es largo */}
+                <h3 className="text-sm font-black uppercase tracking-tight text-zinc-100 leading-snug">
                   {exerciseData?.name || "--"}
                 </h3>
               </div>
 
-              <div className="flex flex-col items-end gap-2 shrink-0">
+              <div className="flex flex-col items-end gap-1.5 shrink-0">
                 {exerciseData?.video_url && (
                   <a
                     href={exerciseData.video_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center h-10 w-10 rounded-xl bg-zinc-800 text-yellow-400 hover:bg-yellow-400 hover:text-black hover:scale-105 active:scale-95 transition-all shadow-md"
+                    className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-800 text-yellow-400 hover:bg-yellow-400 hover:text-black hover:scale-105 active:scale-95 transition-all shadow-sm"
                   >
-                    <Play className="h-4 w-4 fill-current" />
+                    <Play className="h-3.5 w-3.5 fill-current" />
                   </a>
                 )}
                 {role === "COACH" && !isEditing && (
-                  <div className="flex gap-1.5">
-                    <button onClick={() => handleStartEdit(ex)} className="h-9 w-9 flex items-center justify-center rounded-lg bg-zinc-800/50 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-400/10 active:scale-95 transition-all">
-                      <Settings2 className="h-4 w-4" />
+                  <div className="flex gap-1">
+                    <button onClick={() => handleStartEdit(ex)} className="h-7 w-7 flex items-center justify-center rounded-md bg-zinc-800/50 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-400/10 active:scale-95 transition-all">
+                      <Settings2 className="h-3.5 w-3.5" />
                     </button>
-                    <button onClick={() => handleDelete(ex.id)} className="h-9 w-9 flex items-center justify-center rounded-lg bg-red-500/10 text-red-400 hover:bg-red-500/20 active:scale-95 transition-all">
-                      <Trash2 className="h-4 w-4" />
+                    <button onClick={() => handleDelete(ex.id)} className="h-7 w-7 flex items-center justify-center rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 active:scale-95 transition-all">
+                      <Trash2 className="h-3.5 w-3.5" />
                     </button>
                   </div>
                 )}
               </div>
             </div>
 
-            <div className="flex flex-col md:flex-row gap-3 w-full">
-              {/* Sección COACH (Prescripción) */}
-              <div className="flex-1 rounded-xl bg-zinc-950/80 border border-zinc-800/80 p-3 flex flex-col gap-3 w-full">
-                <div className="flex items-center gap-2 border-b border-zinc-800/50 pb-2">
+            <div className="flex flex-col md:flex-row gap-2 w-full">
+              {/* Sección COACH */}
+              <div className="flex-1 rounded-lg bg-zinc-950/80 border border-zinc-800/80 p-2 flex flex-col gap-2 w-full">
+                <div className="flex items-center gap-1.5 border-b border-zinc-800/50 pb-1.5">
                   <div className="w-1.5 h-1.5 rounded-full bg-yellow-400" />
-                  <span className="text-[10px] font-black uppercase tracking-widest text-yellow-400">
+                  <span className="text-[9px] font-black uppercase tracking-widest text-yellow-400">
                     Coach
                   </span>
                 </div>
 
                 {role === "COACH" && isEditing ? (
-                  <div className="flex flex-col gap-3 animate-in fade-in">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 text-center">Sets</label>
+                  <div className="flex flex-col gap-2 animate-in fade-in">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 text-center">Sets</label>
                         <input
                           type="number"
-                          className="h-10 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400"
+                          className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-yellow-400 outline-none focus:border-yellow-400"
                           value={data.target_sets || 0}
                           onChange={e => setEditForm({ ...editForm, target_sets: Number(e.target.value) })}
                         />
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE</label>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE</label>
                         <input
                           type="number"
                           step="0.5"
-                          className="h-10 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400"
+                          className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-yellow-400 outline-none focus:border-yellow-400"
                           value={data.target_rpe || 0}
                           onChange={e => setEditForm({ ...editForm, target_rpe: Number(e.target.value) })}
                         />
                       </div>
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 text-center">Pausa</label>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 text-center">Pausa</label>
                         <input
                           type="number"
-                          className="h-10 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400"
+                          className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-yellow-400 outline-none focus:border-yellow-400"
                           value={data.rest_seconds || 0}
                           onChange={e => setEditForm({ ...editForm, rest_seconds: Number(e.target.value) })}
                         />
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-2 bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-800 overflow-hidden w-full">
-                      <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400">Series detalladas</span>
-                      <div className="flex flex-col gap-2 w-full">
+                    <div className="flex flex-col gap-1.5 bg-zinc-900/50 p-1.5 rounded-lg border border-zinc-800 w-full">
+                      <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">Series</span>
+                      <div className="flex flex-col gap-1.5 w-full">
                         {Array.from({ length: coachSets }).map((_, i) => (
                           <div key={i} className="flex items-center gap-2 w-full">
-                            <span className="w-5 shrink-0 text-[10px] font-black uppercase tracking-widest text-zinc-500">S{i + 1}</span>
-                            <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
+                            <span className="w-4 shrink-0 text-[9px] font-black uppercase tracking-widest text-zinc-500">S{i + 1}</span>
+                            <div className="flex-1 grid grid-cols-2 gap-1.5 min-w-0">
                               <input
                                 type="number"
                                 min="1"
                                 placeholder="Reps"
-                                className="h-9 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400"
+                                className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400"
                                 value={data.target_reps?.[i] ?? ""}
                                 onChange={e => updateArrayField("target_reps", i, e.target.value)}
                               />
@@ -195,7 +200,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                                 type="number"
                                 step="0.5"
                                 placeholder="Kg"
-                                className="h-9 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400"
+                                className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400"
                                 value={data.target_weight?.[i] ?? ""}
                                 onChange={e => updateArrayField("target_weight", i, e.target.value)}
                               />
@@ -205,109 +210,110 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                       </div>
                     </div>
 
-                    <div className="flex flex-col gap-1.5">
-                      <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Notas del coach</label>
+                    <div className="flex flex-col gap-1">
+                      <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Notas</label>
                       <textarea
-                        className="min-h-[60px] w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 text-xs text-zinc-100 outline-none focus:border-yellow-400 resize-none"
+                        className="min-h-[40px] w-full rounded-md border border-zinc-700 bg-zinc-900 p-2 text-[11px] text-zinc-100 outline-none focus:border-yellow-400 resize-none"
                         value={data.coach_notes || ""}
                         onChange={e => setEditForm({ ...editForm, coach_notes: e.target.value })}
                       />
                     </div>
                   </div>
                 ) : (
-                  <div className="flex flex-col gap-3">
-                    <div className="grid grid-cols-3 gap-2">
-                      <div className="bg-zinc-900/50 rounded-lg p-2 text-center border border-zinc-800">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Sets</p>
-                        <p className="text-sm font-black text-zinc-100">{coachSets}</p>
+                  <div className="flex flex-col gap-2">
+                    <div className="grid grid-cols-3 gap-1.5">
+                      <div className="bg-zinc-900/50 rounded-md p-1.5 text-center border border-zinc-800">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Sets</p>
+                        <p className="text-xs font-black text-zinc-100">{coachSets}</p>
                       </div>
-                      <div className="bg-zinc-900/50 rounded-lg p-2 text-center border border-zinc-800">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">RPE</p>
-                        <p className="text-sm font-black text-zinc-100">{data.target_rpe || "--"}</p>
+                      <div className="bg-zinc-900/50 rounded-md p-1.5 text-center border border-zinc-800">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">RPE</p>
+                        <p className="text-xs font-black text-zinc-100">{data.target_rpe || "--"}</p>
                       </div>
-                      <div className="bg-zinc-900/50 rounded-lg p-2 text-center border border-zinc-800">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Pausa</p>
-                        <p className="text-sm font-black text-zinc-100">{data.rest_seconds ? `${data.rest_seconds}s` : "--"}</p>
+                      <div className="bg-zinc-900/50 rounded-md p-1.5 text-center border border-zinc-800">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Pausa</p>
+                        <p className="text-xs font-black text-zinc-100">{data.rest_seconds ? `${data.rest_seconds}s` : "--"}</p>
                       </div>
                     </div>
                     
-                    <div className="flex flex-col gap-1.5 mt-1">
+                    <div className="flex flex-col gap-1">
                       {Array.from({ length: coachSets }).map((_, i) => (
-                        <div key={i} className="flex items-center justify-between bg-zinc-900/40 px-3 py-2.5 rounded-lg border border-zinc-800/50">
-                          <span className="text-[10px] font-black text-zinc-500 shrink-0">SET {i+1}</span>
-                          <div className="flex items-center gap-4">
-                            <span className="text-sm font-bold text-zinc-200 min-w-[50px] text-right">{data.target_reps?.[i] ?? "-"} reps</span>
-                            <span className="text-sm font-medium text-zinc-400 min-w-[40px] text-right">{data.target_weight?.[i] ? `${data.target_weight[i]}kg` : "--"}</span>
+                        <div key={i} className="flex items-center justify-between bg-zinc-900/40 px-2 py-1.5 rounded border border-zinc-800/50">
+                          <span className="text-[9px] font-black text-zinc-500 shrink-0">SET {i+1}</span>
+                          <div className="flex items-center gap-3">
+                            <span className="text-xs font-bold text-zinc-200 min-w-[36px] text-right">{data.target_reps?.[i] ?? "-"} reps</span>
+                            <span className="text-[11px] font-medium text-zinc-400 min-w-[32px] text-right">{data.target_weight?.[i] ? `${data.target_weight[i]}kg` : "--"}</span>
                           </div>
                         </div>
                       ))}
                     </div>
 
                     {data.coach_notes && (
-                      <div className="bg-yellow-400/5 border border-yellow-400/10 rounded-lg p-2.5">
-                        <p className="text-[11px] text-yellow-500/80 italic leading-relaxed">"{data.coach_notes}"</p>
+                      <div className="bg-yellow-400/5 border border-yellow-400/10 rounded-md p-2">
+                        <p className="text-[10px] text-yellow-500/80 italic leading-snug">"{data.coach_notes}"</p>
                       </div>
                     )}
                   </div>
                 )}
               </div>
 
-              {/* Sección STUDENT (Ejecución) */}
+              {/* Sección STUDENT */}
               {!isTemplate && (
-                <div className="flex-1 rounded-xl bg-zinc-950/80 border border-zinc-800/80 p-3 flex flex-col gap-3 w-full">
-                  <div className="flex items-center justify-between border-b border-zinc-800/50 pb-2">
-                    <div className="flex items-center gap-2">
+                <div className="flex-1 rounded-lg bg-zinc-950/80 border border-zinc-800/80 p-2 flex flex-col gap-2 w-full">
+                  <div className="flex items-center justify-between border-b border-zinc-800/50 pb-1.5">
+                    <div className="flex items-center gap-1.5">
                       <div className="w-1.5 h-1.5 rounded-full bg-emerald-400" />
-                      <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400">
+                      <span className="text-[9px] font-black uppercase tracking-widest text-emerald-400">
                         Alumno
                       </span>
                     </div>
-                    {role === "STUDENT" && !isEditing && (
+                    {/* Solo mostramos el botón 'Editar' chico arriba si YA TIENE datos */}
+                    {role === "STUDENT" && !isEditing && hasStudentData && (
                       <button
                         onClick={() => handleStartEdit(ex)}
-                        className="flex items-center gap-1.5 rounded-md bg-emerald-400/10 px-2.5 py-1 text-[9px] font-black uppercase tracking-widest text-emerald-400 hover:bg-emerald-400/20 active:scale-95 transition-all"
+                        className="flex items-center gap-1 rounded bg-zinc-800/50 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-zinc-400 hover:text-emerald-400 active:scale-95 transition-all"
                       >
-                        <Settings2 className="h-3 w-3" /> Anotar
+                        <Settings2 className="h-3 w-3" /> Editar
                       </button>
                     )}
                   </div>
 
                   {role === "STUDENT" && isEditing ? (
-                    <div className="flex flex-col gap-3 animate-in fade-in w-full">
-                      <div className="grid grid-cols-2 gap-2">
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 text-center">Sets Hechos</label>
+                    <div className="flex flex-col gap-2 animate-in fade-in w-full">
+                      <div className="grid grid-cols-2 gap-1.5">
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 text-center">Sets Hechos</label>
                           <input
                             type="number"
-                            className="h-10 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-center text-sm font-black text-emerald-400 outline-none focus:border-emerald-400"
+                            className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-emerald-400 outline-none focus:border-emerald-400"
                             value={data.actual_sets || 0}
                             onChange={e => setEditForm({ ...editForm, actual_sets: Number(e.target.value) })}
                           />
                         </div>
-                        <div className="flex flex-col gap-1.5">
-                          <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE Sentido</label>
+                        <div className="flex flex-col gap-1">
+                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE Sentido</label>
                           <input
                             type="number"
                             step="0.5"
-                            className="h-10 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-900 px-2 text-center text-sm font-black text-emerald-400 outline-none focus:border-emerald-400"
+                            className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-emerald-400 outline-none focus:border-emerald-400"
                             value={data.actual_rpe || 0}
                             onChange={e => setEditForm({ ...editForm, actual_rpe: Number(e.target.value) })}
                           />
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-2.5 bg-zinc-900/50 p-2.5 rounded-xl border border-zinc-800 overflow-hidden w-full">
-                        <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400">Tus pesos y reps</span>
-                        <div className="flex flex-col gap-2 w-full">
+                      <div className="flex flex-col gap-1.5 bg-zinc-900/50 p-1.5 rounded-lg border border-zinc-800 w-full">
+                        <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">Tus pesos y reps</span>
+                        <div className="flex flex-col gap-1.5 w-full">
                           {Array.from({ length: studentSets }).map((_, i) => (
                             <div key={i} className="flex items-center gap-2 w-full">
-                              <span className="w-5 shrink-0 text-[10px] font-black uppercase tracking-widest text-zinc-500">S{i + 1}</span>
-                              <div className="flex-1 grid grid-cols-2 gap-2 min-w-0">
+                              <span className="w-4 shrink-0 text-[9px] font-black uppercase tracking-widest text-zinc-500">S{i + 1}</span>
+                              <div className="flex-1 grid grid-cols-2 gap-1.5 min-w-0">
                                 <input
                                   type="number"
                                   min="1"
                                   placeholder="Reps"
-                                  className="h-9 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-center text-xs font-black text-zinc-100 outline-none focus:border-emerald-400"
+                                  className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-emerald-400"
                                   value={data.actual_reps?.[i] ?? ""}
                                   onChange={e => updateArrayField("actual_reps", i, e.target.value)}
                                 />
@@ -315,7 +321,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                                   type="number"
                                   step="0.5"
                                   placeholder="Kg"
-                                  className="h-9 w-full min-w-0 rounded-lg border border-zinc-700 bg-zinc-950 px-2 text-center text-xs font-black text-zinc-100 outline-none focus:border-emerald-400"
+                                  className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-emerald-400"
                                   value={data.actual_weight?.[i] ?? ""}
                                   onChange={e => updateArrayField("actual_weight", i, e.target.value)}
                                 />
@@ -325,10 +331,10 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                         </div>
                       </div>
 
-                      <div className="flex flex-col gap-1.5">
-                        <label className="text-[9px] font-black uppercase tracking-widest text-zinc-500">Mis notas</label>
+                      <div className="flex flex-col gap-1">
+                        <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Mis notas</label>
                         <textarea
-                          className="min-h-[60px] w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 text-xs text-zinc-100 outline-none focus:border-emerald-400 resize-none"
+                          className="min-h-[40px] w-full rounded-md border border-zinc-700 bg-zinc-900 p-2 text-[11px] text-zinc-100 outline-none focus:border-emerald-400 resize-none"
                           placeholder="Ej: Me dolió un poco el hombro..."
                           value={data.student_notes || ""}
                           onChange={e => setEditForm({ ...editForm, student_notes: e.target.value })}
@@ -336,43 +342,51 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                       </div>
                     </div>
                   ) : (
-                    <div className="flex flex-col gap-3">
-                      {ex.actual_sets ? (
+                    <div className="flex flex-col gap-2">
+                      {hasStudentData ? (
                         <>
-                          <div className="grid grid-cols-2 gap-2">
-                            <div className="bg-zinc-900/50 rounded-lg p-2 text-center border border-zinc-800">
-                              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Sets</p>
-                              <p className="text-sm font-black text-emerald-400">{ex.actual_sets}</p>
+                          <div className="grid grid-cols-2 gap-1.5">
+                            <div className="bg-zinc-900/50 rounded-md p-1.5 text-center border border-zinc-800">
+                              <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Sets</p>
+                              <p className="text-xs font-black text-emerald-400">{ex.actual_sets}</p>
                             </div>
-                            <div className="bg-zinc-900/50 rounded-lg p-2 text-center border border-zinc-800">
-                              <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">RPE</p>
-                              <p className={`text-sm font-black ${getRpeColor(ex.actual_rpe)}`}>{ex.actual_rpe || "--"}</p>
+                            <div className="bg-zinc-900/50 rounded-md p-1.5 text-center border border-zinc-800">
+                              <p className="text-[8px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">RPE</p>
+                              <p className={`text-xs font-black ${getRpeColor(ex.actual_rpe)}`}>{ex.actual_rpe || "--"}</p>
                             </div>
                           </div>
 
-                          <div className="flex flex-col gap-1.5 mt-1">
+                          <div className="flex flex-col gap-1">
                             {Array.from({ length: studentSets }).map((_, i) => (
-                              <div key={i} className="flex items-center justify-between bg-zinc-900/40 px-3 py-2.5 rounded-lg border border-zinc-800/50">
-                                <span className="text-[10px] font-black text-zinc-500 shrink-0">SET {i+1}</span>
-                                <div className="flex items-center gap-4">
-                                  <span className="text-sm font-bold text-zinc-200 min-w-[50px] text-right">{ex.actual_reps?.[i] ?? "-"} reps</span>
-                                  <span className="text-sm font-medium text-emerald-400 min-w-[40px] text-right">{ex.actual_weight?.[i] ? `${ex.actual_weight[i]}kg` : "--"}</span>
+                              <div key={i} className="flex items-center justify-between bg-zinc-900/40 px-2 py-1.5 rounded border border-zinc-800/50">
+                                <span className="text-[9px] font-black text-zinc-500 shrink-0">SET {i+1}</span>
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xs font-bold text-zinc-200 min-w-[36px] text-right">{ex.actual_reps?.[i] ?? "-"} reps</span>
+                                  <span className="text-[11px] font-medium text-emerald-400 min-w-[32px] text-right">{ex.actual_weight?.[i] ? `${ex.actual_weight[i]}kg` : "--"}</span>
                                 </div>
                               </div>
                             ))}
                           </div>
 
                           {ex.student_notes && (
-                            <div className="bg-emerald-400/5 border border-emerald-400/10 rounded-lg p-2.5">
-                              <p className="text-[11px] text-emerald-500/80 italic leading-relaxed">"{ex.student_notes}"</p>
+                            <div className="bg-emerald-400/5 border border-emerald-400/10 rounded-md p-2">
+                              <p className="text-[10px] text-emerald-500/80 italic leading-snug">"{ex.student_notes}"</p>
                             </div>
                           )}
                         </>
                       ) : (
-                        <div className="flex-1 flex flex-col items-center justify-center p-4 text-center">
-                          <p className="text-[11px] font-medium text-zinc-500 mb-1">Aún no completaste este ejercicio.</p>
-                          {role === "STUDENT" && (
-                            <p className="text-[9px] uppercase tracking-widest text-zinc-600">Presioná ANOTAR para registrar tu avance.</p>
+                        // SOLUCIÓN 1: Botón gigante para registrar si está vacío
+                        <div className="flex-1 flex flex-col items-center justify-center py-2">
+                          {role === "STUDENT" ? (
+                            <button
+                              onClick={() => handleStartEdit(ex)}
+                              className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-400 border border-emerald-400/50 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-950 shadow-lg shadow-emerald-400/20 hover:bg-emerald-300 active:scale-95 transition-all"
+                            >
+                              <PlusCircle className="h-4 w-4" />
+                              Registrar Resultados
+                            </button>
+                          ) : (
+                            <p className="text-[10px] font-medium text-zinc-500">Aún no completado.</p>
                           )}
                         </div>
                       )}
@@ -384,17 +398,17 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
 
             {/* Acciones de Guardado */}
             {isEditing && (
-              <div className="mt-1 flex gap-2">
+              <div className="mt-1 flex gap-1.5">
                 <button
                   onClick={() => setEditingId(null)}
-                  className="flex-1 rounded-xl bg-zinc-900 py-3 text-xs font-black uppercase tracking-widest text-zinc-400 border border-zinc-800 hover:bg-zinc-800 transition-all active:scale-95"
+                  className="flex-1 rounded-lg bg-zinc-900 py-2.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 border border-zinc-800 hover:bg-zinc-800 transition-all active:scale-95"
                 >
                   Cancelar
                 </button>
                 <button
                   onClick={() => handleSave(ex.id)}
                   disabled={isPending}
-                  className={`flex-1 rounded-xl py-3 text-xs font-black uppercase tracking-widest text-black transition-all active:scale-95 disabled:opacity-50 ${role === "COACH" ? "bg-yellow-400 hover:bg-yellow-300" : "bg-emerald-400 hover:bg-emerald-300"}`}
+                  className={`flex-1 rounded-lg py-2.5 text-[10px] font-black uppercase tracking-widest text-black transition-all active:scale-95 disabled:opacity-50 ${role === "COACH" ? "bg-yellow-400 hover:bg-yellow-300" : "bg-emerald-400 hover:bg-emerald-300"}`}
                 >
                   {isPending ? "Guardando..." : "Guardar Cambios"}
                 </button>

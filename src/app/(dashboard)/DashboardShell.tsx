@@ -31,6 +31,24 @@ type DashboardShellProps = {
   roleLabel: string;
 };
 
+// Función centralizada para saber qué pestaña está activa
+function checkIsActive(pathname: string | null, href: string) {
+  if (!pathname) return false;
+  
+  // Regla especial para "Alumnos" (porque es la ruta raíz /coach)
+  if (href === "/coach") {
+    return pathname === "/coach" || pathname.startsWith("/coach/student");
+  }
+  
+  // Regla especial para Perfil (para que no se active accidentalmente)
+  if (href === "/profile") {
+    return pathname === "/profile";
+  }
+
+  // Para el resto (plantillas, librería, student, admin, etc.)
+  return pathname === href || pathname.startsWith(href + "/");
+}
+
 function NavIcon({ href, role }: { href: string; role: UserRole }) {
   const iconClass = "h-4 w-4";
   
@@ -79,7 +97,7 @@ function SidebarContent({
       <nav className="flex flex-1 flex-col gap-1">
         {navItems.map((item) => {
           const pathname = usePathname();
-          const isActive = pathname === item.href || pathname?.startsWith(item.href + "/");
+          const isActive = checkIsActive(pathname, item.href);
           
           return (
             <Link
@@ -117,32 +135,44 @@ type BottomNavItem = {
 };
 
 function getBottomNavItems(role: UserRole): BottomNavItem[] {
-  if (role === "COACH" || role === "ADMIN") {
+  const coachAdminItems = [
+    {
+      href: "/coach",
+      label: "Alumnos",
+      icon: <Users className="h-5 w-5" />,
+    },
+    {
+      href: "/coach/templates",
+      label: "Plantillas",
+      icon: <ClipboardList className="h-5 w-5" />,
+    },
+    {
+      href: "/coach/library",
+      label: "Biblioteca",
+      icon: <Library className="h-5 w-5" />,
+    },
+    {
+      href: "/profile",
+      label: "Perfil",
+      icon: <UserCircle className="h-5 w-5" />,
+    },
+  ];
+
+  if (role === "ADMIN") {
     return [
       {
-        href: "/coach",
-        label: "Alumnos",
-        icon: <Users className="h-6 w-6" />,
+        href: "/admin/dashboard",
+        label: "Admin",
+        icon: <LayoutDashboard className="h-5 w-5" />,
       },
-      {
-        href: "/coach/templates",
-        label: "Plantillas",
-        icon: <ClipboardList className="h-6 w-6" />,
-      },
-      {
-        href: "/coach/library",
-        label: "Biblioteca",
-        icon: <Library className="h-6 w-6" />,
-      },
-      {
-        href: "/profile",
-        label: "Perfil",
-        icon: <UserCircle className="h-6 w-6" />,
-      },
+      ...coachAdminItems,
     ];
   }
 
-  // STUDENT
+  if (role === "COACH") {
+    return coachAdminItems;
+  }
+
   return [
     {
       href: "/student",
@@ -162,23 +192,23 @@ function BottomNavigation({ role }: { role: UserRole }) {
   const navItems = getBottomNavItems(role);
 
   return (
-    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950/90 backdrop-blur-md pb-[env(safe-area-inset-bottom)] md:hidden">
-      <div className="flex items-center justify-around px-2">
+    <nav className="w-full shrink-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] md:hidden">
+      <div className="flex w-full items-center justify-between px-1">
         {navItems.map((item) => {
-          const isActive = pathname === item.href || (item.href !== "/profile" && pathname?.startsWith(item.href + "/"));
+          const isActive = checkIsActive(pathname, item.href);
           
           return (
             <Link
               key={item.href}
               href={item.href}
-              className="flex min-w-16 flex-1 flex-col items-center justify-center gap-1 py-3 transition-all active:scale-95"
+              className="flex flex-1 flex-col items-center justify-center gap-1 py-2.5 transition-all active:scale-95 overflow-hidden"
             >
               <div className={`transition-all duration-200 ${
                 isActive ? "text-yellow-400 scale-110" : "text-zinc-500"
               }`}>
                 {item.icon}
               </div>
-              <span className={`text-[10px] font-black uppercase tracking-widest transition-all duration-200 ${
+              <span className={`text-[8px] sm:text-[9px] font-black uppercase tracking-widest transition-all duration-200 truncate w-full text-center px-0.5 ${
                 isActive ? "text-yellow-400" : "text-zinc-500"
               }`}>
                 {item.label}
@@ -193,20 +223,18 @@ function BottomNavigation({ role }: { role: UserRole }) {
 
 export function DashboardShell({ children, fullName, navItems, role, roleLabel }: DashboardShellProps) {
   return (
-    <div className="flex min-h-screen bg-zinc-950">
-      {/* Desktop Sidebar - Se oculta en mobile */}
-      <aside className="hidden w-64 flex-col border-r border-zinc-800 bg-zinc-900 px-4 py-6 md:flex">
+    <div className="flex h-[100dvh] w-screen overflow-hidden bg-zinc-950">
+      
+      {/* Desktop Sidebar */}
+      <aside className="hidden w-64 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 px-4 py-6 md:flex">
         <SidebarContent fullName={fullName} navItems={navItems} role={role} roleLabel={roleLabel} />
       </aside>
 
-      {/* Main Content */}
-      <div className="flex min-h-screen w-full flex-1 flex-col">
-        {/* pb-24 asegura que el contenido no quede tapado por la BottomBar en mobile */}
-        <main className="w-full flex-1 bg-zinc-950 pb-24 md:pb-0">
+      {/* Área Principal y Barra Inferior */}
+      <div className="flex flex-1 flex-col min-w-0 h-[100dvh]">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-zinc-950 relative">
           {children}
         </main>
-        
-        {/* Bottom Navigation - Solo se muestra en mobile */}
         <BottomNavigation role={role} />
       </div>
     </div>
