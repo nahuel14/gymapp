@@ -1,8 +1,9 @@
- "use client";
+"use client";
+
 import { useCoachStudents } from "@/hooks/useCoachStudents";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Plus, Calendar, User, ChevronRight, Loader2, X, LayoutTemplate } from "lucide-react";
+import { Plus, User, ChevronRight, Loader2, X, LayoutTemplate } from "lucide-react";
 import { createTrainingPlan, instantiateTemplateToStudent } from "./student/actions";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
 
@@ -27,9 +28,8 @@ export function CoachDashboardClient({ errorKey }: Props) {
   const [creationMode, setCreationMode] = useState<'template' | 'blank'>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [durationWeeks, setDurationWeeks] = useState(4);
-  const [preferredDays, setPreferredDays] = useState<number[]>([1, 3, 5]); // Lunes, Miércoles, Viernes
+  const [preferredDays, setPreferredDays] = useState<number[]>([1, 3, 5]);
 
-  // Fetch templates for the coach
   const { data: templates = [] } = useQuery({
     queryKey: ["templates"],
     queryFn: async () => {
@@ -39,6 +39,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
     },
     enabled: isModalOpen && creationMode === 'template'
   });
+  
   const selectedTemplateData = templates.find((template: any) => template.id === selectedTemplate) as any;
   const templateDaysCount = selectedTemplateData?.training_days_count || 0;
   const hasExactSelectedDays = creationMode !== 'template' || !templateDaysCount || preferredDays.length === templateDaysCount;
@@ -50,10 +51,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
     startTransition(async () => {
       try {
         if (creationMode === 'template') {
-          if (!selectedTemplate) {
-            return;
-          }
-
+          if (!selectedTemplate) return;
           await instantiateTemplateToStudent(
             selectedTemplate,
             selectedStudent.id,
@@ -97,7 +95,6 @@ export function CoachDashboardClient({ errorKey }: Props) {
   };
 
   let errorMessage = "";
-
   if (errorKey === "save") {
     errorMessage = "Ocurrió un error al realizar la acción.";
   }
@@ -105,7 +102,9 @@ export function CoachDashboardClient({ errorKey }: Props) {
   if (isLoading && !data) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
-        <p className="text-sm text-muted-foreground">Cargando estudiantes...</p>
+        <p className="text-sm text-muted-foreground flex items-center gap-2">
+          <Loader2 className="h-4 w-4 animate-spin text-primary" /> Cargando estudiantes...
+        </p>
       </div>
     );
   }
@@ -113,9 +112,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
   if (!data) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
-        <p className="text-sm text-muted-foreground">
-          No se pudo cargar la información del coach.
-        </p>
+        <p className="text-sm text-muted-foreground">No se pudo cargar la información del coach.</p>
       </div>
     );
   }
@@ -125,67 +122,65 @@ export function CoachDashboardClient({ errorKey }: Props) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">
-          Panel de estudiantes
-        </h1>
-        <p className="text-sm text-muted-foreground">
-          {(coach as any).name
-            ? `Hola, ${(coach as any).name}.`
-            : "Hola, revisa el estado de tus estudiantes."}
+        <h1 className="text-xl font-black text-foreground tracking-tight">Panel de estudiantes</h1>
+        <p className="text-xs text-muted-foreground">
+          {(coach as any).name ? `Hola, ${(coach as any).name}.` : "Hola, revisa el estado de tus estudiantes."}
         </p>
       </header>
 
-      {errorMessage ? (
-        <div className="rounded-md bg-red-50 px-3 py-2 text-sm text-red-700">
+      {errorMessage && (
+        <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-xs font-bold text-red-400">
           {errorMessage}
         </div>
-      ) : null}
+      )}
 
       {students.length === 0 ? (
-        <div className="rounded-lg bg-card p-6 text-sm text-muted-foreground shadow-sm">
+        <div className="rounded-2xl bg-card p-6 text-xs font-bold text-muted-foreground shadow-sm text-center border-2 border-dashed border-border">
           No tienes estudiantes asignados.
         </div>
       ) : (
-        <div className="space-y-4">
+        /* LISTA COMPACTA MOBILE-FIRST (Sin texto del plan) */
+        <div className="flex flex-col gap-2">
           {students.map((student) => (
-            <div
+            <div 
               key={student.studentId}
-              className="group flex flex-col items-start justify-between gap-4 rounded-3xl bg-card p-6 shadow-sm border border-border hover:border-primary/50 transition-all md:flex-row md:items-center"
+              className="group flex items-center justify-between rounded-2xl border border-border bg-card p-3 shadow-sm hover:border-primary/40 active:scale-[0.99] transition-all"
             >
-              <div className="flex items-center gap-4">
-                <div className="flex h-12 w-12 items-center justify-center rounded-2xl bg-muted group-hover:bg-primary/10 transition-colors">
-                  <User className="h-6 w-6 text-muted-foreground group-hover:text-primary" />
+              <Link 
+                href={`/coach/student/${student.studentId}`}
+                className="flex flex-1 items-center gap-3 min-w-0"
+              >
+                <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-muted group-hover:bg-primary/10 transition-colors">
+                  <User className="h-5 w-5 text-muted-foreground group-hover:text-primary" />
                 </div>
-                <div className="flex flex-col">
-                  <p className="text-base font-black text-foreground">
+                
+                <div className="flex flex-col min-w-0 justify-center">
+                  <p className="text-sm font-black text-foreground truncate">
                     {student.studentName}
                   </p>
-                  {student.planId ? (
-                    <div className="flex flex-col">
-                      <p className="text-xs font-bold text-primary flex items-center gap-1">
-                        <Calendar className="h-3 w-3" /> {student.planName}
-                      </p>
-                      {student.startDate && (
-                        <p className="text-[10px] text-muted-foreground font-medium">
-                          Iniciado el {new Date(student.startDate).toLocaleDateString()}
-                        </p>
-                      )}
-                    </div>
-                  ) : (
-                    <span className="inline-flex mt-0.5 px-2 py-0.5 rounded-full bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-wider border border-red-100">
-                      Sin plan asignado
-                    </span>
-                  )}
                 </div>
-              </div>
-              
-              <div className="flex w-full items-center gap-2 md:w-auto">
-                <Link
-                  href={`/coach/student/${student.studentId}`}
-                  className="flex flex-1 items-center justify-center gap-2 rounded-xl border-2 border-border px-4 py-2.5 text-xs font-black text-foreground hover:bg-muted transition md:flex-none"
-                >
-                  <Calendar className="h-4 w-4" /> VER RUTINA <ChevronRight className="h-4 w-4" />
-                </Link>
+              </Link>
+
+              <div className="flex items-center shrink-0 pl-2">
+                {!student.planId ? (
+                  <button
+                    onClick={() => {
+                      setSelectedStudent({ id: student.studentId, name: student.studentName });
+                      setIsModalOpen(true);
+                    }}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+                    title="Asignar Plan"
+                  >
+                    <Plus className="h-4 w-4" />
+                  </button>
+                ) : (
+                  <Link 
+                    href={`/coach/student/${student.studentId}`}
+                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground group-hover:translate-x-0.5 transition-transform"
+                  >
+                    <ChevronRight className="h-4 w-4" />
+                  </Link>
+                )}
               </div>
             </div>
           ))}
@@ -213,7 +208,6 @@ export function CoachDashboardClient({ errorKey }: Props) {
             </div>
 
             <form onSubmit={handleCreatePlan} className="flex flex-col gap-5">
-              {/* Tipo de Plan */}
               <div className="flex flex-col gap-3">
                 <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Tipo de Plan</label>
                 <div className="grid grid-cols-2 gap-3">
@@ -245,11 +239,8 @@ export function CoachDashboardClient({ errorKey }: Props) {
                 </div>
               </div>
 
-              {/* Nombre del Plan */}
               <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">
-                  Nombre del Plan
-                </label>
+                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Nombre del Plan</label>
                 <input 
                   required
                   type="text" 
@@ -290,11 +281,8 @@ export function CoachDashboardClient({ errorKey }: Props) {
                     </select>
                   </div>
 
-                  {/* Días de la Semana */}
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">
-                      Días de Entrenamiento
-                    </label>
+                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Días de Entrenamiento</label>
                     <div className="grid grid-cols-7 gap-2">
                       {["L", "M", "M", "J", "V", "S", "D"].map((day, index) => (
                         <button
@@ -334,9 +322,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
                   </div>
 
                   <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">
-                      Duración (Semanas)
-                    </label>
+                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Duración (Semanas)</label>
                     <input
                       required
                       min={1}
