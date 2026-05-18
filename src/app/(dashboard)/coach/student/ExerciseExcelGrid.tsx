@@ -5,7 +5,6 @@ import {
   Play, 
   Settings2, 
   Trash2, 
-  Save, 
   X,
   PlusCircle
 } from "lucide-react";
@@ -40,6 +39,17 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
 
   const handleStartEdit = (ex: any) => {
     setEditingId(ex.id);
+    
+    const hasStudentData = ex.actual_sets && ex.actual_sets > 0;
+    const initialSets = hasStudentData ? ex.actual_sets : (ex.target_sets || 0);
+
+    // Mapeo seguro: copiamos valor por valor lo que puso el profe (o dejamos por defecto)
+    const safeTargetReps = Array.from({ length: initialSets }).map((_, i) => ex.target_reps?.[i] ?? 10);
+    const safeTargetWeight = Array.from({ length: initialSets }).map((_, i) => ex.target_weight?.[i] ?? null);
+
+    const initialReps = hasStudentData && ex.actual_reps ? ex.actual_reps : safeTargetReps;
+    const initialWeight = hasStudentData && ex.actual_weight ? ex.actual_weight : safeTargetWeight;
+
     setEditForm({
       target_sets: ex.target_sets || 0,
       target_reps: ex.target_reps || Array(ex.target_sets || 0).fill(10),
@@ -47,10 +57,11 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
       target_rpe: ex.target_rpe || 0,
       rest_seconds: ex.rest_seconds || 0,
       coach_notes: ex.coach_notes || "",
-      actual_sets: ex.actual_sets || ex.target_sets || 0,
-      actual_reps: ex.actual_reps || Array(ex.actual_sets || ex.target_sets || 0).fill(10),
-      actual_weight: ex.actual_weight || Array(ex.actual_sets || ex.target_sets || 0).fill(null),
-      actual_rpe: ex.actual_rpe || 0,
+      // Inyectamos los datos clonados
+      actual_sets: initialSets,
+      actual_reps: initialReps,
+      actual_weight: initialWeight,
+      actual_rpe: ex.actual_rpe || 0, 
       student_notes: ex.student_notes || ""
     });
   };
@@ -92,8 +103,11 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
         const coachSets = Number(data.target_sets || 0);
         const studentSets = Number(data.actual_sets || coachSets);
 
-        // Verificamos si el alumno ya guardó datos
         const hasStudentData = ex.actual_sets && ex.actual_sets > 0;
+        
+        // MEJORA 2: Validación de RPE Obligatorio
+        // El botón se deshabilita si está cargando (isPending) O si el rol es Alumno Y el RPE es nulo o 0.
+        const isSaveDisabled = isPending || (role === "STUDENT" && (!data.actual_rpe || data.actual_rpe <= 0));
 
         return (
           <div key={ex.id} className="bg-zinc-900/40 rounded-xl border border-zinc-800/80 p-3 flex flex-col gap-2.5 shadow-md relative overflow-hidden">
@@ -108,7 +122,6 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                     {exerciseData?.category ? EXERCISE_CATEGORY_LABELS[exerciseData.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
                   </span>
                 </div>
-                {/* SOLUCIÓN 2: Texto más chico (text-sm) y sin 'truncate' para que baje de línea si es largo */}
                 <h3 className="text-sm font-black uppercase tracking-tight text-zinc-100 leading-snug">
                   {exerciseData?.name || "--"}
                 </h3>
@@ -267,7 +280,6 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                         Alumno
                       </span>
                     </div>
-                    {/* Solo mostramos el botón 'Editar' chico arriba si YA TIENE datos */}
                     {role === "STUDENT" && !isEditing && hasStudentData && (
                       <button
                         onClick={() => handleStartEdit(ex)}
@@ -291,12 +303,19 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                           />
                         </div>
                         <div className="flex flex-col gap-1">
-                          <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE Sentido</label>
+                          <label className={`text-[8px] font-black uppercase tracking-widest text-center ${(!data.actual_rpe || data.actual_rpe <= 0) ? 'text-red-400 animate-pulse' : 'text-zinc-500'}`}>
+                            {(!data.actual_rpe || data.actual_rpe <= 0) ? 'RPE Obligatorio *' : 'RPE Sentido'}
+                          </label>
                           <input
                             type="number"
                             step="0.5"
-                            className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-emerald-400 outline-none focus:border-emerald-400"
-                            value={data.actual_rpe || 0}
+                            className={`h-8 w-full min-w-0 rounded-md border bg-zinc-900 px-1 text-center text-xs font-black outline-none transition-colors ${
+                              (!data.actual_rpe || data.actual_rpe <= 0) 
+                              ? 'border-red-500/50 focus:border-red-500 text-red-400' 
+                              : 'border-zinc-700 focus:border-emerald-400 text-emerald-400'
+                            }`}
+                            value={data.actual_rpe || ""}
+                            placeholder="Del 1 al 10"
                             onChange={e => setEditForm({ ...editForm, actual_rpe: Number(e.target.value) })}
                           />
                         </div>
@@ -375,7 +394,6 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                           )}
                         </>
                       ) : (
-                        // SOLUCIÓN 1: Botón gigante para registrar si está vacío
                         <div className="flex-1 flex flex-col items-center justify-center py-2">
                           {role === "STUDENT" ? (
                             <button
@@ -398,20 +416,31 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
 
             {/* Acciones de Guardado */}
             {isEditing && (
-              <div className="mt-1 flex gap-1.5">
-                <button
-                  onClick={() => setEditingId(null)}
-                  className="flex-1 rounded-lg bg-zinc-900 py-2.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 border border-zinc-800 hover:bg-zinc-800 transition-all active:scale-95"
-                >
-                  Cancelar
-                </button>
-                <button
-                  onClick={() => handleSave(ex.id)}
-                  disabled={isPending}
-                  className={`flex-1 rounded-lg py-2.5 text-[10px] font-black uppercase tracking-widest text-black transition-all active:scale-95 disabled:opacity-50 ${role === "COACH" ? "bg-yellow-400 hover:bg-yellow-300" : "bg-emerald-400 hover:bg-emerald-300"}`}
-                >
-                  {isPending ? "Guardando..." : "Guardar Cambios"}
-                </button>
+              <div className="mt-1 flex flex-col gap-1.5">
+                <div className="flex gap-1.5">
+                  <button
+                    onClick={() => setEditingId(null)}
+                    className="flex-1 rounded-lg bg-zinc-900 py-2.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 border border-zinc-800 hover:bg-zinc-800 transition-all active:scale-95"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    onClick={() => handleSave(ex.id)}
+                    disabled={isSaveDisabled}
+                    className={`flex-1 rounded-lg py-2.5 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                      role === "COACH" 
+                        ? "bg-yellow-400 hover:bg-yellow-300 text-black" 
+                        : "bg-emerald-400 hover:bg-emerald-300 text-black"
+                    }`}
+                  >
+                    {isPending ? "Guardando..." : "Guardar Cambios"}
+                  </button>
+                </div>
+                {role === "STUDENT" && isSaveDisabled && !isPending && (
+                   <span className="text-[10px] text-red-400 text-center uppercase tracking-widest font-black animate-pulse">
+                     Debes indicar el RPE sentido para guardar
+                   </span>
+                )}
               </div>
             )}
           </div>

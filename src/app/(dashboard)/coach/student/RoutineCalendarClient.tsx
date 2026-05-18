@@ -187,7 +187,6 @@ export function RoutineCalendarClient({
       : "";
   const hasPlanInViewedWeek = currentWeekSessions.length > 0;
 
-  // REFACTOR: Use allPlans directly, no mock data
   const availablePlans = useMemo(() => {
     return allPlans
       .filter((p) => String(p.id) !== deletedPlanId)
@@ -205,7 +204,7 @@ export function RoutineCalendarClient({
       const nextPlan = availablePlans[index + 1];
       const endDate = nextPlan
         ? shiftDate(nextPlan.startDate, -1)
-        : shiftDate(currentPlan.startDate, 27); // Assume 4 weeks by default if no later plan
+        : shiftDate(currentPlan.startDate, 27);
       return {
         ...currentPlan,
         endDate
@@ -541,313 +540,249 @@ export function RoutineCalendarClient({
         </div>
       )}
 
-      <div className="flex items-center justify-between px-4">
-        <div className="flex flex-col gap-1">
-          <h2 className="text-lg font-bold text-foreground uppercase tracking-tight">
-            {effectivePlan?.name || "Sin plan activo"}
-          </h2>
-          <p className="text-[10px] font-black text-muted-foreground uppercase tracking-widest">
-            {profile?.name ? `Alumno: ${profile.name} ${profile.last_name || ""}` : ""}
-          </p>
-        </div>
-      </div>
-
-      <div className="flex flex-col gap-4 px-4 pt-2">
-        <div className="mb-6 flex flex-col gap-4 rounded-xl bg-zinc-900/50 p-4 md:flex-row md:items-center md:justify-between">
-          {hasPlanInViewedWeek ? (
-            <>
-              <div className="flex flex-col gap-1">
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                  Historial de rutinas
-                </span>
-                <span className="text-sm font-bold text-zinc-100">
-                  {selectedPlan ? `${selectedPlan.name} - Semana ${viewedWeekNumber || selectedWeek}` : "Salta al inicio del bloque seleccionado"}
-                </span>
-              </div>
-
-              <div className="flex items-center gap-2 self-start md:self-auto">
-                <select
-                  value={selectedPlanValue}
-                  onChange={(e) => {
-                    const nextPlan = availablePlans.find((p) => p.id === e.target.value);
-                    if (!nextPlan) return;
-                    setSelectedWeek(getWeekNumberFromDate(nextPlan.startDate, effectivePlan?.start_date || null));
-                    setSelectedDate(nextPlan.startDate);
-                    setIsAddingDay(false);
-                    setNewDayForm(null);
-                  }}
-                  className="rounded-xl border border-zinc-800 bg-zinc-950 px-4 py-3 text-sm font-bold text-zinc-100 outline-none focus:border-yellow-400"
-                >
-                  {availablePlans.map((p) => (
-                    <option key={p.id} value={p.id}>
-                      {p.name}
-                    </option>
-                  ))}
-                </select>
-
-                {(role === "COACH" || role === "ADMIN") && selectedPlan && (
-                  <button
-                    onClick={handleDeleteSelectedPlan}
-                    className="rounded-xl p-3 text-red-500 transition hover:bg-red-500/10"
+      {/* 1. HEADER COMPACTO: PLAN Y NAVEGACIÓN */}
+      <div className="flex flex-col gap-3 px-4">
+        {hasPlanInViewedWeek ? (
+          <div className="flex flex-col gap-3 rounded-2xl bg-zinc-900/40 p-3 border border-zinc-800/80 shadow-sm">
+            
+            {/* Fila superior: Selector de Plan y Nombre del Alumno */}
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                {role === "COACH" || role === "ADMIN" ? (
+                  <select
+                    value={selectedPlanValue}
+                    onChange={(e) => {
+                      const nextPlan = availablePlans.find((p) => p.id === e.target.value);
+                      if (!nextPlan) return;
+                      setSelectedWeek(getWeekNumberFromDate(nextPlan.startDate, effectivePlan?.start_date || null));
+                      setSelectedDate(nextPlan.startDate);
+                      setIsAddingDay(false);
+                      setNewDayForm(null);
+                    }}
+                    className="w-full max-w-[200px] truncate bg-transparent text-sm font-black text-zinc-100 outline-none focus:text-yellow-400 appearance-none"
                   >
-                    <Trash2 className="h-4 w-4" />
-                  </button>
+                    {availablePlans.map((p) => (
+                      <option key={p.id} value={p.id} className="bg-zinc-900 text-zinc-100">
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                ) : (
+                  <h2 className="text-sm font-black text-zinc-100 truncate">
+                    {effectivePlan?.name || "Plan de Entrenamiento"}
+                  </h2>
+                )}
+                {profile?.name && (
+                  <p className="text-[9px] font-black uppercase tracking-widest text-zinc-500 truncate mt-0.5">
+                    {profile.name} {profile.last_name || ""}
+                  </p>
                 )}
               </div>
-            </>
-          ) : (
-            <>
-              <div className="flex flex-col gap-1">
-                <span className="text-sm font-bold text-zinc-100">Sin plan asignado</span>
-                <span className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                  No hay sesiones en la semana visualizada
-                </span>
-              </div>
 
-              {(role === "COACH" || role === "ADMIN") && studentId && (
-                <button
-                  onClick={openPlanActionModal}
-                  className="flex items-center gap-2 rounded-xl bg-yellow-400 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition-all hover:scale-[1.02] active:scale-[0.98]"
-                >
-                  <Plus className="h-4 w-4" /> Crear Plan
+              {/* Botón Eliminar Plan (Solo Coach) */}
+              {(role === "COACH" || role === "ADMIN") && selectedPlan && (
+                <button onClick={handleDeleteSelectedPlan} className="shrink-0 rounded-lg p-1.5 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 transition-colors">
+                  <Trash2 className="h-4 w-4" />
                 </button>
               )}
-            </>
-          )}
-        </div>
+            </div>
 
-        <div className="flex items-center justify-between">
-          <h3 className="text-xl font-black text-zinc-100 uppercase tracking-tighter flex items-center gap-2">
-            <Calendar className="h-5 w-5 text-yellow-400" />
-            {currentMonthName || "Calendario"}
-          </h3>
-
-          <div className="flex items-center bg-zinc-900 border border-zinc-800 rounded-xl p-1">
-            <button
-              onClick={() => setSelectedWeek((prev) => prev - 1)}
-              className="p-2 text-zinc-400 hover:text-white transition-all"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-
-            <span className="px-3 text-[10px] font-black uppercase tracking-widest text-zinc-100">
-              {viewedWeekLabel}
-            </span>
-
-            <button
-              onClick={() => setSelectedWeek((prev) => prev + 1)}
-              className="p-2 text-zinc-400 hover:text-white disabled:opacity-20 transition-all"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
+            {/* Fila inferior: Paginador de Semanas */}
+            <div className="flex items-center justify-between border-t border-zinc-800/50 pt-2">
+              <span className="text-xs font-bold text-zinc-400 flex items-center gap-1.5">
+                <Calendar className="h-3.5 w-3.5" />
+                Semana {viewedWeekNumber || selectedWeek}
+              </span>
+              <div className="flex items-center gap-1 bg-zinc-950 rounded-lg border border-zinc-800 p-0.5">
+                <button onClick={() => setSelectedWeek((prev) => prev - 1)} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button onClick={() => setSelectedWeek((prev) => prev + 1)} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
+            </div>
           </div>
-        </div>
+        ) : (
+          <div className="flex flex-col gap-3 rounded-2xl bg-zinc-900/40 p-4 border border-zinc-800/80 items-center justify-center text-center">
+            <CalendarX className="h-8 w-8 text-zinc-600 mb-1" />
+            <div className="flex flex-col gap-0.5">
+              <span className="text-sm font-bold text-zinc-100">Sin plan asignado</span>
+              <span className="text-[10px] text-zinc-500">No hay sesiones en esta semana</span>
+            </div>
+            {(role === "COACH" || role === "ADMIN") && studentId && (
+              <button onClick={openPlanActionModal} className="mt-2 flex items-center gap-1.5 rounded-xl bg-yellow-400 px-4 py-2 text-[10px] font-black uppercase tracking-widest text-black transition-all hover:scale-[1.02] active:scale-[0.98]">
+                <Plus className="h-3.5 w-3.5" /> Crear Plan
+              </button>
+            )}
+          </div>
+        )}
+      </div>
 
-        {hasActivePlan ? (
-          <div className="grid grid-cols-7 gap-2">
+      {/* 2. CALENDARIO TIPO PÍLDORA (IOS STYLE) */}
+      {hasActivePlan && (
+        <div className="px-4">
+          <div className="flex justify-between items-center gap-1 sm:gap-2">
             {weeklyDays.map((day, idx) => {
               const isSelected = selectedDate === day.date;
               const dateInfo = formatSessionDate(day.date);
               const hasSession = day.sessions.length > 0;
+              
+              // Iniciales de los días para que ocupe menos (L, M, X, J, V, S, D)
+              const shortDays = ["L", "M", "X", "J", "V", "S", "D"];
 
               return (
                 <button
                   key={day.date}
                   onClick={() => {
+                    setSelectedDate(day.date);
                     if (hasSession) {
-                      setSelectedDate(day.date);
                       setIsAddingDay(false);
                       setNewDayForm(null);
                     } else if (role === "COACH") {
-                      setSelectedDate(day.date);
                       setIsAddingDay(true);
                       setNewDayForm({ date: day.date });
                     } else {
-                      setSelectedDate(day.date);
                       setIsAddingDay(false);
                       setNewDayForm(null);
                     }
                   }}
-                  className={`flex flex-col items-center gap-1 rounded-2xl py-3 border-2 transition-all duration-200 ${
+                  className={`flex flex-col items-center justify-center w-11 h-14 sm:w-14 sm:h-16 rounded-xl transition-all duration-200 relative ${
                     isSelected
-                      ? "bg-yellow-400 border-yellow-400 text-black shadow-lg scale-105 z-10"
+                      ? "bg-yellow-400 text-black shadow-lg scale-105"
                       : hasSession
-                      ? "bg-zinc-900 border-zinc-800 text-zinc-100 hover:border-yellow-400/50"
-                      : "bg-black/40 border-zinc-900 border-dashed text-zinc-600 hover:border-zinc-700"
+                      ? "bg-zinc-900 border border-zinc-800 text-zinc-100 hover:border-yellow-400/50"
+                      : "bg-transparent text-zinc-600 hover:bg-zinc-900/50"
                   }`}
                 >
-                  <span className="text-[9px] font-black uppercase tracking-tighter opacity-60">
-                    {dateInfo?.day || ["Lun", "Mar", "Mié", "Jue", "Vie", "Sáb", "Dom"][idx]}
+                  <span className={`text-[10px] font-black uppercase ${isSelected ? 'opacity-80' : 'opacity-60'}`}>
+                    {shortDays[idx]}
                   </span>
-                  <span className="text-sm font-black tracking-tight">
+                  <span className="text-sm font-black mt-0.5">
                     {dateInfo?.num || new Date(day.date + "T00:00:00").getDate()}
                   </span>
-                  {hasSession && !isSelected && <div className="h-1 w-1 rounded-full bg-yellow-400 mt-0.5 animate-pulse" />}
-                  {day.sessions.length > 1 && (
-                    <span className="text-[8px] font-black uppercase tracking-widest opacity-60">
-                      {day.sessions.length}
-                    </span>
+                  {hasSession && !isSelected && (
+                    <div className="absolute bottom-1.5 h-1 w-1 rounded-full bg-yellow-400" />
                   )}
                 </button>
               );
             })}
           </div>
-        ) : (
-          <div className="flex min-h-65 flex-col items-center justify-center rounded-4xl border border-dashed border-zinc-800 bg-zinc-950/40 px-6 py-10 text-center">
-            <div className="mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-zinc-900/80">
-              <CalendarX className="h-8 w-8 text-zinc-500" />
-            </div>
-            <p className="max-w-xl text-sm font-medium leading-relaxed text-zinc-400">
-              No hay un plan activo para esta semana. Crea o extiende un plan desde la cabecera para comenzar a agregar rutinas.
-            </p>
-          </div>
-        )}
-      </div>
+        </div>
+      )}
 
+      {/* 3. INFO DEL DÍA SELECCIONADO Y BOTONES DE COACH */}
       {hasActivePlan && (
-      <div className="flex flex-col gap-4 px-4">
-        <div className="flex items-center justify-between border-b border-zinc-800 pb-3">
-          <div className="flex flex-col">
-            <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-              {selectedDate
-                ? activeSessionsForDate.length > 0
-                  ? "Entrenamiento"
-                  : role === "STUDENT"
-                  ? "Día de descanso"
-                  : "Sin sesión"
-                : role === "STUDENT"
-                ? "Día de descanso"
-                : "Sin sesión"}
-            </h3>
-            <p className="text-lg font-bold text-zinc-100 uppercase tracking-tight">
-              {selectedDate
-                ? new Date(selectedDate + "T00:00:00").toLocaleDateString("es-AR", { dateStyle: "long" })
-                : role === "STUDENT"
-                ? "Descanso y recuperación"
-                : "Selecciona un día"}
-            </p>
+        <div className="flex flex-col gap-3 px-4">
+          <div className="flex items-center justify-between">
+            <div className="flex flex-col">
+              <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
+                {selectedDate
+                  ? activeSessionsForDate.length > 0
+                    ? "Entrenamiento"
+                    : role === "STUDENT"
+                    ? "Descanso"
+                    : "Día libre"
+                  : "Día de descanso"}
+              </h3>
+              <p className="text-base font-bold text-zinc-100 tracking-tight">
+                {selectedDate
+                  ? new Date(selectedDate + "T00:00:00").toLocaleDateString("es-AR", { weekday: 'long', day: 'numeric', month: 'short' })
+                  : "Selecciona un día"}
+              </p>
+            </div>
+
+            {/* Acciones de Coach (Compactas en mobile) */}
+            {role === "COACH" && activeSessionsForDate.length > 0 && !isAddingDay && (
+              <div className="flex items-center gap-1.5">
+                <button onClick={handleDuplicateDay} className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 transition hover:text-yellow-400 active:scale-95" title="Duplicar Día">
+                  <Copy className="h-4 w-4" />
+                </button>
+                <button onClick={handleDeleteDay} className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 transition hover:bg-red-500/20 active:scale-95" title="Eliminar Día">
+                  <Trash2 className="h-4 w-4" />
+                </button>
+                <button onClick={() => setIsAddingExercise(true)} className="flex h-9 items-center gap-1.5 rounded-lg bg-yellow-400 px-3 text-[10px] font-black uppercase tracking-widest text-black transition active:scale-95">
+                  <Plus className="h-4 w-4 shrink-0" /> <span className="hidden sm:inline">Ejercicio</span>
+                </button>
+              </div>
+            )}
           </div>
 
-          {role === "COACH" && activeSessionsForDate.length > 0 && !isAddingDay && (
-            <div className="flex gap-2">
-              <button
-                onClick={handleDuplicateDay}
-                className="flex items-center gap-1.5 rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-2 text-[10px] font-black text-zinc-400 transition hover:text-yellow-400 active:scale-95 uppercase"
-              >
-                <Copy className="h-3.5 w-3.5" /> Duplicar
-              </button>
-
-              <button
-                onClick={() => setIsAddingExercise(true)}
-                className="flex items-center gap-1.5 rounded-xl bg-yellow-400 px-4 py-2 text-[10px] font-black text-black transition active:scale-95 uppercase"
-              >
-                <Plus className="h-3.5 w-3.5" /> Ejercicio
-              </button>
-
-              <button
-                onClick={handleDeleteDay}
-                className="flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-2 text-[10px] font-black text-red-400 transition hover:bg-red-500/20 hover:border-red-400 active:scale-95 uppercase"
-              >
-                <Trash2 className="h-3.5 w-3.5" /> Eliminar Día
-              </button>
+          {/* Modal para Agregar Día (Se mantiene igual, solo ajustado visualmente) */}
+          {plan && isViewedWeekWithinPlan && isAddingDay && (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+              <div className="w-full bg-zinc-950 rounded-t-[2rem] sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
+                <div className="flex items-center justify-between">
+                  <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Agregar Día</h4>
+                  <button onClick={() => { setIsAddingDay(false); setNewDayForm(null); }} className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors">
+                    <X className="h-5 w-5" />
+                  </button>
+                </div>
+                <div className="flex flex-col gap-5">
+                  <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Fecha del entrenamiento</label>
+                    <input type="date" className="w-full h-14 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-sm font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all uppercase" value={newDayForm?.date ?? ""} onChange={(e) => setNewDayForm({ date: e.target.value })} />
+                  </div>
+                  <button onClick={handleAddDay} className="h-14 w-full rounded-2xl bg-yellow-400 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-400/20 transition-all hover:bg-yellow-300 active:scale-95">
+                    Confirmar Día
+                  </button>
+                </div>
+              </div>
             </div>
           )}
+
+          {isAddingExercise && role === "COACH" && (
+            <ExerciseFormModal
+              isOpen={isAddingExercise}
+              onClose={() => setIsAddingExercise(false)}
+              formState={newExForm}
+              setFormState={setNewExForm}
+              onSave={handleAddExercise}
+              isPending={isPending}
+              allExercises={allExercises}
+            />
+          )}
         </div>
+      )}
 
-        {plan && isViewedWeekWithinPlan && isAddingDay && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
-            <div className="w-full bg-zinc-950 rounded-t-[2rem] sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
-              <div className="flex items-center justify-between">
-                <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">
-                  Agregar Día
-                </h4>
-                <button
-                  onClick={() => {
-                    setIsAddingDay(false);
-                    setNewDayForm(null);
-                  }}
-                  className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
-                >
-                  <X className="h-5 w-5" />
-                </button>
-              </div>
-
-              <div className="flex flex-col gap-5">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
-                    Fecha del entrenamiento
-                  </label>
-                  <input
-                    type="date"
-                    className="w-full h-14 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-sm font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all uppercase"
-                    value={newDayForm?.date ?? ""}
-                    onChange={(e) => setNewDayForm({ date: e.target.value })}
-                  />
+      {!isAddingDay && (
+        <div className="flex flex-col gap-4 px-4">
+          {activeExercises.length === 0 && activeSessionsForDate.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
+              <div className="flex flex-col items-center gap-3">
+                <div className="h-16 w-16 rounded-full bg-zinc-900/50 flex items-center justify-center">
+                  <Calendar className="h-8 w-8 text-zinc-600" />
                 </div>
-                
-                <button
-                  onClick={handleAddDay}
-                  className="h-14 w-full rounded-2xl bg-yellow-400 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-400/20 transition-all hover:bg-yellow-300 active:scale-95"
-                >
-                  Confirmar Día
-                </button>
+                <p className="text-zinc-500 font-black uppercase tracking-widest text-xs text-center">
+                  {role === "STUDENT" ? "Día de Descanso" : "Sin ejercicios para este día"}
+                </p>
+                {role === "STUDENT" && (
+                  <p className="text-zinc-600 text-xs text-center max-w-50">
+                    Hoy no hay entrenamiento programado. ¡Aprovecha para recuperarte!
+                  </p>
+                )}
               </div>
             </div>
-          </div>
-        )}
+          ) : activeExercises.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-12 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
+              <Dumbbell className="h-12 w-12 text-zinc-700 mb-4" />
+              <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">
+                Sin ejercicios para este día
+              </p>
+            </div>
+          ) : (
+            <ExerciseExcelGrid exercises={activeExercises} role={role === "ADMIN" ? "COACH" : role} />
+          )}
 
-        {isAddingExercise && role === "COACH" && (
-          <ExerciseFormModal
-            isOpen={isAddingExercise}
-            onClose={() => setIsAddingExercise(false)}
-            formState={newExForm}
-            setFormState={setNewExForm}
-            onSave={handleAddExercise}
-            isPending={isPending}
-            allExercises={allExercises}
-          />
-        )}
-
-        {!isAddingDay && (
-          <div className="flex flex-col gap-4">
-            {activeExercises.length === 0 && activeSessionsForDate.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
-                <div className="flex flex-col items-center gap-3">
-                  <div className="h-16 w-16 rounded-full bg-zinc-900/50 flex items-center justify-center">
-                    <Calendar className="h-8 w-8 text-zinc-600" />
-                  </div>
-                  <p className="text-zinc-500 font-black uppercase tracking-widest text-xs text-center">
-                    {role === "STUDENT" ? "Día de Descanso" : "Sin ejercicios para este día"}
-                  </p>
-                  {role === "STUDENT" && (
-                    <p className="text-zinc-600 text-xs text-center max-w-50">
-                      Hoy no hay entrenamiento programado. ¡Aprovecha para recuperarte!
-                    </p>
-                  )}
-                </div>
-              </div>
-            ) : activeExercises.length === 0 ? (
-              <div className="flex flex-col items-center justify-center py-12 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
-                <Dumbbell className="h-12 w-12 text-zinc-700 mb-4" />
-                <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">
-                  Sin ejercicios para este día
-                </p>
-              </div>
-            ) : (
-              <ExerciseExcelGrid exercises={activeExercises} role={role === "ADMIN" ? "COACH" : role} />
-            )}
-
-            {role === "COACH" && !isAddingExercise && activeSessionsForDate.length > 0 && (
-              <button
-                onClick={() => setIsAddingExercise(true)}
-                className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-800 p-4 text-xs font-black text-zinc-500 hover:border-yellow-400 hover:text-yellow-400 transition-all uppercase tracking-widest"
-              >
-                <Plus className="h-4 w-4" /> Agregar Ejercicio
-              </button>
-            )}
-          </div>
-        )}
-      </div>
+          {role === "COACH" && !isAddingExercise && activeSessionsForDate.length > 0 && (
+            <button
+              onClick={() => setIsAddingExercise(true)}
+              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-800 p-4 text-xs font-black text-zinc-500 hover:border-yellow-400 hover:text-yellow-400 transition-all uppercase tracking-widest"
+            >
+              <Plus className="h-4 w-4" /> Agregar Ejercicio
+            </button>
+          )}
+        </div>
       )}
     </div>
   );
