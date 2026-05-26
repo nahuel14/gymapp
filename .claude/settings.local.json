@@ -4,7 +4,8 @@
       "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\Nahuel\\\\gymapp\" -Recurse -Directory)",
       "Bash(Select-Object -ExpandProperty FullName)",
       "Bash(dir \"c:\\\\Users\\\\Nahuel\\\\gymapp\\\\supabase\")",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "Bash(npm run *)"
     ]
   }
 }

@@ -66,10 +66,7 @@ async function fetchStudentSession(): Promise<StudentSessionResult> {
   const { data: plans } = await supabase
     .from("training_plans")
     .select("id, name, start_date, is_active")
-    .eq(
-      "student_id",
-      user.id as Database["public"]["Tables"]["training_plans"]["Row"]["student_id"],
-    )
+    .eq("student_id", user.id as any)
     .eq("is_active", true as never)
     .order("created_at", { ascending: false })
     .limit(1);
@@ -111,19 +108,16 @@ async function fetchStudentSession(): Promise<StudentSessionResult> {
   const { data: sessionExercises } = await supabase
     .from("session_exercises")
     .select(
-      "id, sets, reps, rest_seconds, rpe_target, coach_notes, order_index, exercise:exercises(name, body_zone, category)",
+      "*, exercise:exercises(name, body_zone, category)",
     )
-    .eq(
-      "session_id",
-      session.id as never,
-    )
+    .eq("session_id", session.id as never)
     .order("order_index", { ascending: true });
 
   return {
     profile: typedProfile,
     plan,
     session,
-    exercises: (sessionExercises ?? []) as SessionExercise[],
+    exercises: (sessionExercises ?? []) as unknown as SessionExercise[],
   };
 }
 
