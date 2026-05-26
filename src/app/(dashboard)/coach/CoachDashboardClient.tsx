@@ -3,13 +3,35 @@
 import { useCoachStudents } from "@/hooks/useCoachStudents";
 import Link from "next/link";
 import { useState, useTransition } from "react";
-import { Plus, User, ChevronRight, Loader2, X, LayoutTemplate } from "lucide-react";
+import { Plus, User, ChevronRight, Loader2, LayoutTemplate, CalendarClock } from "lucide-react";
 import { createTrainingPlan, instantiateTemplateToStudent } from "./student/actions";
 import { useQueryClient, useQuery } from "@tanstack/react-query";
+
+// Shadcn UI Imports
+import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
 
 type Props = {
   errorKey?: string;
 };
+
+function formatDate(date: Date): string {
+  return date.toLocaleDateString("es-AR", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+  });
+}
 
 const getDefaultDaysForCount = (count: number) => {
   if (count === 2) return [1, 4];
@@ -24,11 +46,21 @@ export function CoachDashboardClient({ errorKey }: Props) {
   const [isPending, startTransition] = useTransition();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedStudent, setSelectedStudent] = useState<{ id: string, name: string } | null>(null);
-  const [newPlan, setNewPlan] = useState({ name: "", startDate: new Date().toISOString().split('T')[0] });
+  
+  // Forzamos que el estado inicial sea el lunes de esta semana
+  const [newPlan, setNewPlan] = useState(() => {
+    const today = new Date();
+    const day = today.getDay();
+    const diffToMonday = day === 0 ? -6 : 1 - day;
+    today.setDate(today.getDate() + diffToMonday);
+    return { name: "", startDate: today.toISOString().split('T')[0] };
+  });
+  
   const [creationMode, setCreationMode] = useState<'template' | 'blank'>('template');
   const [selectedTemplate, setSelectedTemplate] = useState<number | null>(null);
   const [durationWeeks, setDurationWeeks] = useState(4);
   const [preferredDays, setPreferredDays] = useState<number[]>([1, 3, 5]);
+  const [planError, setPlanError] = useState<string | null>(null);
 
   const { data: templates = [] } = useQuery({
     queryKey: ["templates"],
@@ -42,11 +74,30 @@ export function CoachDashboardClient({ errorKey }: Props) {
   
   const selectedTemplateData = templates.find((template: any) => template.id === selectedTemplate) as any;
   const templateDaysCount = selectedTemplateData?.training_days_count || 0;
+  // Semanas aproximadas = total sesiones / días semanales de la plantilla
+  const templateWeeksCount = selectedTemplateData && templateDaysCount > 0
+    ? Math.ceil((selectedTemplateData.session_count || 1) / templateDaysCount)
+    : 4;
   const hasExactSelectedDays = creationMode !== 'template' || !templateDaysCount || preferredDays.length === templateDaysCount;
-
+/*
+  // --- REGLA DE NEGOCIO: FORZAR LUNES (OPCIÓN A) ---
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const selectedDate = new Date(e.target.value + "T00:00:00");
+    const day = selectedDate.getDay();
+    
+    // Si no es Lunes (1), lo corregimos al Lunes de esa misma semana
+    if (day !== 1) {
+      const diffToMonday = day === 0 ? -6 : 1 - day;
+      selectedDate.setDate(selectedDate.getDate() + diffToMonday);
+    }
+    
+    setNewPlan({ ...newPlan, startDate: selectedDate.toISOString().split('T')[0] });
+  };
+*/
   const handleCreatePlan = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedStudent || !newPlan.name) return;
+    setPlanError(null);
 
     startTransition(async () => {
       try {
@@ -61,19 +112,32 @@ export function CoachDashboardClient({ errorKey }: Props) {
         } else {
           await createTrainingPlan(selectedStudent.id, newPlan.name, newPlan.startDate, durationWeeks);
         }
-        
+
         await queryClient.invalidateQueries({ queryKey: ["coach", "students"] });
-        setIsModalOpen(false);
-        setSelectedStudent(null);
-        setNewPlan({ name: "", startDate: new Date().toISOString().split('T')[0] });
-        setCreationMode('template');
-        setSelectedTemplate(null);
-        setDurationWeeks(4);
-        setPreferredDays([1, 3, 5]);
-      } catch (error) {
-        console.error("Error creating plan:", error);
+        resetModalState();
+      } catch (error: any) {
+        const msg: string = error?.message ?? "";
+        if (msg.startsWith("PLAN_COLLISION:")) {
+          setPlanError(msg.replace("PLAN_COLLISION:", "").trim());
+        } else {
+          setPlanError("Ocurrió un error al crear el plan. Intentá de nuevo.");
+        }
       }
     });
+  };
+
+  const resetModalState = () => {
+    setIsModalOpen(false);
+    setSelectedStudent(null);
+    const today = new Date();
+    const diffToMonday = today.getDay() === 0 ? -6 : 1 - today.getDay();
+    today.setDate(today.getDate() + diffToMonday);
+    setNewPlan({ name: "", startDate: today.toISOString().split('T')[0] });
+    setCreationMode('template');
+    setSelectedTemplate(null);
+    setDurationWeeks(4);
+    setPreferredDays([1, 3, 5]);
+    setPlanError(null);
   };
 
   const toggleDay = (dayIndex: number) => {
@@ -93,6 +157,30 @@ export function CoachDashboardClient({ errorKey }: Props) {
       setPreferredDays(getDefaultDaysForCount(nextDaysCount));
     }
   };
+
+// --- REGLA DE NEGOCIO: FORZAR LUNES (CORRECCIÓN) ---
+  const getMonday = (date: Date) => {
+    const d = new Date(date);
+    const day = d.getDay();
+    // Si es domingo (0), resta 6 para ir al lunes anterior. Si es otro día, resta (day - 1)
+    const diff = day === 0 ? -6 : 1 - day;
+    d.setDate(d.getDate() + diff);
+    return d;
+  };
+
+  const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const rawDate = new Date(e.target.value + "T00:00:00");
+    const monday = getMonday(rawDate);
+    setNewPlan({ ...newPlan, startDate: monday.toISOString().split('T')[0] });
+  };
+
+  // --- CÁLCULO DE PREVISUALIZACIÓN (CORRECCIÓN) ---
+  const previewStart = new Date(newPlan.startDate + "T00:00:00");
+  const activeWeeks = creationMode === 'blank' ? durationWeeks : templateWeeksCount;
+  
+  // Calculamos el domingo exacto: Start (Lunes) + (Semanas * 7 días) - 1 día
+  const previewEnd = new Date(previewStart);
+  previewEnd.setDate(previewStart.getDate() + (Math.max(activeWeeks, 1) * 7) - 1);
 
   let errorMessage = "";
   if (errorKey === "save") {
@@ -129,7 +217,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
       </header>
 
       {errorMessage && (
-        <div className="rounded-xl bg-red-500/10 border border-red-500/20 px-4 py-3 text-xs font-bold text-red-400">
+        <div className="rounded-xl bg-destructive/10 border border-destructive/20 px-4 py-3 text-xs font-bold text-destructive">
           {errorMessage}
         </div>
       )}
@@ -139,7 +227,6 @@ export function CoachDashboardClient({ errorKey }: Props) {
           No tienes estudiantes asignados.
         </div>
       ) : (
-        /* LISTA COMPACTA MOBILE-FIRST (Sin texto del plan) */
         <div className="flex flex-col gap-2">
           {students.map((student) => (
             <div 
@@ -163,16 +250,18 @@ export function CoachDashboardClient({ errorKey }: Props) {
 
               <div className="flex items-center shrink-0 pl-2">
                 {!student.planId ? (
-                  <button
+                  <Button
+                    variant="outline"
+                    size="icon"
                     onClick={() => {
                       setSelectedStudent({ id: student.studentId, name: student.studentName });
                       setIsModalOpen(true);
                     }}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20 text-red-500 hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
+                    className="h-8 w-8 rounded-lg border-destructive/20 text-destructive hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
                     title="Asignar Plan"
                   >
                     <Plus className="h-4 w-4" />
-                  </button>
+                  </Button>
                 ) : (
                   <Link 
                     href={`/coach/student/${student.studentId}`}
@@ -187,176 +276,157 @@ export function CoachDashboardClient({ errorKey }: Props) {
         </div>
       )}
 
-      {/* Modal para Crear Plan */}
-      {isModalOpen && selectedStudent && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-card border-2 border-border w-full max-w-lg rounded-[2.5rem] p-8 shadow-2xl shadow-primary/10 animate-in zoom-in-95 duration-200 max-h-[90vh] overflow-y-auto">
-            <div className="flex items-center justify-between mb-6">
-              <div className="flex flex-col">
-                <h2 className="text-2xl font-black text-foreground tracking-tight">Nuevo Plan</h2>
-                <p className="text-xs font-bold text-muted-foreground uppercase tracking-widest">Para: {selectedStudent.name}</p>
-              </div>
-              <button onClick={() => {
-                setIsModalOpen(false);
-                setCreationMode('template');
-                setSelectedTemplate(null);
-                setDurationWeeks(4);
-                setPreferredDays([1, 3, 5]);
-              }} className="p-2 rounded-full hover:bg-muted transition">
-                <X className="h-6 w-6" />
-              </button>
+      <Dialog 
+        open={isModalOpen} 
+        onOpenChange={(open) => {
+          if (!open) resetModalState();
+          else setIsModalOpen(true);
+        }}
+      >
+        <DialogContent className="sm:max-w-md rounded-[2rem] border-border bg-card shadow-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-xl font-black tracking-tight">Nuevo Plan</DialogTitle>
+            <DialogDescription className="text-xs font-bold uppercase tracking-widest text-muted-foreground">
+              Para: {selectedStudent?.name}
+            </DialogDescription>
+          </DialogHeader>
+
+          <form onSubmit={handleCreatePlan} className="flex flex-col gap-5 py-2">
+            
+            <Tabs 
+              defaultValue="template" 
+              value={creationMode} 
+              onValueChange={(v) => setCreationMode(v as 'template' | 'blank')}
+              className="w-full"
+            >
+              <TabsList className="grid w-full grid-cols-2 rounded-xl h-auto p-1 bg-muted">
+                <TabsTrigger value="template" className="rounded-lg py-2.5 text-xs font-black data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
+                  <LayoutTemplate className="h-4 w-4 mr-2" /> Plantilla
+                </TabsTrigger>
+                <TabsTrigger value="blank" className="rounded-lg py-2.5 text-xs font-black data-[state=active]:bg-background data-[state=active]:text-primary data-[state=active]:shadow-sm">
+                  <Plus className="h-4 w-4 mr-2" /> En Blanco
+                </TabsTrigger>
+              </TabsList>
+            </Tabs>
+
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="planName" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Nombre del Plan</Label>
+              <Input 
+                id="planName"
+                required
+                placeholder={creationMode === 'template' ? "Ej: Hipertrofia Basada en Plantilla" : "Ej: Hipertrofia Marzo"}
+                value={newPlan.name}
+                onChange={(e) => setNewPlan({...newPlan, name: e.target.value})}
+                className="rounded-xl border-border bg-muted/50 focus-visible:ring-primary h-12"
+              />
             </div>
 
-            <form onSubmit={handleCreatePlan} className="flex flex-col gap-5">
-              <div className="flex flex-col gap-3">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Tipo de Plan</label>
-                <div className="grid grid-cols-2 gap-3">
-                  <button
-                    type="button"
-                    onClick={() => setCreationMode('template')}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all ${
-                      creationMode === 'template' 
-                        ? "border-primary bg-primary/10 text-primary" 
-                        : "border-border bg-muted text-muted-foreground hover:border-primary/50"
-                    }`}
-                  >
-                    <LayoutTemplate className="h-5 w-5" />
-                    <span className="text-xs font-black">Importar Plantilla</span>
-                  </button>
-                  
-                  <button
-                    type="button"
-                    onClick={() => setCreationMode('blank')}
-                    className={`flex flex-col items-center gap-2 rounded-xl border-2 p-4 transition-all ${
-                      creationMode === 'blank' 
-                        ? "border-primary bg-primary/10 text-primary" 
-                        : "border-border bg-muted text-muted-foreground hover:border-primary/50"
-                    }`}
-                  >
-                    <Plus className="h-5 w-5" />
-                    <span className="text-xs font-black">Crear desde cero</span>
-                  </button>
-                </div>
-              </div>
+            <div className="flex flex-col gap-2">
+              <Label htmlFor="startDate" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Fecha de Inicio (Semana Lunes)</Label>
+              <Input 
+                id="startDate"
+                required
+                type="date" 
+                value={newPlan.startDate}
+                onChange={handleDateChange}
+                className="rounded-xl border-border bg-muted/50 focus-visible:ring-primary h-12"
+              />
+            </div>
 
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Nombre del Plan</label>
-                <input 
+            {creationMode === 'template' && (
+              <>
+                <div className="flex flex-col gap-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Seleccionar Plantilla</Label>
+                  <Select required onValueChange={handleTemplateChange} value={selectedTemplate?.toString() || ""}>
+                    <SelectTrigger className="rounded-xl border-border bg-muted/50 h-12">
+                      <SelectValue placeholder="Elegir una plantilla..." />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {templates.map((template: any) => (
+                        <SelectItem key={template.id} value={template.id.toString()}>
+                          {template.name} ({template.session_count} sesiones)
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <Label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Días de Entrenamiento</Label>
+                  <div className="grid grid-cols-7 gap-1.5">
+                    {["L", "M", "M", "J", "V", "S", "D"].map((day, index) => (
+                      <Button
+                        key={index}
+                        type="button"
+                        variant={preferredDays.includes(index) ? "default" : "outline"}
+                        onClick={() => toggleDay(index)}
+                        className={`aspect-square p-0 h-auto rounded-lg text-xs font-black transition-all ${
+                          preferredDays.includes(index) ? "bg-primary text-primary-foreground shadow-md" : "text-muted-foreground"
+                        }`}
+                      >
+                        {day}
+                      </Button>
+                    ))}
+                  </div>
+                  <p className="text-[10px] font-medium text-muted-foreground mt-1">
+                    {templateDaysCount > 0
+                      ? `La plantilla exige ${templateDaysCount} días semanales. Seleccionados: ${preferredDays.length}.`
+                      : "Seleccioná en qué días caerán las sesiones de la plantilla."}
+                  </p>
+                </div>
+              </>
+            )}
+
+            {creationMode === 'blank' && (
+              <div className="flex flex-col gap-2">
+                <Label htmlFor="duration" className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Duración (Semanas)</Label>
+                <Input
+                  id="duration"
                   required
-                  type="text" 
-                  className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
-                  placeholder={creationMode === 'template' ? "Ej: Hipertrofia Basada en Plantilla" : "Ej: Hipertrofia Marzo"}
-                  value={newPlan.name}
-                  onChange={(e) => setNewPlan({...newPlan, name: e.target.value})}
+                  min={1}
+                  type="number"
+                  value={durationWeeks}
+                  onChange={(e) => setDurationWeeks(Math.max(1, Number(e.target.value) || 1))}
+                  className="rounded-xl border-border bg-muted/50 focus-visible:ring-primary h-12"
                 />
               </div>
+            )}
 
-              {creationMode === 'template' && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Fecha de Inicio</label>
-                    <input 
-                      required
-                      type="date" 
-                      className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
-                      value={newPlan.startDate}
-                      onChange={(e) => setNewPlan({...newPlan, startDate: e.target.value})}
-                    />
-                  </div>
+            {/* PREVISUALIZACIÓN DE FECHAS */}
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-3 flex items-start gap-3">
+              <CalendarClock className="h-5 w-5 text-primary mt-0.5 shrink-0" />
+              <div className="flex flex-col">
+                <span className="text-[10px] font-black uppercase tracking-widest text-primary">Resumen del Bloque</span>
+                <span className="text-xs text-muted-foreground mt-0.5">
+                  Desde el <b>{formatDate(previewStart)}</b> hasta el <b>{formatDate(previewEnd)}</b> ({activeWeeks} semanas).
+                </span>
+              </div>
+            </div>
 
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Plantilla</label>
-                    <select 
-                      required
-                      className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
-                      value={selectedTemplate || ""}
-                      onChange={(e) => handleTemplateChange(e.target.value)}
-                    >
-                      <option value="">Seleccionar plantilla...</option>
-                      {templates.map((template: any) => (
-                        <option key={template.id} value={template.id}>
-                          {template.name} ({template.session_count} sesiones)
-                        </option>
-                      ))}
-                    </select>
-                  </div>
+            {/* ERROR DE COLISIÓN */}
+            {planError && (
+              <div className="rounded-xl border border-destructive/30 bg-destructive/8 px-3 py-2.5 flex items-start gap-2">
+                <span className="text-destructive mt-0.5 shrink-0 text-sm font-black">!</span>
+                <p className="text-xs font-bold text-destructive leading-relaxed">{planError}</p>
+              </div>
+            )}
 
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Días de Entrenamiento</label>
-                    <div className="grid grid-cols-7 gap-2">
-                      {["L", "M", "M", "J", "V", "S", "D"].map((day, index) => (
-                        <button
-                          key={index}
-                          type="button"
-                          onClick={() => toggleDay(index)}
-                          className={`aspect-square rounded-lg border-2 text-xs font-black transition-all ${
-                            preferredDays.includes(index)
-                              ? "border-primary bg-primary text-primary-foreground"
-                              : "border-border bg-muted text-muted-foreground hover:border-primary/50"
-                          }`}
-                        >
-                          {day}
-                        </button>
-                      ))}
-                    </div>
-                    <p className="text-xs text-muted-foreground mt-1">
-                      {templateDaysCount > 0
-                        ? `Esta plantilla requiere exactamente ${templateDaysCount} días por semana. Has seleccionado ${preferredDays.length}.`
-                        : "Selecciona los días para distribuir las sesiones"}
-                    </p>
-                  </div>
-                </>
+            <Button
+              type="submit"
+              disabled={isPending || (creationMode === 'blank' && durationWeeks < 1) || (creationMode === 'template' && (!selectedTemplate || preferredDays.length === 0 || !hasExactSelectedDays))}
+              className="mt-2 h-14 rounded-2xl font-black text-sm uppercase tracking-widest shadow-xl shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98]"
+            >
+              {isPending ? (
+                <><Loader2 className="mr-2 h-5 w-5 animate-spin" /> Procesando...</>
+              ) : creationMode === 'template' ? (
+                <><LayoutTemplate className="mr-2 h-5 w-5" /> Instanciar Plantilla</>
+              ) : (
+                <><Plus className="mr-2 h-5 w-5" /> Crear Plan Vacío</>
               )}
-
-              {creationMode === 'blank' && (
-                <>
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Fecha de Inicio</label>
-                    <input 
-                      required
-                      type="date" 
-                      className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
-                      value={newPlan.startDate}
-                      onChange={(e) => setNewPlan({...newPlan, startDate: e.target.value})}
-                    />
-                  </div>
-
-                  <div className="flex flex-col gap-1.5">
-                    <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Duración (Semanas)</label>
-                    <input
-                      required
-                      min={1}
-                      type="number"
-                      className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium text-sm"
-                      value={durationWeeks}
-                      onChange={(e) => setDurationWeeks(Math.max(1, Number(e.target.value) || 1))}
-                    />
-                  </div>
-                </>
-              )}
-
-              <button 
-                disabled={isPending || (creationMode === 'blank' && durationWeeks < 1) || (creationMode === 'template' && (!selectedTemplate || preferredDays.length === 0 || !hasExactSelectedDays))}
-                className="mt-4 bg-primary text-primary-foreground py-5 rounded-3xl font-black text-sm shadow-xl shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
-              >
-                {isPending ? (
-                  <>
-                    <Loader2 className="h-5 w-5 animate-spin" /> PROCESANDO...
-                  </>
-                ) : creationMode === 'template' ? (
-                  <>
-                    <LayoutTemplate className="h-5 w-5" /> INSTANCIAR PLANTILLA
-                  </>
-                ) : (
-                  <>
-                    <Plus className="h-5 w-5" /> CREAR PLAN EN BLANCO
-                  </>
-                )}
-              </button>
-            </form>
-          </div>
-        </div>
-      )}
+            </Button>
+          </form>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

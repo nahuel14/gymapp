@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { X } from "lucide-react";
 import { importTemplateToStudent, createBlankPlan } from "./actions";
 
@@ -36,6 +37,7 @@ const getDefaultDaysForCount = (count: number) => {
 
 export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTemplateModalProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
@@ -44,6 +46,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
   const [selectedDays, setSelectedDays] = useState<number[]>([1, 3, 5]);
   const [planName, setPlanName] = useState("");
   const [weeksCount, setWeeksCount] = useState(4);
+  const [importError, setImportError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -110,53 +113,49 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
   };
 
   const handleConfirm = () => {
+    setImportError(null);
+
     if (!planName.trim()) {
-      alert("Ingresa un nombre para el plan");
+      setImportError("Ingresá un nombre para el plan.");
       return;
     }
-
     if (!startDate) {
-      alert("Selecciona una fecha de inicio");
+      setImportError("Seleccioná una fecha de inicio.");
       return;
     }
 
     if (!templateId) {
-      // Plan desde cero
       if (weeksCount < 1) {
-        alert("La cantidad de semanas debe ser al menos 1");
+        setImportError("La cantidad de semanas debe ser al menos 1.");
         return;
       }
-
       startTransition(async () => {
         try {
           await createBlankPlan(studentId, planName, startDate, weeksCount);
           await queryClient.invalidateQueries({ queryKey: ["student", "routine", studentId] });
+          router.refresh();
           onClose();
-        } catch (error) {
-          console.error("Error creating blank plan:", error);
-          alert("No se pudo crear el plan");
+        } catch (error: any) {
+          setImportError(error?.message ?? "No se pudo crear el plan.");
         }
       });
     } else {
-      // Plantilla
       if (selectedDaysSorted.length === 0) {
-        alert("Selecciona al menos un día de entrenamiento");
+        setImportError("Seleccioná al menos un día de entrenamiento.");
         return;
       }
-
       if (templateDaysCount && selectedDaysSorted.length !== templateDaysCount) {
-        alert(`Esta plantilla requiere exactamente ${templateDaysCount} días por semana`);
+        setImportError(`Esta plantilla requiere exactamente ${templateDaysCount} días por semana. Tenés ${selectedDaysSorted.length} seleccionados.`);
         return;
       }
-
       startTransition(async () => {
         try {
-          await importTemplateToStudent(studentId, Number(templateId), startDate, selectedDaysSorted);
+          await importTemplateToStudent(studentId, Number(templateId), startDate, selectedDaysSorted, planName);
           await queryClient.invalidateQueries({ queryKey: ["student", "routine", studentId] });
+          router.refresh();
           onClose();
-        } catch (error) {
-          console.error("Error importing template:", error);
-          alert("No se pudo importar la plantilla");
+        } catch (error: any) {
+          setImportError(error?.message ?? "No se pudo importar la plantilla.");
         }
       });
     }
@@ -166,7 +165,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-      <div className="w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
+      <div className="w-full max-w-2xl rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl overflow-y-auto max-h-[90vh]">
         <div className="mb-6 flex items-center justify-between">
           <div>
             <h3 className="text-lg font-black uppercase tracking-tight text-zinc-100">
@@ -296,10 +295,17 @@ export function ImportTemplateModal({ isOpen, onClose, studentId }: ImportTempla
             </>
           )}
 
+          {importError && (
+            <div className="rounded-2xl border border-red-500/30 bg-red-500/10 px-4 py-3 flex items-start gap-2">
+              <span className="text-red-400 font-black text-sm shrink-0">!</span>
+              <p className="text-xs font-bold text-red-400 leading-relaxed">{importError}</p>
+            </div>
+          )}
+
           <button
             onClick={handleConfirm}
             disabled={isPending || (templateId.length > 0 && !hasExactSelectedDays)}
-            className="rounded-[1.5rem] bg-yellow-400 py-4 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+            className="rounded-3xl bg-yellow-400 py-4 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
           >
             {isPending ? "Procesando..." : "CREAR PLAN"}
           </button>

@@ -7,7 +7,7 @@ import type { Database, Tables } from "@/types/supabase";
 type Profile = Pick<Tables<"profiles">, "id" | "role" | "name" | "last_name">;
 type TrainingPlan = Pick<
   Tables<"training_plans">,
-  "id" | "name" | "start_date" | "is_active"
+  "id" | "name" | "start_date" | "is_active" | "end_date"
 >;
 type Session = Tables<"sessions">;
 type SessionExercise = Tables<"session_exercises"> & {
@@ -41,7 +41,7 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
   // 2. Todos los planes del estudiante, y el plan activo
   const { data: allPlansData } = await supabase
     .from("training_plans")
-    .select("id, name, start_date, is_active")
+    .select("id, name, start_date, end_date, is_active")
     .eq("student_id", studentId as any)
     .order("created_at", { ascending: false });
 

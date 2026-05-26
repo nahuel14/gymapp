@@ -4,6 +4,51 @@ import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/sup
 import { revalidatePath } from "next/cache";
 import type { Database } from "@/types/supabase";
 
+// --- Helpers de fechas y validación de colisiones ---
+
+function normalizeToMonday(dateStr: string): string {
+  const date = new Date(dateStr + "T00:00:00");
+  const day = date.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  date.setDate(date.getDate() + diff);
+  return date.toISOString().split("T")[0];
+}
+
+function calcEndDate(mondayStr: string, weeks: number): string {
+  const start = new Date(mondayStr + "T00:00:00");
+  const end = new Date(start);
+  end.setDate(start.getDate() + Math.max(weeks, 1) * 7 - 1);
+  return end.toISOString().split("T")[0];
+}
+
+async function assertNoPlanCollision(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  studentId: string,
+  newStart: string,
+  newEnd: string
+): Promise<void> {
+  const { data: overlapping, error } = await adminClient
+    .from("training_plans")
+    .select("id, name, start_date, end_date")
+    .eq("student_id", studentId as any)
+    .eq("is_template", false as any)
+    .eq("is_active", true as any)
+    .not("end_date", "is", null)
+    .lte("start_date", newEnd)
+    .gte("end_date", newStart);
+
+  if (error) throw error;
+
+  if (overlapping && overlapping.length > 0) {
+    const conflict = overlapping[0] as any;
+    throw new Error(
+      `PLAN_COLLISION:El período ${newStart}–${newEnd} se superpone con el plan "${conflict.name}" (${conflict.start_date} — ${conflict.end_date}).`
+    );
+  }
+}
+
+// --- Fin helpers ---
+
 export async function addWeekToPlan(planId: number, nextWeekNumber: number) {
   const supabase = await createSupabaseServerClient();
 
@@ -312,25 +357,19 @@ export async function createTrainingPlan(
 ) {
   const supabaseAuth = await createSupabaseServerClient();
   const { data: { user } } = await supabaseAuth.auth.getUser();
-  
+
   if (!user) throw new Error("No autenticado");
   const supabaseAdmin = createSupabaseAdminClient();
+
+  const normalizedStart = normalizeToMonday(startDate);
+  const endDateStr = calcEndDate(normalizedStart, durationWeeks);
+
+  await assertNoPlanCollision(supabaseAdmin, studentId, normalizedStart, endDateStr);
 
   await supabaseAdmin
     .from("training_plans")
     .update({ is_active: false } as any)
     .eq("student_id", studentId as any);
-
-  // Lógica para redondear al domingo de la última semana
-  const planStart = new Date(startDate + "T00:00:00");
-  const exactEnd = new Date(planStart);
-  exactEnd.setDate(planStart.getDate() + Math.max(durationWeeks, 1) * 7 - 1);
-  
-  const endDay = exactEnd.getDay();
-  const diffToSunday = endDay === 0 ? 0 : 7 - endDay;
-  exactEnd.setDate(exactEnd.getDate() + diffToSunday);
-  
-  const endDateStr = exactEnd.toISOString().split("T")[0];
 
   const { data: plan, error } = await supabaseAdmin
     .from("training_plans")
@@ -338,7 +377,7 @@ export async function createTrainingPlan(
       student_id: studentId,
       coach_id: user.id,
       name: planName,
-      start_date: startDate,
+      start_date: normalizedStart,
       end_date: endDateStr,
       is_active: true
     } as any)
@@ -364,25 +403,19 @@ export async function createBlankPlan(
 ) {
   const supabaseAuth = await createSupabaseServerClient();
   const { data: { user } } = await supabaseAuth.auth.getUser();
-  
+
   if (!user) throw new Error("No autenticado");
   const supabaseAdmin = createSupabaseAdminClient();
+
+  const normalizedStart = normalizeToMonday(startDate);
+  const endDateStr = calcEndDate(normalizedStart, weeksCount);
+
+  await assertNoPlanCollision(supabaseAdmin, studentId, normalizedStart, endDateStr);
 
   await supabaseAdmin
     .from("training_plans")
     .update({ is_active: false } as any)
     .eq("student_id", studentId as any);
-
-  // Lógica para redondear al domingo de la última semana
-  const planStart = new Date(startDate + "T00:00:00");
-  const exactEnd = new Date(planStart);
-  exactEnd.setDate(planStart.getDate() + Math.max(weeksCount, 1) * 7 - 1);
-  
-  const endDay = exactEnd.getDay();
-  const diffToSunday = endDay === 0 ? 0 : 7 - endDay;
-  exactEnd.setDate(exactEnd.getDate() + diffToSunday);
-  
-  const endDateStr = exactEnd.toISOString().split("T")[0];
 
   const { data: plan, error } = await supabaseAdmin
     .from("training_plans")
@@ -390,7 +423,7 @@ export async function createBlankPlan(
       student_id: studentId,
       coach_id: user.id,
       name: planName,
-      start_date: startDate,
+      start_date: normalizedStart,
       end_date: endDateStr,
       is_active: true
     } as any)
@@ -402,7 +435,7 @@ export async function createBlankPlan(
   revalidatePath("/coach");
   revalidatePath("/coach/student/[studentId]", "page");
   revalidatePath("/student", "page");
-  
+
   return {
     success: true,
     planId: plan.id,
@@ -491,12 +524,16 @@ export async function instantiateTemplateToStudent(
   startDate: string,
   preferredDaysOfWeek: number[]
 ) {
+  if (preferredDaysOfWeek.length === 0) throw new Error("Debes seleccionar al menos un día de entrenamiento");
+
   const supabase = await createSupabaseServerClient();
   const adminClient = createSupabaseAdminClient();
 
   try {
     const { data: { user } } = await supabase.auth.getUser();
     if (!user) throw new Error("No autenticado");
+
+    // --- Fase 1: todas las lecturas antes de cualquier escritura ---
 
     const { data: templatePlan, error: fetchTemplateError } = await supabase
       .from("training_plans")
@@ -506,6 +543,43 @@ export async function instantiateTemplateToStudent(
       .single();
 
     if (fetchTemplateError || !templatePlan) throw new Error("No se encontró la plantilla");
+
+    const { data: templateSessions, error: fetchSessionsError } = await supabase
+      .from("sessions")
+      .select("*")
+      .eq("plan_id", templatePlanId)
+      .order("week_number", { ascending: true })
+      .order("order_index", { ascending: true });
+
+    if (fetchSessionsError) throw fetchSessionsError;
+
+    const normalizedStart = normalizeToMonday(startDate);
+
+    // Pre-computar las fechas de sesión para determinar end_date antes de escribir
+    const sessionDates: string[] = [];
+    let currentDate = new Date(normalizedStart + "T00:00:00");
+
+    for (let i = 0; i < (templateSessions?.length || 0); i++) {
+      while (!preferredDaysOfWeek.includes(currentDate.getDay())) {
+        currentDate.setDate(currentDate.getDate() + 1);
+      }
+      sessionDates.push(currentDate.toISOString().split("T")[0]);
+      currentDate.setDate(currentDate.getDate() + 1);
+    }
+
+    // end_date = domingo de la semana que contiene la última sesión
+    let endDateStr = calcEndDate(normalizedStart, 1);
+    if (sessionDates.length > 0) {
+      const lastDate = new Date(sessionDates[sessionDates.length - 1] + "T00:00:00");
+      const lastDay = lastDate.getDay();
+      const diffToSunday = lastDay === 0 ? 0 : 7 - lastDay;
+      lastDate.setDate(lastDate.getDate() + diffToSunday);
+      endDateStr = lastDate.toISOString().split("T")[0];
+    }
+
+    await assertNoPlanCollision(adminClient, studentId, normalizedStart, endDateStr);
+
+    // --- Fase 2: escrituras ---
 
     await adminClient
       .from("training_plans")
@@ -520,39 +594,19 @@ export async function instantiateTemplateToStudent(
         student_id: studentId,
         is_active: true,
         is_template: false,
-        start_date: startDate
-        // Nota: Al instanciar plantilla, capaz querés agregar la lógica de end_date acá también
+        start_date: normalizedStart,
+        end_date: endDateStr
       } as any)
       .select()
       .single();
 
     if (createPlanError || !newPlan) throw createPlanError;
 
-    const { data: templateSessions, error: fetchSessionsError } = await supabase
-      .from("sessions")
-      .select("*")
-      .eq("plan_id", templatePlanId)
-      .order("week_number", { ascending: true })
-      .order("order_index", { ascending: true });
-
-    if (fetchSessionsError) throw fetchSessionsError;
-
-    const sessionDates: string[] = [];
-    let currentDate = new Date(startDate + 'T00:00:00');
-    
-    for (let i = 0; i < (templateSessions?.length || 0); i++) {
-      while (!preferredDaysOfWeek.includes(currentDate.getDay())) {
-        currentDate.setDate(currentDate.getDate() + 1);
-      }
-      sessionDates.push(currentDate.toISOString().split('T')[0]);
-      currentDate.setDate(currentDate.getDate() + 1);
-    }
-
     const newSessionIds: number[] = [];
-    
+
     for (let i = 0; i < (templateSessions?.length || 0); i++) {
       const templateSession = templateSessions![i];
-      
+
       const { data: newSession, error: sessionError } = await adminClient
         .from("sessions")
         .insert({
@@ -598,11 +652,10 @@ export async function instantiateTemplateToStudent(
 
     revalidatePath("/coach/student/[studentId]", "page");
     revalidatePath("/student", "page");
-    
+
     return { success: true, planId: newPlan.id };
 
   } catch (error) {
-    console.error("Error en instantiateTemplateToStudent:", error);
     throw error;
   }
 }
@@ -663,7 +716,8 @@ export async function importTemplateToStudent(
   studentId: string,
   templateId: number,
   startDate: string,
-  selectedDays: number[]
+  selectedDays: number[],
+  planName?: string
 ) {
   const supabase = await createSupabaseServerClient();
   const adminClient = createSupabaseAdminClient();
@@ -679,7 +733,7 @@ export async function importTemplateToStudent(
     return normalizedA - normalizedB;
   });
 
-  const { data: templatePlan, error: templateError } = await supabase
+  const { data: templatePlan, error: templateError } = await adminClient
     .from("training_plans")
     .select("*")
     .eq("id", templateId)
@@ -688,46 +742,7 @@ export async function importTemplateToStudent(
 
   if (templateError || !templatePlan) throw new Error("No se encontró la plantilla");
 
-  let { data: activePlan } = await supabase
-    .from("training_plans")
-    .select("*")
-    .eq("student_id", studentId as any)
-    .eq("is_template", false as any)
-    .eq("is_active", true as any)
-    .order("created_at", { ascending: false })
-    .limit(1)
-    .maybeSingle();
-
-  if (!activePlan) {
-    const { data: createdPlan, error: createPlanError } = await adminClient
-      .from("training_plans")
-      .insert({
-        student_id: studentId,
-        coach_id: templatePlan.coach_id ?? user.id,
-        name: templatePlan.name,
-        start_date: startDate,
-        is_active: true,
-        is_template: false
-      } as any)
-      .select()
-      .single();
-
-    if (createPlanError || !createdPlan) throw createPlanError;
-    activePlan = createdPlan;
-  }
-
-  const { data: existingSessions, error: existingSessionsError } = await supabase
-    .from("sessions")
-    .select("week_number")
-    .eq("plan_id", activePlan.id);
-
-  if (existingSessionsError) throw existingSessionsError;
-
-  const baseWeek = (existingSessions || []).reduce((max, session: any) => {
-    return Math.max(max, session.week_number || 0);
-  }, 0);
-
-  const { data: templateSessions, error: templateSessionsError } = await supabase
+  const { data: templateSessions, error: templateSessionsError } = await adminClient
     .from("sessions")
     .select("*")
     .eq("plan_id", templateId)
@@ -737,17 +752,13 @@ export async function importTemplateToStudent(
   if (templateSessionsError) throw templateSessionsError;
 
   if (!templateSessions || templateSessions.length === 0) {
-    revalidatePath("/coach/student/[studentId]", "page");
-    revalidatePath("/student", "page");
-    return { success: true, planId: activePlan.id };
+    throw new Error("La plantilla seleccionada no tiene sesiones. Agregá sesiones a la plantilla antes de importarla.");
   }
 
-  const start = new Date(startDate + "T00:00:00");
-  const monday = new Date(start);
-  const startDay = monday.getDay();
-  const diffToMonday = startDay === 0 ? -6 : 1 - startDay;
-  monday.setDate(monday.getDate() + diffToMonday);
+  const normalizedStart = normalizeToMonday(startDate);
+  const monday = new Date(normalizedStart + "T00:00:00");
 
+  // Pre-computar fechas de sesión por semana
   const sessionsByTemplateWeek = new Map<number, any[]>();
   for (const session of templateSessions) {
     const weekNumber = session.week_number || 1;
@@ -757,13 +768,14 @@ export async function importTemplateToStudent(
     sessionsByTemplateWeek.get(weekNumber)!.push(session);
   }
 
-  const createdSessionIds = new Map<number, number>();
+  // Calcular todas las fechas para determinar end_date antes de escribir
+  const sessionDateMap = new Map<number, string>(); // templateSession.id → date
+  const allDates: string[] = [];
 
   for (const [templateWeek, weekSessions] of sessionsByTemplateWeek.entries()) {
     const sortedSessions = [...weekSessions].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
     const weekMonday = new Date(monday);
     weekMonday.setDate(monday.getDate() + (templateWeek - 1) * 7);
-    const targetWeekNumber = baseWeek + templateWeek;
 
     for (let index = 0; index < sortedSessions.length; index++) {
       const templateSession = sortedSessions[index];
@@ -772,12 +784,54 @@ export async function importTemplateToStudent(
       const sessionDate = new Date(weekMonday);
       sessionDate.setDate(weekMonday.getDate() + dayOffset);
       const formattedDate = sessionDate.toISOString().split("T")[0];
+      sessionDateMap.set(templateSession.id, formattedDate);
+      allDates.push(formattedDate);
+    }
+  }
+
+  // end_date = domingo de la semana de la última sesión
+  const lastDate = new Date(allDates.sort().at(-1)! + "T00:00:00");
+  const lastDay = lastDate.getDay();
+  lastDate.setDate(lastDate.getDate() + (lastDay === 0 ? 0 : 7 - lastDay));
+  const endDateStr = lastDate.toISOString().split("T")[0];
+
+  await assertNoPlanCollision(adminClient, studentId, normalizedStart, endDateStr);
+
+  // Desactivar todos los planes activos del alumno antes de crear el nuevo
+  await adminClient
+    .from("training_plans")
+    .update({ is_active: false } as any)
+    .eq("student_id", studentId as any);
+
+  const { data: newPlan, error: createPlanError } = await adminClient
+    .from("training_plans")
+    .insert({
+      student_id: studentId,
+      coach_id: user.id,
+      name: (planName?.trim() || templatePlan.name),
+      start_date: normalizedStart,
+      end_date: endDateStr,
+      is_active: true,
+      is_template: false
+    } as any)
+    .select()
+    .single();
+
+  if (createPlanError || !newPlan) throw createPlanError ?? new Error("No se pudo crear el plan");
+
+  const createdSessionIds = new Map<number, number>();
+
+  for (const [templateWeek, weekSessions] of sessionsByTemplateWeek.entries()) {
+    const sortedSessions = [...weekSessions].sort((a, b) => (a.order_index || 0) - (b.order_index || 0));
+
+    for (const templateSession of sortedSessions) {
+      const formattedDate = sessionDateMap.get(templateSession.id)!;
 
       const { data: insertedSession, error: insertedSessionError } = await adminClient
         .from("sessions")
         .insert({
-          plan_id: activePlan.id,
-          week_number: targetWeekNumber,
+          plan_id: newPlan.id,
+          week_number: templateWeek,
           day_name: templateSession.day_name,
           order_index: templateSession.order_index,
           is_completed: false,
@@ -786,7 +840,7 @@ export async function importTemplateToStudent(
         .select()
         .single();
 
-      if (insertedSessionError || !insertedSession) throw insertedSessionError;
+      if (insertedSessionError || !insertedSession) throw insertedSessionError ?? new Error("No se pudo crear la sesión");
       createdSessionIds.set(templateSession.id, insertedSession.id);
     }
   }
@@ -795,7 +849,7 @@ export async function importTemplateToStudent(
     const newSessionId = createdSessionIds.get(templateSession.id);
     if (!newSessionId) continue;
 
-    const { data: templateExercises, error: templateExercisesError } = await supabase
+    const { data: templateExercises, error: templateExercisesError } = await adminClient
       .from("session_exercises")
       .select("*")
       .eq("session_id", templateSession.id)
@@ -827,7 +881,7 @@ export async function importTemplateToStudent(
   revalidatePath("/coach/student/[studentId]", "page");
   revalidatePath("/student", "page");
 
-  return { success: true, planId: activePlan.id };
+  return { success: true, planId: newPlan.id };
 }
 
 export async function createInlineExercise(data: { name: string; body_zone: string; category: string }) {
