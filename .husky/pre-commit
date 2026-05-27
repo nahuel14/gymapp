@@ -1,0 +1,5 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🏋️‍♂️ Validando las reglas de negocio de GymApp..."
+npm run test:run

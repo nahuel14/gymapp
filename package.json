@@ -7,8 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "test": "vitest",
+    "test:run": "vitest run",
+    "prepare": "husky install",
+    "gym-push": "node git-fly.mjs"
   },
   "dependencies": {
     "@heroui/react": "^3.0.4",
@@ -39,6 +41,7 @@
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
     "typescript": "^5",
-    "vitest": "^4.1.6"
+    "vitest": "^4.1.6",
+    "husky": "^8.0.0"
   }
 }
