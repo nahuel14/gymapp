@@ -8,17 +8,37 @@ const rl = readline.createInterface({
 
 console.log("🚀 Iniciando automatización de envío...\n");
 
-// 1. Ejecutar git add de manera automática
+// 1. Tests — fallan rápido (2 seg), no tiene sentido esperar el build si ya hay un test roto
 try {
-  console.log("📦 Indexando todos los cambios modificados...");
-  execSync('git add .', { stdio: 'inherit', shell: true });
-} catch (error) {
-  console.error("❌ Error al indexar archivos.");
+  console.log("🧪 1/3: Ejecutando TESTS...");
+  execSync('npm run test:run', { stdio: 'inherit', shell: true });
+} catch {
+  console.error("\n❌ Tests fallidos. Corregí los errores antes de continuar.");
+  rl.close();
   process.exit(1);
 }
 
-// 2. Solicitar el mensaje de commit
-rl.question('✍️  Ingresa el mensaje para tu commit: ', (message) => {
+// 2. Build — verifica tipado y compilación (~1-2 min)
+try {
+  console.log("\n🏗️  2/3: Ejecutando BUILD de Next.js...");
+  execSync('npm run build', { stdio: 'inherit', shell: true });
+} catch {
+  console.error("\n❌ Build fallido. Corregí los errores antes de continuar.");
+  rl.close();
+  process.exit(1);
+}
+
+// 3. Git — solo llegamos acá si build y tests pasaron
+console.log("\n📦 3/3: Indexando cambios...");
+try {
+  execSync('git add .', { stdio: 'inherit', shell: true });
+} catch {
+  console.error("❌ Error al indexar archivos.");
+  rl.close();
+  process.exit(1);
+}
+
+rl.question('\n✍️  Ingresa el mensaje para tu commit: ', (message) => {
   if (!message.trim()) {
     console.log("⚠️ El mensaje no puede estar vacío. Abortando flujo.");
     rl.close();
@@ -26,20 +46,15 @@ rl.question('✍️  Ingresa el mensaje para tu commit: ', (message) => {
   }
 
   try {
-    console.log(`\n🧪 1/3: Guardando commit y ejecutando TESTS (vía Husky)...`);
-    // Husky interceptará esto y correrá 'npm run test:run'
-    execSync(`git commit -m "${message}"`, { stdio: 'inherit', shell: true });
-    
-    console.log(`\n🏗️  2/3: Ejecutando BUILD de Next.js (Simulando Vercel)...`);
-    // Si falla el tipado estricto o un componente, se corta aquí y NO hace push
-    execSync('npm run build', { stdio: 'inherit', shell: true });
-    
-    console.log("\n📡 3/3: Subiendo cambios al repositorio remoto...");
+    // --no-verify: los tests ya corrieron en el paso 1, evita que Husky los ejecute de nuevo
+    execSync(`git commit --no-verify -m "${message}"`, { stdio: 'inherit', shell: true });
+
+    console.log("\n📡 Subiendo cambios al repositorio remoto...");
     execSync('git push', { stdio: 'inherit', shell: true });
-    
-    console.log("\n✅ ¡Éxito total! Tu código pasó las pruebas, compiló perfecto y ya está en camino a Vercel.");
-  } catch (error) {
-    console.error("\n❌ Flujo interrumpido. Revisa los errores en la consola arriba antes de reintentar.");
+
+    console.log("\n✅ ¡Éxito total! Tu código compiló, pasó los tests y ya está en camino a Vercel.");
+  } catch {
+    console.error("\n❌ Flujo interrumpido. Revisá los errores en la consola.");
   } finally {
     rl.close();
   }
