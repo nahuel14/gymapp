@@ -884,6 +884,65 @@ export async function importTemplateToStudent(
   return { success: true, planId: newPlan.id };
 }
 
+export async function extendPlan(planId: number, additionalWeeks: number) {
+  if (additionalWeeks < 1) throw new Error("Debe agregar al menos 1 semana");
+
+  const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: plan, error: fetchError } = await adminClient
+    .from("training_plans")
+    .select("id, name, start_date, end_date, student_id")
+    .eq("id", planId)
+    .single();
+
+  if (fetchError || !plan) throw new Error("No se encontró el plan");
+
+  const currentEnd = (plan as any).end_date as string | null;
+  if (!currentEnd) throw new Error("El plan no tiene fecha de fin definida");
+
+  // New end = current end + N weeks, snapped to Sunday
+  const newEnd = new Date(currentEnd + "T00:00:00");
+  newEnd.setDate(newEnd.getDate() + additionalWeeks * 7);
+  const dow = newEnd.getDay();
+  if (dow !== 0) newEnd.setDate(newEnd.getDate() + (7 - dow));
+  const newEndStr = newEnd.toISOString().split("T")[0];
+
+  // Check for OTHER plans of this student that start after the current end (would now collide)
+  const { data: overlapping, error: colError } = await adminClient
+    .from("training_plans")
+    .select("id, name, start_date")
+    .eq("student_id", (plan as any).student_id as any)
+    .eq("is_template", false as any)
+    .neq("id", planId)
+    .not("end_date", "is", null)
+    .gt("start_date", currentEnd);
+
+  if (colError) throw colError;
+
+  if (overlapping && overlapping.length > 0) {
+    const conflict = overlapping[0] as any;
+    throw new Error(
+      `No se puede extender: el plan "${conflict.name}" comienza el ${conflict.start_date}.`
+    );
+  }
+
+  const { error: updateError } = await adminClient
+    .from("training_plans")
+    .update({ end_date: newEndStr } as any)
+    .eq("id", planId);
+
+  if (updateError) throw updateError;
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+
+  return { success: true, newEndDate: newEndStr };
+}
+
 export async function createInlineExercise(data: { name: string; body_zone: string; category: string }) {
   const supabase = await createSupabaseServerClient();
 

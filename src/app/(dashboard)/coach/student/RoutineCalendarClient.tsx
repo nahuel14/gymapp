@@ -7,7 +7,6 @@ import {
   ChevronLeft,
   ChevronRight,
   Calendar,
-  CalendarX,
   Dumbbell,
   Plus,
   X,
@@ -94,11 +93,8 @@ export function RoutineCalendarClient({
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [isAddingDay, setIsAddingDay] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [isPlanActionModalOpen, setIsPlanActionModalOpen] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
   const [newDayForm, setNewDayForm] = useState<{ date: string } | null>(null);
-  const [planAction, setPlanAction] = useState<"create" | "extend">("create");
-  const [selectedExistingPlanId, setSelectedExistingPlanId] = useState("");
 
   const [newExForm, setNewExForm] = useState({
     exerciseId: "",
@@ -165,22 +161,9 @@ export function RoutineCalendarClient({
 
   // -- MANEJADORES DE ACCIONES -- //
 
-  const openPlanActionModal = () => {
-    setPlanAction("create");
-    if (plansWithRanges.length > 0) {
-      setSelectedExistingPlanId(plansWithRanges[0].id);
-    }
-    setIsPlanActionModalOpen(true);
-  };
-
-  const handleConfirmPlanAction = () => {
-    if (planAction === "extend" && !selectedExistingPlanId) {
-      alert("Selecciona un plan para extender");
-      return;
-    }
-    setIsPlanActionModalOpen(false);
-    setIsImportModalOpen(true);
-  };
+  const activePlan = useMemo(() => {
+    return allPlans.find(p => p.is_active) ?? null;
+  }, [allPlans]);
 
   const handleDeleteSelectedPlan = () => {
     if (!currentViewedPlan) return;
@@ -284,58 +267,12 @@ export function RoutineCalendarClient({
   return (
     <div className="flex flex-col gap-4 pb-24">
       {(role === "COACH" || role === "ADMIN") && studentId && (
-        <ImportTemplateModal isOpen={isImportModalOpen} onClose={() => setIsImportModalOpen(false)} studentId={studentId} />
-      )}
-
-      {/* MODAL GESTIONAR PLAN */}
-      {isPlanActionModalOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/70 p-4 backdrop-blur-sm">
-          <div className="w-full max-w-lg rounded-3xl border border-zinc-800 bg-zinc-950 p-6 shadow-2xl">
-            <div className="flex items-start justify-between gap-4">
-              <div className="flex flex-col gap-1">
-                <h3 className="text-lg font-black text-zinc-100">Gestionar plan desde esta fecha</h3>
-                <p className="text-sm text-zinc-400">
-                  {selectedDate ? `Fecha seleccionada: ${formatDateDisplay(selectedDate, { day: "2-digit", month: "short", year: "numeric" })}` : "Sin fecha seleccionada"}
-                </p>
-              </div>
-              <button onClick={() => setIsPlanActionModalOpen(false)} className="rounded-xl p-2 text-zinc-500 transition hover:bg-zinc-900 hover:text-white">
-                <X className="h-5 w-5" />
-              </button>
-            </div>
-
-            <div className="mt-6 grid grid-cols-1 md:grid-cols-2 gap-3">
-              <button type="button" onClick={() => setPlanAction("create")} className={`rounded-2xl border p-4 text-left transition ${planAction === "create" ? "border-yellow-400 bg-yellow-400/10 text-yellow-400" : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700"}`}>
-                <span className="block text-sm font-black">Crear Nuevo Plan</span>
-                <span className="mt-1 block text-xs text-zinc-500">Define un nombre y arranca un bloque nuevo.</span>
-              </button>
-              {plansWithRanges.length > 0 && (
-                <button type="button" onClick={() => setPlanAction("extend")} className={`rounded-2xl border p-4 text-left transition ${planAction === "extend" ? "border-yellow-400 bg-yellow-400/10 text-yellow-400" : "border-zinc-800 bg-zinc-900 text-zinc-300 hover:border-zinc-700"}`}>
-                  <span className="block text-sm font-black">Extender Plan Existente</span>
-                  <span className="mt-1 block text-xs text-zinc-500">Sumar semanas a un bloque ya creado.</span>
-                </button>
-              )}
-            </div>
-
-            <div className="mt-5 flex flex-col gap-4">
-              {planAction === "extend" && (
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Plan a extender</label>
-                  <select value={selectedExistingPlanId} onChange={(e) => setSelectedExistingPlanId(e.target.value)} className="rounded-2xl border border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-medium text-zinc-100 outline-none transition focus:border-yellow-400">
-                    <option value="">Seleccionar plan...</option>
-                    {plansWithRanges.map((p) => (
-                      <option key={p.id} value={p.id}>{p.name}</option>
-                    ))}
-                  </select>
-                </div>
-              )}
-            </div>
-
-            <div className="mt-6 flex items-center justify-end gap-3">
-              <button type="button" onClick={() => setIsPlanActionModalOpen(false)} className="rounded-xl border border-zinc-800 px-4 py-2 text-sm font-bold text-zinc-300 transition hover:bg-zinc-900">Cancelar</button>
-              <button type="button" onClick={handleConfirmPlanAction} className="rounded-xl bg-yellow-400 px-4 py-2 text-sm font-black text-black transition hover:scale-[1.02] active:scale-[0.98]">Continuar</button>
-            </div>
-          </div>
-        </div>
+        <ImportTemplateModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          studentId={studentId}
+          activePlan={activePlan}
+        />
       )}
 
       {/* HEADER COMPACTO CONTINUO */}
@@ -355,16 +292,25 @@ export function RoutineCalendarClient({
               )}
             </div>
 
-            {/* Acciones del Coach sobre el plan */}
-            {role === "COACH" && !currentViewedPlan && studentId && (
-              <button onClick={openPlanActionModal} className="shrink-0 flex items-center gap-1 rounded-lg bg-yellow-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-black transition hover:scale-105">
-                <Plus className="h-3 w-3" /> Crear Plan
-              </button>
-            )}
-            {role === "COACH" && currentViewedPlan && (
-              <button onClick={handleDeleteSelectedPlan} className="shrink-0 rounded-lg p-1.5 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 transition-colors">
-                <Trash2 className="h-4 w-4" />
-              </button>
+            {/* Acciones del Coach/Admin sobre el plan */}
+            {(role === "COACH" || role === "ADMIN") && studentId && (
+              <div className="flex items-center gap-1.5 shrink-0">
+                <button
+                  onClick={() => setIsImportModalOpen(true)}
+                  className={currentViewedPlan
+                    ? "flex items-center gap-1 rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition hover:bg-zinc-800 active:scale-95"
+                    : "flex items-center gap-1 rounded-lg bg-yellow-400 px-3 py-1.5 text-[10px] font-black uppercase tracking-widest text-black transition hover:scale-105 active:scale-95"
+                  }
+                >
+                  {!currentViewedPlan && <Plus className="h-3 w-3" />}
+                  {currentViewedPlan ? "Gestionar" : "Nuevo Plan"}
+                </button>
+                {currentViewedPlan && (
+                  <button onClick={handleDeleteSelectedPlan} className="rounded-lg p-1.5 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 transition-colors">
+                    <Trash2 className="h-4 w-4" />
+                  </button>
+                )}
+              </div>
             )}
           </div>
 
@@ -469,7 +415,7 @@ export function RoutineCalendarClient({
         {/* MODAL DE REAGENDAR DÍA (BOTTOM SHEET) */}
         {isRescheduling && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
-            <div className="w-full bg-zinc-950 rounded-t-[2rem] sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
+            <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
               <div className="flex items-center justify-between">
                 <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Reagendar Sesión</h4>
                 <button onClick={() => setIsRescheduling(false)} className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors">
@@ -512,7 +458,7 @@ export function RoutineCalendarClient({
         {/* MODAL AGREGAR DÍA NUEVO */}
         {currentViewedPlan && isAddingDay && (
           <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
-            <div className="w-full bg-zinc-950 rounded-t-[2rem] sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
+            <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
               <div className="flex items-center justify-between">
                 <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Iniciar Rutina</h4>
                 <button onClick={() => { setIsAddingDay(false); setNewDayForm(null); }} className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors">
