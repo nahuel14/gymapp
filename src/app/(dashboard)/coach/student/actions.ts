@@ -126,8 +126,12 @@ export async function addDayToWeek(planId: number, weekNumber: number, nextOrder
 
 export async function duplicateSession(sessionId: number, targetDate: string) {
   const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
 
-  const { data: originalSession, error: fetchSessionError } = await supabase
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: originalSession, error: fetchSessionError } = await adminClient
     .from("sessions")
     .select("*")
     .eq("id", sessionId)
@@ -135,7 +139,18 @@ export async function duplicateSession(sessionId: number, targetDate: string) {
 
   if (fetchSessionError || !originalSession) throw new Error("No se encontró la sesión original");
 
-  const { data: newSession, error: createSessionError } = await supabase
+  const { data: existingOnDate } = await adminClient
+    .from("sessions")
+    .select("id")
+    .eq("plan_id", (originalSession as any).plan_id)
+    .eq("date", targetDate)
+    .limit(1);
+
+  if (existingOnDate && existingOnDate.length > 0) {
+    throw new Error("Ya existe un entrenamiento en esa fecha.");
+  }
+
+  const { data: newSession, error: createSessionError } = await adminClient
     .from("sessions")
     .insert({
       plan_id: originalSession.plan_id,
@@ -150,7 +165,7 @@ export async function duplicateSession(sessionId: number, targetDate: string) {
 
   if (createSessionError || !newSession) throw createSessionError;
 
-  const { data: exercises, error: fetchExError } = await supabase
+  const { data: exercises, error: fetchExError } = await adminClient
     .from("session_exercises")
     .select("*")
     .eq("session_id", sessionId);
@@ -170,7 +185,7 @@ export async function duplicateSession(sessionId: number, targetDate: string) {
       order_index: ex.order_index
     }));
 
-    const { error: insertExError } = await supabase
+    const { error: insertExError } = await adminClient
       .from("session_exercises")
       .insert(duplicatedExercises as any);
 
@@ -182,11 +197,14 @@ export async function duplicateSession(sessionId: number, targetDate: string) {
   return { success: true, newSessionId: newSession.id };
 }
 
-// NUEVA FUNCIÓN: Mover sesión a otro día
 export async function moveSession(sessionId: number, newDate: string) {
   const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
 
-  const { data: session } = await supabase
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: session } = await adminClient
     .from("sessions")
     .select("plan_id")
     .eq("id", sessionId)
@@ -194,17 +212,29 @@ export async function moveSession(sessionId: number, newDate: string) {
 
   if (!session || !session.plan_id) throw new Error("Sesión o plan no encontrado");
 
-  // Validar que no haya ya una sesión en esa fecha para este plan
-  const { data: existingSession } = await supabase
+  const { data: plan } = await adminClient
+    .from("training_plans")
+    .select("start_date, end_date")
+    .eq("id", (session as any).plan_id)
+    .single();
+
+  if (!plan) throw new Error("Plan no encontrado");
+
+  const startDate: string | null = (plan as any).start_date;
+  const endDate: string | null = (plan as any).end_date;
+  if (startDate && newDate < startDate) throw new Error("La fecha está fuera del rango del plan.");
+  if (endDate && newDate > endDate) throw new Error("La fecha está fuera del rango del plan.");
+
+  const { data: existingSession } = await adminClient
     .from("sessions")
     .select("id")
-    .eq("plan_id", session.plan_id)
+    .eq("plan_id", (session as any).plan_id)
     .eq("date", newDate)
     .maybeSingle();
 
-  if (existingSession) throw new Error("Ya existe un entrenamiento en esta fecha. Selecciona un día libre.");
+  if (existingSession) throw new Error("Ya existe un entrenamiento en esa fecha.");
 
-  const { error } = await supabase
+  const { error } = await adminClient
     .from("sessions")
     .update({ date: newDate } as any)
     .eq("id", sessionId);

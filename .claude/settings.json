@@ -1,0 +1,19 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(node -e \"const { execSync } = require\\('child_process'\\); try { const out = execSync\\('npx vitest run test/plans.test.ts', { env: { ...process.env, CI: 'true' }, timeout: 60000 }\\); console.log\\(out.toString\\(\\)\\); } catch\\(e\\) { console.log\\(e.stdout?.toString\\(\\)\\); console.log\\(e.stderr?.toString\\(\\)\\); }\")",
+      "Bash(node -e \"const { execSync } = require\\('child_process'\\); try { const out = execSync\\('npx vitest run test/plans.test.ts --reporter=verbose 2>&1', { env: { ...process.env, CI: 'true' }, timeout: 60000 }\\); console.log\\(out.toString\\(\\)\\); } catch\\(e\\) { console.log\\(e.stdout?.toString\\(\\)\\); console.log\\(e.stderr?.toString\\(\\)\\); }\")",
+      "Bash(node -e \"const { execSync } = require\\('child_process'\\); try { const out = execSync\\('npx vitest run test/plans.test.ts --reporter=verbose', { env: { ...process.env, CI: 'true' }, timeout: 60000, stdio: 'pipe' }\\); console.log\\(out.toString\\(\\)\\); } catch\\(e\\) { console.log\\(e.stdout?.toString\\(\\)\\); console.log\\(e.stderr?.toString\\(\\)\\); }\")",
+      "Bash(node -e \"const pkg = require\\('./package.json'\\); const deps = {...pkg.dependencies, ...pkg.devDependencies}; const relevant = Object.keys\\(deps\\).filter\\(k => k.includes\\('radix'\\) || k.includes\\('day-picker'\\) || k.includes\\('date'\\) || k.includes\\('popover'\\) || k.includes\\('calendar'\\)\\); console.log\\(JSON.stringify\\(relevant, null, 2\\)\\);\")",
+      "Bash(node -e \"const pkg = require\\('./package.json'\\); console.log\\(JSON.stringify\\(pkg.dependencies, null, 2\\)\\);\")",
+      "Bash(npx shadcn@latest add calendar popover)",
+      "PowerShell(npx shadcn@latest add calendar popover 2>&1)",
+      "PowerShell(npx tsc --noEmit 2>&1)",
+      "PowerShell(node -e \"console.log\\(require\\('./node_modules/react-day-picker/package.json'\\).version\\)\")",
+      "PowerShell(node -e \"const rdp = require\\('./node_modules/react-day-picker'\\); console.log\\(Object.keys\\(rdp\\).slice\\(0,20\\)\\)\")",
+      "PowerShell(npm install react-day-picker@9 2>&1)",
+      "PowerShell(tail -5)",
+      "PowerShell(node -e \"const { es } = require\\('react-day-picker/locale'\\); console.log\\(es ? 'OK: es locale found' : 'ERROR: es locale not found'\\)\")"
+    ]
+  }
+}

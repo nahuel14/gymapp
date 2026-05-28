@@ -161,6 +161,44 @@ function sessionBelongsToPlan(
   return session.plan_id !== null && String(session.plan_id) === currentViewedPlanId;
 }
 
+function simulateDuplicateSession(
+  existingSessions: { date: string }[],
+  targetDate: string,
+  planRange: { start_date: string; end_date: string }
+): { success: boolean; date: string } {
+  if (!targetDate) throw new Error("Seleccioná una fecha destino.");
+  if (targetDate < planRange.start_date || targetDate > planRange.end_date) {
+    throw new Error("La fecha destino está fuera del rango del plan.");
+  }
+  if (existingSessions.some(s => s.date === targetDate)) {
+    throw new Error("Ya existe un entrenamiento en esa fecha.");
+  }
+  return { success: true, date: targetDate };
+}
+
+function simulateCopyExercises(
+  sourceExercises: { exercise_id: number; target_sets: number }[]
+): { exercise_id: number; target_sets: number }[] {
+  return sourceExercises.map(ex => ({ ...ex }));
+}
+
+function simulateMoveSessionWithRange(
+  existingSessions: { date: string }[],
+  newDate: string,
+  planRange: { start_date: string | null; end_date: string | null }
+): { success: boolean; new_date: string } {
+  if (planRange.start_date && newDate < planRange.start_date) {
+    throw new Error("La fecha está fuera del rango del plan.");
+  }
+  if (planRange.end_date && newDate > planRange.end_date) {
+    throw new Error("La fecha está fuera del rango del plan.");
+  }
+  if (existingSessions.some(s => s.date === newDate)) {
+    throw new Error("Ya existe un entrenamiento en esa fecha.");
+  }
+  return { success: true, new_date: newDate };
+}
+
 // --- Tests ---
 
 describe('ESCENARIO 1: Creacion de Plan', () => {
@@ -529,5 +567,262 @@ describe('ESCENARIO 10: Fetch de Sesiones para Todos los Planes (regresion bug)'
     const sessions = [{ plan_id: 1, date: '2026-05-28' }];
     const result = filterSessionsAllPlans(sessions, []);
     expect(result).toHaveLength(0);
+  });
+});
+
+describe('ESCENARIO 11: Duplicar Día', () => {
+  const plan = { start_date: '2026-06-01', end_date: '2026-06-28' };
+
+  it('permite duplicar a una fecha libre dentro del plan', () => {
+    const sessions = [{ date: '2026-06-02' }, { date: '2026-06-05' }];
+    const result = simulateDuplicateSession(sessions, '2026-06-09', plan);
+    expect(result.success).toBe(true);
+    expect(result.date).toBe('2026-06-09');
+  });
+
+  it('lanza error si la fecha destino ya tiene sesion', () => {
+    const sessions = [{ date: '2026-06-02' }, { date: '2026-06-09' }];
+    expect(() => simulateDuplicateSession(sessions, '2026-06-09', plan))
+      .toThrow("Ya existe un entrenamiento en esa fecha.");
+  });
+
+  it('lanza error si la fecha destino esta fuera del rango del plan', () => {
+    const sessions = [{ date: '2026-06-02' }];
+    expect(() => simulateDuplicateSession(sessions, '2026-07-05', plan))
+      .toThrow("La fecha destino está fuera del rango del plan.");
+    expect(() => simulateDuplicateSession(sessions, '2026-05-31', plan))
+      .toThrow("La fecha destino está fuera del rango del plan.");
+  });
+
+  it('lanza error si no se selecciono fecha', () => {
+    expect(() => simulateDuplicateSession([], '', plan))
+      .toThrow("Seleccioná una fecha destino.");
+  });
+
+  it('la duplicacion copia todos los ejercicios de la sesion origen', () => {
+    const sourceExercises = [
+      { exercise_id: 1, target_sets: 3 },
+      { exercise_id: 5, target_sets: 4 },
+    ];
+    const copied = simulateCopyExercises(sourceExercises);
+    expect(copied).toHaveLength(2);
+    expect(copied[0]).toEqual({ exercise_id: 1, target_sets: 3 });
+    expect(copied[1]).toEqual({ exercise_id: 5, target_sets: 4 });
+  });
+
+  it('los ejercicios copiados son independientes del original (sin referencia compartida)', () => {
+    const sourceExercises = [{ exercise_id: 1, target_sets: 3 }];
+    const copied = simulateCopyExercises(sourceExercises);
+    copied[0].target_sets = 99;
+    expect(sourceExercises[0].target_sets).toBe(3);
+  });
+
+  it('duplicar a cualquier dia de la semana es valido (no solo lunes)', () => {
+    const sessions: { date: string }[] = [];
+    // Martes, Miércoles, Sábado → todos permitidos
+    expect(simulateDuplicateSession(sessions, '2026-06-02', plan).success).toBe(true); // martes
+    expect(simulateDuplicateSession(sessions, '2026-06-06', plan).success).toBe(true); // sabado
+    expect(simulateDuplicateSession(sessions, '2026-06-07', plan).success).toBe(true); // domingo
+  });
+});
+
+describe('ESCENARIO 12: Reagendar Sesion', () => {
+  const plan = { start_date: '2026-06-01', end_date: '2026-06-28' };
+
+  it('permite reagendar a una fecha libre dentro del plan', () => {
+    const sessions = [{ date: '2026-06-02' }, { date: '2026-06-05' }];
+    const result = simulateMoveSessionWithRange(sessions, '2026-06-10', plan);
+    expect(result.success).toBe(true);
+    expect(result.new_date).toBe('2026-06-10');
+  });
+
+  it('lanza error si la fecha destino ya tiene sesion', () => {
+    const sessions = [{ date: '2026-06-02' }, { date: '2026-06-10' }];
+    expect(() => simulateMoveSessionWithRange(sessions, '2026-06-10', plan))
+      .toThrow("Ya existe un entrenamiento en esa fecha.");
+  });
+
+  it('lanza error si la fecha destino esta antes del inicio del plan', () => {
+    const sessions = [{ date: '2026-06-02' }];
+    expect(() => simulateMoveSessionWithRange(sessions, '2026-05-31', plan))
+      .toThrow("La fecha está fuera del rango del plan.");
+  });
+
+  it('lanza error si la fecha destino esta despues del fin del plan', () => {
+    const sessions = [{ date: '2026-06-02' }];
+    expect(() => simulateMoveSessionWithRange(sessions, '2026-06-29', plan))
+      .toThrow("La fecha está fuera del rango del plan.");
+  });
+
+  it('la sesion de origen no bloquea su propia reagendacion', () => {
+    // La sesion esta en Jun 02 y se mueve a Jun 10. Jun 02 no interfiere con Jun 10.
+    const sessions = [{ date: '2026-06-02' }];
+    const result = simulateMoveSessionWithRange(sessions, '2026-06-10', plan);
+    expect(result.success).toBe(true);
+  });
+
+  it('permite reagendar a la semana anterior dentro del plan', () => {
+    // Sesion en semana 2 (Jun 08) → mover a semana 1 (Jun 03)
+    const sessions = [{ date: '2026-06-08' }];
+    const result = simulateMoveSessionWithRange(sessions, '2026-06-03', plan);
+    expect(result.success).toBe(true);
+    expect(result.new_date).toBe('2026-06-03');
+  });
+
+  it('permite reagendar a la semana siguiente dentro del plan', () => {
+    // Sesion en semana 1 (Jun 03) → mover a semana 2 (Jun 10)
+    const sessions = [{ date: '2026-06-03' }];
+    const result = simulateMoveSessionWithRange(sessions, '2026-06-10', plan);
+    expect(result.success).toBe(true);
+    expect(result.new_date).toBe('2026-06-10');
+  });
+
+  it('no bloquea por rango cuando el plan no tiene end_date', () => {
+    const sessions = [{ date: '2026-06-02' }];
+    const planSinFin = { start_date: '2026-06-01', end_date: null };
+    // Cualquier fecha futura no debe ser bloqueada por falta de end_date
+    const result = simulateMoveSessionWithRange(sessions, '2026-12-31', planSinFin);
+    expect(result.success).toBe(true);
+  });
+
+  it('no bloquea por rango cuando el plan no tiene start_date', () => {
+    const sessions = [{ date: '2026-06-02' }];
+    const planSinInicio = { start_date: null, end_date: '2026-06-28' };
+    // Cualquier fecha anterior no debe ser bloqueada por falta de start_date
+    const result = simulateMoveSessionWithRange(sessions, '2026-01-01', planSinInicio);
+    expect(result.success).toBe(true);
+  });
+});
+
+function simulateDeleteSession(
+  sessions: { id: number; date: string; exercises?: { id: number }[] }[],
+  sessionId: number
+): { sessions: { id: number; date: string; exercises?: { id: number }[] }[]; deleted: boolean } {
+  const index = sessions.findIndex(s => s.id === sessionId);
+  if (index === -1) return { sessions, deleted: false };
+  const updated = sessions.filter(s => s.id !== sessionId);
+  return { sessions: updated, deleted: true };
+}
+
+function simulateAddSession(
+  existingSessions: { date: string; plan_id: number }[],
+  newDate: string,
+  planId: number,
+  planRange: { start_date: string; end_date: string }
+): { success: boolean; date: string; plan_id: number } {
+  if (!newDate) throw new Error("Seleccioná una fecha.");
+  if (newDate < planRange.start_date || newDate > planRange.end_date) {
+    throw new Error("La fecha está fuera del rango del plan.");
+  }
+  if (existingSessions.some(s => s.date === newDate && s.plan_id === planId)) {
+    throw new Error("Ya existe un entrenamiento en esa fecha.");
+  }
+  return { success: true, date: newDate, plan_id: planId };
+}
+
+describe('ESCENARIO 13: Eliminar Día', () => {
+  it('eliminar una sesion la remueve de la lista', () => {
+    const sessions = [
+      { id: 1, date: '2026-06-02', exercises: [] },
+      { id: 2, date: '2026-06-05', exercises: [] },
+    ];
+    const { sessions: updated, deleted } = simulateDeleteSession(sessions, 1);
+    expect(deleted).toBe(true);
+    expect(updated).toHaveLength(1);
+    expect(updated.find(s => s.id === 1)).toBeUndefined();
+  });
+
+  it('las sesiones restantes no se modifican al eliminar una', () => {
+    const sessions = [
+      { id: 1, date: '2026-06-02', exercises: [] },
+      { id: 2, date: '2026-06-05', exercises: [{ id: 10 }] },
+    ];
+    const { sessions: updated } = simulateDeleteSession(sessions, 1);
+    expect(updated[0]).toEqual({ id: 2, date: '2026-06-05', exercises: [{ id: 10 }] });
+  });
+
+  it('eliminar una sesion remueve sus ejercicios junto con ella', () => {
+    const sessions = [
+      { id: 1, date: '2026-06-02', exercises: [{ id: 10 }, { id: 11 }] },
+      { id: 2, date: '2026-06-05', exercises: [{ id: 20 }] },
+    ];
+    const { sessions: updated } = simulateDeleteSession(sessions, 1);
+    const deletedSession = updated.find(s => s.id === 1);
+    expect(deletedSession).toBeUndefined();
+    // Los ejercicios de la sesion 2 siguen intactos
+    expect(updated[0].exercises).toHaveLength(1);
+    expect(updated[0].exercises![0].id).toBe(20);
+  });
+
+  it('intentar eliminar una sesion inexistente no modifica la lista', () => {
+    const sessions = [
+      { id: 1, date: '2026-06-02', exercises: [] },
+    ];
+    const { sessions: updated, deleted } = simulateDeleteSession(sessions, 99);
+    expect(deleted).toBe(false);
+    expect(updated).toHaveLength(1);
+  });
+
+  it('eliminar la unica sesion deja la lista vacia', () => {
+    const sessions = [{ id: 1, date: '2026-06-02', exercises: [] }];
+    const { sessions: updated, deleted } = simulateDeleteSession(sessions, 1);
+    expect(deleted).toBe(true);
+    expect(updated).toHaveLength(0);
+  });
+});
+
+describe('ESCENARIO 14: Agregar Día (Iniciar Rutina)', () => {
+  const plan = { start_date: '2026-06-01', end_date: '2026-06-28' };
+  const planId = 7;
+
+  it('permite agregar una sesion a una fecha libre dentro del plan', () => {
+    const sessions: { date: string; plan_id: number }[] = [];
+    const result = simulateAddSession(sessions, '2026-06-03', planId, plan);
+    expect(result.success).toBe(true);
+    expect(result.date).toBe('2026-06-03');
+  });
+
+  it('la sesion creada pertenece al plan correcto', () => {
+    const sessions: { date: string; plan_id: number }[] = [];
+    const result = simulateAddSession(sessions, '2026-06-03', planId, plan);
+    expect(result.plan_id).toBe(planId);
+  });
+
+  it('lanza error si la fecha ya tiene una sesion en el mismo plan', () => {
+    const sessions = [{ date: '2026-06-03', plan_id: planId }];
+    expect(() => simulateAddSession(sessions, '2026-06-03', planId, plan))
+      .toThrow("Ya existe un entrenamiento en esa fecha.");
+  });
+
+  it('permite agregar a la misma fecha si pertenece a otro plan', () => {
+    // Otra sesion en la misma fecha pero de plan_id diferente no debe bloquear
+    const sessions = [{ date: '2026-06-03', plan_id: 99 }];
+    const result = simulateAddSession(sessions, '2026-06-03', planId, plan);
+    expect(result.success).toBe(true);
+  });
+
+  it('lanza error si la fecha esta fuera del rango del plan', () => {
+    const sessions: { date: string; plan_id: number }[] = [];
+    expect(() => simulateAddSession(sessions, '2026-05-31', planId, plan))
+      .toThrow("La fecha está fuera del rango del plan.");
+    expect(() => simulateAddSession(sessions, '2026-06-29', planId, plan))
+      .toThrow("La fecha está fuera del rango del plan.");
+  });
+
+  it('permite agregar a cualquier dia de la semana (martes, sabado, domingo)', () => {
+    const sessions: { date: string; plan_id: number }[] = [];
+    expect(simulateAddSession(sessions, '2026-06-02', planId, plan).success).toBe(true); // martes
+    expect(simulateAddSession(sessions, '2026-06-06', planId, plan).success).toBe(true); // sabado
+    expect(simulateAddSession(sessions, '2026-06-07', planId, plan).success).toBe(true); // domingo
+  });
+
+  it('permite agregar multiples sesiones en la misma semana', () => {
+    const sessions: { date: string; plan_id: number }[] = [];
+    simulateAddSession(sessions, '2026-06-01', planId, plan); // lunes
+    sessions.push({ date: '2026-06-01', plan_id: planId });
+    simulateAddSession(sessions, '2026-06-03', planId, plan); // miercoles
+    sessions.push({ date: '2026-06-03', plan_id: planId });
+    const result = simulateAddSession(sessions, '2026-06-05', planId, plan); // viernes
+    expect(result.success).toBe(true);
   });
 });

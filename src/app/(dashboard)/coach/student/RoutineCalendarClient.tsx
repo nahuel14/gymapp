@@ -28,6 +28,7 @@ import {
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "./ExerciseExcelGrid";
 import { ImportTemplateModal } from "./ImportTemplateModal";
+import { DatePickerField } from "@/components/DatePickerField";
 
 // FIX TYPESCRIPT: Le decimos explícitamente que session puede traer un "date"
 type Session = Tables<"sessions"> & { 
@@ -96,6 +97,11 @@ export function RoutineCalendarClient({
   const [isAddingDay, setIsAddingDay] = useState(false);
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isRescheduling, setIsRescheduling] = useState(false);
+  const [rescheduleTargetDate, setRescheduleTargetDate] = useState<string>("");
+  const [rescheduleError, setRescheduleError] = useState<string | null>(null);
+  const [isDuplicating, setIsDuplicating] = useState(false);
+  const [duplicateTargetDate, setDuplicateTargetDate] = useState<string>("");
+  const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const [newDayForm, setNewDayForm] = useState<{ date: string } | null>(null);
 
   const [newExForm, setNewExForm] = useState({
@@ -196,37 +202,48 @@ export function RoutineCalendarClient({
     });
   };
 
-  const handleMoveSession = (newDate: string) => {
+  const handleOpenReschedule = () => {
+    setRescheduleTargetDate(toLocalISODate(new Date()));
+    setRescheduleError(null);
+    setIsRescheduling(true);
+  };
+
+  const handleMoveSession = () => {
     const sessionId = activeSessionsForDate[0]?.id;
-    if (!sessionId) return;
+    if (!sessionId || !rescheduleTargetDate) return;
 
     startTransition(async () => {
       try {
-        await moveSession(sessionId, newDate);
-        await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+        await moveSession(sessionId, rescheduleTargetDate);
         router.refresh();
+        await queryClient.refetchQueries({ queryKey: ["student", "routine"] });
         setIsRescheduling(false);
-        setSelectedDate(newDate);
+        setSelectedDate(rescheduleTargetDate);
       } catch (error: any) {
-        alert(error.message || "Error al reagendar la sesión");
+        setRescheduleError(error.message || "Error al reagendar la sesión");
       }
     });
   };
 
-  const handleDuplicateDay = async () => {
+  const handleDuplicateDay = () => {
+    if (!activeSessionsForDate[0]?.id) return;
+    setDuplicateTargetDate(toLocalISODate(new Date()));
+    setDuplicateError(null);
+    setIsDuplicating(true);
+  };
+
+  const handleConfirmDuplicate = () => {
     const sourceSessionId = activeSessionsForDate[0]?.id;
-    if (!sourceSessionId) return;
-    const targetDate = prompt("Ingrese la fecha para el nuevo día (YYYY-MM-DD):", toLocalISODate(new Date()));
-    if (!targetDate) return;
+    if (!sourceSessionId || !duplicateTargetDate) return;
 
     startTransition(async () => {
       try {
-        await duplicateSession(sourceSessionId, targetDate);
-        await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
-        router.refresh();
-        alert("Día duplicado con éxito");
-      } catch (error) {
-        console.error("Error duplicating day:", error);
+        await duplicateSession(sourceSessionId, duplicateTargetDate);
+        await queryClient.refetchQueries({ queryKey: ["student", "routine"] });
+        setIsDuplicating(false);
+        setSelectedDate(duplicateTargetDate);
+      } catch (error: any) {
+        setDuplicateError(error?.message || "Error al duplicar el día");
       }
     });
   };
@@ -398,8 +415,8 @@ export function RoutineCalendarClient({
           <div className="flex items-center gap-1.5">
             {/* BOTÓN REAGENDAR: Visible para Alumno y Coach si hay sesión */}
             {activeSessionsForDate.length > 0 && !isAddingDay && (
-              <button 
-                onClick={() => setIsRescheduling(true)} 
+              <button
+                onClick={handleOpenReschedule}
                 className="flex h-9 items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition hover:bg-zinc-700 hover:text-white active:scale-95"
               >
                 <CalendarClock className="h-4 w-4 shrink-0" />
@@ -426,42 +443,34 @@ export function RoutineCalendarClient({
 
         {/* MODAL DE REAGENDAR DÍA (BOTTOM SHEET) */}
         {isRescheduling && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
-            <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
-              <div className="flex items-center justify-between">
+          <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+            <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col max-h-[92dvh]">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
                 <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Reagendar Sesión</h4>
                 <button onClick={() => setIsRescheduling(false)} className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors">
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="flex flex-col gap-3">
-                <p className="text-xs text-zinc-400">Seleccioná un día libre de esta semana para mover tu entrenamiento:</p>
-                <div className="grid grid-cols-2 gap-3 mt-2">
-                  {weeklyDays.map(day => {
-                    const isEmpty = day.sessions.length === 0;
-                    if (!isEmpty) return null; 
-                    
-                    const dateObj = new Date(day.date + "T00:00:00");
-                    const dayName = new Intl.DateTimeFormat("es-AR", { weekday: "long" }).format(dateObj);
-                    const dayNum = dateObj.getDate();
-                    
-                    return (
-                      <button
-                        key={day.date}
-                        onClick={() => handleMoveSession(day.date)}
-                        className="flex items-center justify-center rounded-xl border border-zinc-800 bg-zinc-900 py-3 text-sm font-bold text-zinc-300 capitalize transition hover:border-yellow-400 hover:bg-yellow-400/10 hover:text-yellow-400 active:scale-95"
-                      >
-                        {dayName} {dayNum}
-                      </button>
-                    );
-                  })}
-                  
-                  {weeklyDays.filter(d => d.sessions.length === 0).length === 0 && (
-                    <div className="col-span-2 text-center py-4 text-xs font-bold text-zinc-500 bg-zinc-900/50 rounded-xl">
-                      No hay días libres en esta semana
-                    </div>
-                  )}
-                </div>
+              <div className="flex-1 overflow-y-auto px-6 pb-2">
+                <DatePickerField
+                  label="Nueva fecha"
+                  value={rescheduleTargetDate}
+                  onChange={(v) => { setRescheduleTargetDate(v); setRescheduleError(null); }}
+                  min={currentViewedPlan?.startDate}
+                  max={currentViewedPlan?.endDate}
+                />
+                {rescheduleError && (
+                  <p className="text-xs font-bold text-red-400 text-center mt-3">{rescheduleError}</p>
+                )}
+              </div>
+              <div className="px-6 pt-4 pb-8 sm:pb-6 shrink-0">
+                <button
+                  onClick={handleMoveSession}
+                  disabled={isPending || !rescheduleTargetDate}
+                  className="h-14 w-full rounded-2xl bg-yellow-400 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-400/20 transition-all hover:bg-yellow-300 active:scale-95 disabled:opacity-50"
+                >
+                  {isPending ? "Reagendando..." : "Confirmar"}
+                </button>
               </div>
             </div>
           </div>
@@ -469,21 +478,61 @@ export function RoutineCalendarClient({
 
         {/* MODAL AGREGAR DÍA NUEVO */}
         {currentViewedPlan && isAddingDay && (
-          <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
-            <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 p-6 pb-8 sm:pb-6 flex flex-col gap-6 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md">
-              <div className="flex items-center justify-between">
+          <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+            <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col max-h-[92dvh]">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
                 <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Iniciar Rutina</h4>
                 <button onClick={() => { setIsAddingDay(false); setNewDayForm(null); }} className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors">
                   <X className="h-5 w-5" />
                 </button>
               </div>
-              <div className="flex flex-col gap-5">
-                <div className="flex flex-col gap-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Confirmar Fecha</label>
-                  <input type="date" className="w-full h-14 rounded-2xl border border-zinc-800 bg-zinc-900 px-4 text-sm font-black text-zinc-100 outline-none focus:border-yellow-400 transition-all uppercase" value={newDayForm?.date ?? ""} onChange={(e) => setNewDayForm({ date: e.target.value })} />
-                </div>
+              <div className="flex-1 overflow-y-auto px-6 pb-2">
+                <DatePickerField
+                  label="Confirmar Fecha"
+                  value={newDayForm?.date ?? ""}
+                  onChange={(v) => setNewDayForm({ date: v })}
+                  min={currentViewedPlan?.startDate}
+                  max={currentViewedPlan?.endDate}
+                />
+              </div>
+              <div className="px-6 pt-4 pb-8 sm:pb-6 shrink-0">
                 <button onClick={handleAddDay} className="h-14 w-full rounded-2xl bg-yellow-400 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-400/20 transition-all hover:bg-yellow-300 active:scale-95">
                   Confirmar
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* MODAL DUPLICAR DÍA */}
+        {isDuplicating && (
+          <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+            <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col max-h-[92dvh]">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+                <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Duplicar Día</h4>
+                <button onClick={() => setIsDuplicating(false)} className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="flex-1 overflow-y-auto px-6 pb-2">
+                <DatePickerField
+                  label="Fecha destino"
+                  value={duplicateTargetDate}
+                  onChange={(v) => { setDuplicateTargetDate(v); setDuplicateError(null); }}
+                  min={currentViewedPlan?.startDate}
+                  max={currentViewedPlan?.endDate}
+                />
+                {duplicateError && (
+                  <p className="text-xs font-bold text-red-400 text-center mt-3">{duplicateError}</p>
+                )}
+              </div>
+              <div className="px-6 pt-4 pb-8 sm:pb-6 shrink-0">
+                <button
+                  onClick={handleConfirmDuplicate}
+                  disabled={isPending || !duplicateTargetDate}
+                  className="h-14 w-full rounded-2xl bg-yellow-400 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-400/20 transition-all hover:bg-yellow-300 active:scale-95 disabled:opacity-50"
+                >
+                  {isPending ? "Duplicando..." : "Confirmar"}
                 </button>
               </div>
             </div>

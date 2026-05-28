@@ -283,7 +283,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
       onClick={onClose}
     >
       <div
-        className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl flex flex-col sm:max-w-lg"
+        className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl flex flex-col sm:max-w-lg max-h-[92dvh] sm:max-h-[85vh]"
         onClick={e => e.stopPropagation()}
       >
         {/* Header fijo */}
@@ -430,7 +430,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
         </div>
 
         {/* Footer fijo */}
-        <div className="shrink-0 px-5 pt-3 pb-8 sm:pb-5 flex flex-col gap-2.5 border-t border-zinc-800/60 mt-3">
+        <div className="shrink-0 px-5 pt-3 pb-6 sm:pb-5 flex flex-col gap-2 border-t border-zinc-800/60">
           {error && (
             <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 flex items-start gap-2">
               <span className="text-red-400 font-black text-sm shrink-0">!</span>
@@ -452,7 +452,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
             <button
               onClick={handleUpdatePlan}
               disabled={isPending}
-              className="w-full rounded-2xl bg-yellow-400 py-3.5 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+              className="w-full rounded-2xl bg-yellow-400 py-3 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
             >
               {isPending ? "Guardando..." : "GUARDAR CAMBIOS"}
             </button>
@@ -462,7 +462,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
             <button
               onClick={() => { setIsConfirmingDelete(true); setError(null); }}
               disabled={isPending}
-              className="w-full rounded-2xl border border-red-500/30 py-3 text-sm font-black uppercase tracking-widest text-red-500 transition hover:bg-red-500/10 active:scale-[0.99] disabled:opacity-50"
+              className="w-full rounded-2xl border border-red-500/30 py-2.5 text-sm font-black uppercase tracking-widest text-red-500 transition hover:bg-red-500/10 active:scale-[0.99] disabled:opacity-50"
             >
               ELIMINAR PLAN
             </button>
