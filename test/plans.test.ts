@@ -140,6 +140,27 @@ function shiftWeekLocal(dateStr: string, weeks: number): string {
   return `${y}-${m}-${day}`;
 }
 
+function filterSessionsActiveOnly(
+  sessions: { plan_id: number; date: string }[],
+  activePlanId: number
+): { plan_id: number; date: string }[] {
+  return sessions.filter(s => s.plan_id === activePlanId);
+}
+
+function filterSessionsAllPlans(
+  sessions: { plan_id: number; date: string }[],
+  allPlanIds: number[]
+): { plan_id: number; date: string }[] {
+  return sessions.filter(s => allPlanIds.includes(s.plan_id));
+}
+
+function sessionBelongsToPlan(
+  session: { plan_id: number | null },
+  currentViewedPlanId: string
+): boolean {
+  return session.plan_id !== null && String(session.plan_id) === currentViewedPlanId;
+}
+
 // --- Tests ---
 
 describe('ESCENARIO 1: Creacion de Plan', () => {
@@ -454,5 +475,59 @@ describe('ESCENARIO 9: Colision al Desplazar Fecha de Inicio del Plan', () => {
     // Sesiones Jun 1, Jun 8. Offset -7 → May 25, Jun 1. Nuevo fin Jun 14 → ambas dentro.
     const sessions = [{ date: '2026-06-01' }, { date: '2026-06-08' }];
     expect(hasShiftedSessionOutside(sessions, -7, '2026-06-14')).toBe(false);
+  });
+});
+
+describe('ESCENARIO 10: Fetch de Sesiones para Todos los Planes (regresion bug)', () => {
+  it('BUG: filtrar solo plan activo oculta sesiones de planes inactivos', () => {
+    // Antes del fix: useStudentRoutine solo fetcheaba sesiones del plan activo (id=1).
+    // Una sesion creada en plan 2 no aparecia aunque el coach la acabara de crear.
+    const sessions = [
+      { plan_id: 1, date: '2026-05-26' },
+      { plan_id: 2, date: '2026-05-28' }, // sesion recien creada en plan inactivo
+    ];
+    const result = filterSessionsActiveOnly(sessions, 1);
+    expect(result).toHaveLength(1);
+    expect(result.find(s => s.date === '2026-05-28')).toBeUndefined();
+  });
+
+  it('FIX: incluir todos los planes muestra sesiones de activos e inactivos', () => {
+    const sessions = [
+      { plan_id: 1, date: '2026-05-26' },
+      { plan_id: 2, date: '2026-05-28' },
+    ];
+    const result = filterSessionsAllPlans(sessions, [1, 2]);
+    expect(result).toHaveLength(2);
+    expect(result.find(s => s.date === '2026-05-28')).toBeDefined();
+  });
+
+  it('sesion recien creada en el plan visualizado aparece tras refetch', () => {
+    // Simula el estado post-insert: plan 2 tiene la nueva sesion del 28/05
+    const sessions = [
+      { plan_id: 1, date: '2026-05-10' },
+      { plan_id: 2, date: '2026-05-28' }, // nueva sesion
+    ];
+    const result = filterSessionsAllPlans(sessions, [1, 2]);
+    const newSession = result.find(s => s.plan_id === 2 && s.date === '2026-05-28');
+    expect(newSession).toBeDefined();
+  });
+
+  it('sessionBelongsToPlan: plan_id numerico matchea con id string del plan visualizado', () => {
+    // weeklyDays filtra con String(session.plan_id) === currentViewedPlan.id
+    expect(sessionBelongsToPlan({ plan_id: 5 }, "5")).toBe(true);
+  });
+
+  it('sessionBelongsToPlan: retorna false cuando el plan_id no coincide', () => {
+    expect(sessionBelongsToPlan({ plan_id: 3 }, "5")).toBe(false);
+  });
+
+  it('sessionBelongsToPlan: retorna false cuando plan_id es null', () => {
+    expect(sessionBelongsToPlan({ plan_id: null }, "5")).toBe(false);
+  });
+
+  it('sin planes registrados no hay sesiones visibles', () => {
+    const sessions = [{ plan_id: 1, date: '2026-05-28' }];
+    const result = filterSessionsAllPlans(sessions, []);
+    expect(result).toHaveLength(0);
   });
 });

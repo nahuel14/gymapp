@@ -47,21 +47,23 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
 
   const allPlans = (allPlansData ?? []) as TrainingPlan[];
   const plan = allPlans.find((p) => p.is_active) ?? null;
-  if (!plan) {
+
+  if (allPlans.length === 0) {
     return {
       profile: typedProfile,
       plan: null,
-      allPlans: allPlans,
+      allPlans: [],
       sessions: [],
       exercisesBySession: {},
     };
   }
 
-  // 3. Todas las sesiones del plan
+  // 3. Sesiones de TODOS los planes del alumno (no solo el activo)
+  const allPlanIds = allPlans.map((p) => p.id);
   const { data: sessions } = await supabase
     .from("sessions")
     .select("*")
-    .eq("plan_id", plan.id)
+    .in("plan_id", allPlanIds as any)
     .order("week_number", { ascending: true })
     .order("order_index", { ascending: true });
 
@@ -69,7 +71,7 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
 
   // 4. Ejercicios de todas las sesiones
   const sessionIds = typedSessions.map((s) => s.id);
-  
+
   if (sessionIds.length === 0) {
     return {
       profile: typedProfile,
@@ -89,7 +91,7 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
     .order("order_index", { ascending: true });
 
   const typedExercises = (sessionExercises ?? []) as SessionExercise[];
-  
+
   const exercisesBySession: Record<number, SessionExercise[]> = {};
   typedExercises.forEach((ex) => {
     if (ex.session_id) {

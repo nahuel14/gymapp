@@ -101,8 +101,12 @@ export async function addWeekToPlan(planId: number, nextWeekNumber: number) {
 
 export async function addDayToWeek(planId: number, weekNumber: number, nextOrderIndex: number, dayName: string = "Monday", date?: string) {
   const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
 
-  const { error } = await supabase
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { error } = await adminClient
     .from("sessions")
     .insert({
       plan_id: planId,

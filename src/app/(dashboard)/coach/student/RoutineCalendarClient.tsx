@@ -184,12 +184,15 @@ export function RoutineCalendarClient({
     const nextOrder = (activeSessionsForDate.length > 0 ? Math.max(...activeSessionsForDate.map((s) => s.order_index ?? 0)) : 0) + 1;
 
     startTransition(async () => {
-      await addDayToWeek(Number(currentViewedPlan.id), viewedWeekNumber, nextOrder, "Day", newDayForm.date);
-      await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
-      router.refresh();
-      setIsAddingDay(false);
-      setSelectedDate(newDayForm.date);
-      setNewDayForm(null);
+      try {
+        await addDayToWeek(Number(currentViewedPlan.id), viewedWeekNumber, nextOrder, "Day", newDayForm.date);
+        await queryClient.refetchQueries({ queryKey: ["student", "routine"] });
+        setIsAddingDay(false);
+        setSelectedDate(newDayForm.date);
+        setNewDayForm(null);
+      } catch (error: any) {
+        alert(error?.message || "Error al crear el día");
+      }
     });
   };
 
