@@ -47,6 +47,33 @@ async function assertNoPlanCollision(
   }
 }
 
+async function assertNoPlanCollisionExcluding(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  studentId: string,
+  newStart: string,
+  newEnd: string,
+  excludePlanId: number
+): Promise<void> {
+  const { data: overlapping, error } = await adminClient
+    .from("training_plans")
+    .select("id, name, start_date, end_date")
+    .eq("student_id", studentId as any)
+    .eq("is_template", false as any)
+    .neq("id", excludePlanId)
+    .not("end_date", "is", null)
+    .lte("start_date", newEnd)
+    .gte("end_date", newStart);
+
+  if (error) throw error;
+
+  if (overlapping && overlapping.length > 0) {
+    const conflict = overlapping[0] as any;
+    throw new Error(
+      `PLAN_COLLISION:El período ${newStart}–${newEnd} se superpone con el plan "${conflict.name}" (${conflict.start_date} — ${conflict.end_date}).`
+    );
+  }
+}
+
 // --- Fin helpers ---
 
 export async function addWeekToPlan(planId: number, nextWeekNumber: number) {
@@ -346,6 +373,32 @@ export async function deleteDayFromPlan(sessionId: number) {
   revalidatePath("/student", "page");
   revalidatePath("/coach/templates/[id]", "page");
   revalidatePath("/coach/templates/[id]/edit", "page");
+  return { success: true };
+}
+
+export async function deletePlan(planId: number) {
+  const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: planSessions } = await adminClient
+    .from("sessions")
+    .select("id")
+    .eq("plan_id", planId);
+
+  if (planSessions && planSessions.length > 0) {
+    const sessionIds = planSessions.map((s: any) => s.id);
+    await adminClient.from("session_exercises").delete().in("session_id", sessionIds);
+    await adminClient.from("sessions").delete().in("id", sessionIds);
+  }
+
+  const { error } = await adminClient.from("training_plans").delete().eq("id", planId);
+  if (error) throw error;
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
   return { success: true };
 }
 
@@ -941,6 +994,113 @@ export async function extendPlan(planId: number, additionalWeeks: number) {
   revalidatePath("/student", "page");
 
   return { success: true, newEndDate: newEndStr };
+}
+
+export async function updatePlanMeta(
+  planId: number,
+  data: {
+    name?: string;
+    start_date?: string;
+    end_date?: string;
+  }
+) {
+  const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: plan, error: fetchError } = await adminClient
+    .from("training_plans")
+    .select("id, student_id, start_date, end_date")
+    .eq("id", planId)
+    .single();
+
+  if (fetchError || !plan) throw new Error("Plan no encontrado");
+
+  const updates: any = {};
+  if (data.name !== undefined) updates.name = data.name.trim();
+
+  const currentStart = (plan as any).start_date as string;
+  const currentEnd = (plan as any).end_date as string | null;
+  const newStart = data.start_date ? normalizeToMonday(data.start_date) : currentStart;
+  const newEnd = data.end_date ?? currentEnd ?? "";
+
+  // 1. Collision check first — before any mutation
+  if ((data.start_date !== undefined || data.end_date !== undefined) && newStart && newEnd) {
+    await assertNoPlanCollisionExcluding(adminClient, (plan as any).student_id, newStart, newEnd, planId);
+  }
+
+  // 2. Start-date change: shift all sessions by the same offset
+  if (data.start_date !== undefined && newStart !== currentStart) {
+    const offsetDays = Math.round(
+      (new Date(newStart + "T00:00:00").getTime() - new Date(currentStart + "T00:00:00").getTime())
+      / (1000 * 60 * 60 * 24)
+    );
+
+    const { data: existingSessions } = await adminClient
+      .from("sessions")
+      .select("id, date")
+      .eq("plan_id", planId)
+      .not("date", "is", null);
+
+    // Verify no shifted session lands outside the new end_date
+    if (newEnd) {
+      const outsideAfterShift = (existingSessions ?? []).some(s => {
+        const d = new Date((s as any).date + "T00:00:00");
+        d.setDate(d.getDate() + offsetDays);
+        const y = d.getFullYear();
+        const mo = String(d.getMonth() + 1).padStart(2, "0");
+        const dy = String(d.getDate()).padStart(2, "0");
+        return `${y}-${mo}-${dy}` > newEnd;
+      });
+      if (outsideAfterShift) {
+        throw new Error("No se puede desplazar: alguna sesión quedaría fuera del nuevo rango. Reducí las semanas después de cambiar el inicio.");
+      }
+    }
+
+    for (const session of existingSessions ?? []) {
+      const d = new Date((session as any).date + "T00:00:00");
+      d.setDate(d.getDate() + offsetDays);
+      const y = d.getFullYear();
+      const mo = String(d.getMonth() + 1).padStart(2, "0");
+      const dy = String(d.getDate()).padStart(2, "0");
+      await adminClient
+        .from("sessions")
+        .update({ date: `${y}-${mo}-${dy}` } as any)
+        .eq("id", session.id);
+    }
+  }
+  if (data.start_date !== undefined) updates.start_date = newStart;
+
+  // 3. End-date reduction: only when start is NOT changing
+  // (when start changes, sessions are pre-validated and shifted above)
+  if (data.end_date !== undefined) {
+    if (data.start_date === undefined && currentEnd && newEnd < currentEnd) {
+      const { data: sessionsOutside } = await adminClient
+        .from("sessions")
+        .select("id")
+        .eq("plan_id", planId)
+        .gt("date", newEnd)
+        .limit(1);
+      if (sessionsOutside && sessionsOutside.length > 0) {
+        throw new Error("No se puede reducir el plan: hay sesiones fuera del nuevo rango. Eliminá esas sesiones primero.");
+      }
+    }
+    updates.end_date = newEnd;
+  }
+
+  // 4. Persist plan changes
+  const { error } = await adminClient
+    .from("training_plans")
+    .update(updates)
+    .eq("id", planId);
+
+  if (error) throw error;
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+  return { success: true };
 }
 
 export async function createInlineExercise(data: { name: string; body_zone: string; category: string }) {

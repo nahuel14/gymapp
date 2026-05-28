@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { X, Minus, Plus, ChevronLeft, ChevronRight } from "lucide-react";
-import { importTemplateToStudent, createBlankPlan, extendPlan } from "./actions";
+import { importTemplateToStudent, createBlankPlan, updatePlanMeta, deletePlan } from "./actions";
 
 type TemplateOption = {
   id: number;
@@ -12,9 +12,10 @@ type TemplateOption = {
   training_days_count: number;
 };
 
-type ActivePlan = {
+type ManagedPlan = {
   id: number;
   name: string;
+  start_date?: string | null;
   end_date?: string | null;
 };
 
@@ -22,7 +23,8 @@ type ImportTemplateModalProps = {
   isOpen: boolean;
   onClose: () => void;
   studentId: string;
-  activePlan?: ActivePlan | null;
+  managedPlan?: ManagedPlan | null;
+  planHasSessions?: boolean;
 };
 
 const DAY_OPTIONS = [
@@ -35,19 +37,26 @@ const DAY_OPTIONS = [
   { label: "Dom", value: 0 },
 ];
 
+function toLocalDateStr(date: Date): string {
+  const y = date.getFullYear();
+  const m = String(date.getMonth() + 1).padStart(2, "0");
+  const d = String(date.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
 function getNextMonday(): string {
   const today = new Date();
   const day = today.getDay();
   const daysUntil = day === 0 ? 1 : day === 1 ? 0 : 8 - day;
   const next = new Date(today);
   next.setDate(today.getDate() + daysUntil);
-  return next.toISOString().split("T")[0];
+  return toLocalDateStr(next);
 }
 
 function shiftWeek(mondayStr: string, weeks: number): string {
   const d = new Date(mondayStr + "T00:00:00");
   d.setDate(d.getDate() + weeks * 7);
-  return d.toISOString().split("T")[0];
+  return toLocalDateStr(d);
 }
 
 function formatMonday(dateStr: string): string {
@@ -68,6 +77,20 @@ function formatDateES(dateStr: string): string {
   return raw.charAt(0).toUpperCase() + raw.slice(1);
 }
 
+function calcEndDateLocal(mondayStr: string, weeks: number): string {
+  const start = new Date(mondayStr + "T00:00:00");
+  start.setDate(start.getDate() + Math.max(weeks, 1) * 7 - 1);
+  return toLocalDateStr(start);
+}
+
+function computeInitialWeeks(startDate?: string | null, endDate?: string | null): number {
+  if (!startDate || !endDate) return 4;
+  const start = new Date(startDate + "T00:00:00");
+  const end = new Date(endDate + "T00:00:00");
+  const diffDays = Math.round((end.getTime() - start.getTime()) / (1000 * 60 * 60 * 24)) + 1;
+  return Math.max(1, Math.round(diffDays / 7));
+}
+
 function getDefaultDaysForCount(count: number): number[] {
   if (count === 2) return [1, 4];
   if (count === 3) return [1, 3, 5];
@@ -75,15 +98,15 @@ function getDefaultDaysForCount(count: number): number[] {
   return [1, 3, 5].slice(0, Math.max(1, Math.min(count, 3)));
 }
 
-export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: ImportTemplateModalProps) {
+export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, planHasSessions = false }: ImportTemplateModalProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
 
-  const hasActivePlan = !!(activePlan?.end_date);
-  const [tab, setTab] = useState<"new" | "extend">("new");
+  const isManageMode = !!managedPlan;
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
-  // New plan state
+  // Create mode state
   const [templates, setTemplates] = useState<TemplateOption[]>([]);
   const [isLoadingTemplates, setIsLoadingTemplates] = useState(false);
   const [templateId, setTemplateId] = useState("");
@@ -92,25 +115,33 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
   const [planName, setPlanName] = useState("");
   const [weeksCount, setWeeksCount] = useState(4);
 
-  // Extend state
-  const [extendWeeks, setExtendWeeks] = useState(1);
+  // Edit mode state
+  const [editName, setEditName] = useState("");
+  const [editStartDate, setEditStartDate] = useState<string>("");
+  const [editWeeks, setEditWeeks] = useState(4);
 
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!isOpen) return;
-    setTab("new");
     setError(null);
-    setTemplateId("");
-    setPlanName("");
-    setWeeksCount(4);
-    setExtendWeeks(1);
-    setSelectedDays([1, 3, 5]);
-    setStartDate(getNextMonday());
-  }, [isOpen]);
+
+    if (managedPlan) {
+      setIsConfirmingDelete(false);
+      setEditName(managedPlan.name);
+      setEditStartDate(managedPlan.start_date || getNextMonday());
+      setEditWeeks(computeInitialWeeks(managedPlan.start_date, managedPlan.end_date));
+    } else {
+      setTemplateId("");
+      setPlanName("");
+      setWeeksCount(4);
+      setSelectedDays([1, 3, 5]);
+      setStartDate(getNextMonday());
+    }
+  }, [isOpen, managedPlan?.id]);
 
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isOpen || isManageMode) return;
     const fetchTemplates = async () => {
       try {
         setIsLoadingTemplates(true);
@@ -129,7 +160,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
       }
     };
     fetchTemplates();
-  }, [isOpen]);
+  }, [isOpen, isManageMode]);
 
   const selectedTemplate = templates.find(t => String(t.id) === templateId) ?? null;
   const templateDaysCount = selectedTemplate?.training_days_count ?? 0;
@@ -151,14 +182,23 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
     );
   };
 
-  const newExtendedEndDate = useMemo(() => {
-    if (!activePlan?.end_date || extendWeeks < 1) return null;
-    const d = new Date(activePlan.end_date + "T00:00:00");
-    d.setDate(d.getDate() + extendWeeks * 7);
-    const dow = d.getDay();
-    if (dow !== 0) d.setDate(d.getDate() + (7 - dow));
-    return d.toISOString().split("T")[0];
-  }, [activePlan?.end_date, extendWeeks]);
+  const offsetDays = useMemo(() => {
+    if (!editStartDate || !managedPlan?.start_date) return 0;
+    return Math.round(
+      (new Date(editStartDate + "T00:00:00").getTime() - new Date(managedPlan.start_date + "T00:00:00").getTime())
+      / (1000 * 60 * 60 * 24)
+    );
+  }, [editStartDate, managedPlan?.start_date]);
+
+  const editPreviewEndDate = useMemo(() => {
+    if (!editStartDate || editWeeks < 1) return null;
+    return calcEndDateLocal(editStartDate, editWeeks);
+  }, [editStartDate, editWeeks]);
+
+  const endDateBlocked = useMemo(() => {
+    if (!planHasSessions || !editPreviewEndDate || !managedPlan?.end_date) return false;
+    return editPreviewEndDate < managedPlan.end_date;
+  }, [planHasSessions, editPreviewEndDate, managedPlan?.end_date]);
 
   const handleCreatePlan = () => {
     setError(null);
@@ -196,18 +236,41 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
     }
   };
 
-  const handleExtendPlan = () => {
-    if (!activePlan) return;
+  const handleUpdatePlan = () => {
+    if (!managedPlan) return;
     setError(null);
-    if (extendWeeks < 1) { setError("Agregá al menos 1 semana."); return; }
+    if (!editName.trim()) { setError("El nombre no puede estar vacío."); return; }
+    if (!editStartDate) { setError("Seleccioná una fecha de inicio."); return; }
+    if (!editPreviewEndDate) return;
+
     startTransition(async () => {
       try {
-        await extendPlan(activePlan.id, extendWeeks);
+        await updatePlanMeta(managedPlan.id, {
+          name: editName,
+          start_date: editStartDate,
+          end_date: editPreviewEndDate,
+        });
         await queryClient.invalidateQueries({ queryKey: ["student", "routine", studentId] });
         router.refresh();
         onClose();
       } catch (e: any) {
-        setError(e?.message ?? "No se pudo extender el plan.");
+        const msg = e?.message ?? "No se pudo actualizar el plan.";
+        setError(msg.replace("PLAN_COLLISION:", ""));
+      }
+    });
+  };
+
+  const handleDeletePlan = () => {
+    if (!managedPlan) return;
+    startTransition(async () => {
+      try {
+        await deletePlan(managedPlan.id);
+        await queryClient.invalidateQueries({ queryKey: ["student", "routine", studentId] });
+        router.refresh();
+        onClose();
+      } catch (e: any) {
+        setError(e?.message ?? "No se pudo eliminar el plan.");
+        setIsConfirmingDelete(false);
       }
     });
   };
@@ -223,51 +286,28 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
         className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl flex flex-col sm:max-w-lg"
         onClick={e => e.stopPropagation()}
       >
-        {/* ── Header fijo ── */}
+        {/* Header fijo */}
         <div className="shrink-0 px-5 pt-3 pb-4 flex flex-col gap-3">
-          {/* Drag handle */}
           <div className="flex justify-center sm:hidden">
             <div className="h-1 w-10 rounded-full bg-zinc-700" />
           </div>
 
-          {/* Título */}
           <div className="flex items-center justify-between gap-4">
-            <h3 className="text-base font-black uppercase tracking-tight text-zinc-100">Gestionar Plan</h3>
+            <h3 className="text-base font-black uppercase tracking-tight text-zinc-100">
+              {isManageMode ? "Editar Plan" : "Nuevo Plan"}
+            </h3>
             <button onClick={onClose} className="rounded-full p-1.5 text-zinc-500 hover:bg-zinc-900 hover:text-zinc-100 transition shrink-0">
               <X className="h-5 w-5" />
             </button>
           </div>
-
-          {/* Tabs */}
-          {hasActivePlan && (
-            <div className="flex gap-1 rounded-xl bg-zinc-900 p-1">
-              <button
-                onClick={() => { setTab("new"); setError(null); }}
-                className={`flex-1 rounded-lg py-2 text-xs font-black uppercase tracking-widest transition-all ${
-                  tab === "new" ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-zinc-100"
-                }`}
-              >
-                Nuevo Bloque
-              </button>
-              <button
-                onClick={() => { setTab("extend"); setError(null); }}
-                className={`flex-1 rounded-lg py-2 text-xs font-black uppercase tracking-widest transition-all ${
-                  tab === "extend" ? "bg-yellow-400 text-black" : "text-zinc-400 hover:text-zinc-100"
-                }`}
-              >
-                Extender Plan
-              </button>
-            </div>
-          )}
         </div>
 
-        {/* ── Contenido (scrolleable solo si hace falta) ── */}
+        {/* Contenido scrolleable */}
         <div className="overflow-y-auto flex-1 px-5 flex flex-col gap-3 pb-2">
 
-          {/* Tab: Nuevo Bloque */}
-          {tab === "new" && (
+          {/* MODO CREAR */}
+          {!isManageMode && (
             <>
-              {/* Nombre */}
               <Field label="Nombre del plan">
                 <input
                   type="text"
@@ -278,7 +318,6 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
                 />
               </Field>
 
-              {/* Plantilla */}
               <Field label="Plantilla">
                 <select
                   value={templateId}
@@ -292,30 +331,10 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
                 </select>
               </Field>
 
-              {/* Semana de inicio — navegador por semanas (sin input date nativo) */}
               <Field label="Semana de inicio">
-                <div className="flex items-center gap-2">
-                  <button
-                    type="button"
-                    onClick={() => setStartDate(d => shiftWeek(d, -1))}
-                    className="h-10 w-10 shrink-0 rounded-xl border-2 border-zinc-800 bg-zinc-900 flex items-center justify-center text-zinc-300 hover:border-yellow-400 hover:text-yellow-400 transition-all active:scale-95"
-                  >
-                    <ChevronLeft className="h-4 w-4" />
-                  </button>
-                  <div className="flex-1 rounded-xl border-2 border-zinc-800 bg-zinc-900 py-2.5 px-2 text-center">
-                    <p className="text-xs font-black text-zinc-100">Lun. {startDate ? formatMonday(startDate) : "—"}</p>
-                  </div>
-                  <button
-                    type="button"
-                    onClick={() => setStartDate(d => shiftWeek(d, 1))}
-                    className="h-10 w-10 shrink-0 rounded-xl border-2 border-zinc-800 bg-zinc-900 flex items-center justify-center text-zinc-300 hover:border-yellow-400 hover:text-yellow-400 transition-all active:scale-95"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </button>
-                </div>
+                <WeekNavigator value={startDate} onChange={setStartDate} />
               </Field>
 
-              {/* Sin plantilla: stepper semanas */}
               {!templateId && (
                 <Field label="Duración">
                   <Stepper
@@ -327,7 +346,6 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
                 </Field>
               )}
 
-              {/* Con plantilla: días */}
               {templateId && (
                 <Field
                   label="Días de entrenamiento"
@@ -365,37 +383,53 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
             </>
           )}
 
-          {/* Tab: Extender Plan */}
-          {tab === "extend" && activePlan && (
+          {/* MODO GESTIONAR: EDITAR */}
+          {isManageMode && (
             <>
-              <div className="rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3 flex flex-col gap-0.5">
-                <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Plan actual</p>
-                <p className="text-sm font-black text-zinc-100">{activePlan.name}</p>
-                {activePlan.end_date && (
-                  <p className="text-xs text-zinc-500">Termina: {formatDateES(activePlan.end_date)}</p>
-                )}
-              </div>
-
-              <Field label="Semanas a agregar">
-                <Stepper
-                  value={extendWeeks}
-                  label={`semana${extendWeeks !== 1 ? "s" : ""}`}
-                  onDecrement={() => setExtendWeeks(w => Math.max(1, w - 1))}
-                  onIncrement={() => setExtendWeeks(w => w + 1)}
+              <Field label="Nombre del plan">
+                <input
+                  type="text"
+                  value={editName}
+                  onChange={e => setEditName(e.target.value)}
+                  className="w-full rounded-xl border-2 border-zinc-800 bg-zinc-900 px-3.5 py-2.5 text-sm font-bold text-zinc-100 outline-none transition-all focus:border-yellow-400 placeholder:text-zinc-600"
                 />
               </Field>
 
-              {newExtendedEndDate && (
-                <div className="rounded-xl bg-yellow-400/5 border border-yellow-400/20 px-4 py-3 flex flex-col gap-0.5">
-                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500">Nuevo fin estimado</p>
-                  <p className="text-sm font-black text-yellow-400">{formatDateES(newExtendedEndDate)}</p>
+              <Field label="Semana de inicio">
+                <WeekNavigator value={editStartDate} onChange={setEditStartDate} />
+                {planHasSessions && offsetDays !== 0 && (
+                  <p className="text-xs text-zinc-500 leading-snug mt-1">
+                    Las sesiones se desplazarán {Math.abs(offsetDays)} días hacia {offsetDays < 0 ? "atrás" : "adelante"}.
+                  </p>
+                )}
+              </Field>
+
+              <Field label="Duración">
+                <Stepper
+                  value={editWeeks}
+                  label={`semana${editWeeks !== 1 ? "s" : ""}`}
+                  onDecrement={() => setEditWeeks(w => Math.max(1, w - 1))}
+                  onIncrement={() => setEditWeeks(w => w + 1)}
+                />
+              </Field>
+
+              {editPreviewEndDate && (
+                <div className="rounded-xl bg-zinc-900 border border-zinc-800 px-4 py-3">
+                  <p className="text-[10px] font-black uppercase tracking-widest text-zinc-500 mb-0.5">Fin del plan</p>
+                  <p className="text-sm font-black text-zinc-100">{formatDateES(editPreviewEndDate)}</p>
+                  {endDateBlocked && (
+                    <p className="text-xs text-zinc-500 leading-snug mt-1">
+                      Si hay sesiones fuera de este rango, no se podrá guardar.
+                    </p>
+                  )}
                 </div>
               )}
             </>
           )}
+
         </div>
 
-        {/* ── Footer fijo: error + CTA ── */}
+        {/* Footer fijo */}
         <div className="shrink-0 px-5 pt-3 pb-8 sm:pb-5 flex flex-col gap-2.5 border-t border-zinc-800/60 mt-3">
           {error && (
             <div className="rounded-xl border border-red-500/30 bg-red-500/10 px-3.5 py-2.5 flex items-start gap-2">
@@ -404,7 +438,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
             </div>
           )}
 
-          {tab === "new" && (
+          {!isManageMode && (
             <button
               onClick={handleCreatePlan}
               disabled={isPending || (!!templateId && !hasExactSelectedDays)}
@@ -414,14 +448,46 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
             </button>
           )}
 
-          {tab === "extend" && (
+          {isManageMode && !isConfirmingDelete && (
             <button
-              onClick={handleExtendPlan}
+              onClick={handleUpdatePlan}
               disabled={isPending}
               className="w-full rounded-2xl bg-yellow-400 py-3.5 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
             >
-              {isPending ? "Extendiendo..." : `EXTENDER ${extendWeeks} SEMANA${extendWeeks !== 1 ? "S" : ""}`}
+              {isPending ? "Guardando..." : "GUARDAR CAMBIOS"}
             </button>
+          )}
+
+          {isManageMode && !isConfirmingDelete && (
+            <button
+              onClick={() => { setIsConfirmingDelete(true); setError(null); }}
+              disabled={isPending}
+              className="w-full rounded-2xl border border-red-500/30 py-3 text-sm font-black uppercase tracking-widest text-red-500 transition hover:bg-red-500/10 active:scale-[0.99] disabled:opacity-50"
+            >
+              ELIMINAR PLAN
+            </button>
+          )}
+
+          {isManageMode && isConfirmingDelete && (
+            <div className="flex flex-col gap-2">
+              <p className="text-xs font-bold text-zinc-400 text-center">
+                ¿Seguro? Se eliminarán todas las sesiones y ejercicios del plan.
+              </p>
+              <button
+                onClick={handleDeletePlan}
+                disabled={isPending}
+                className="w-full rounded-2xl bg-red-500 py-3.5 text-sm font-black uppercase tracking-widest text-white transition hover:bg-red-600 active:scale-[0.99] disabled:opacity-50"
+              >
+                {isPending ? "Eliminando..." : "SÍ, ELIMINAR"}
+              </button>
+              <button
+                onClick={() => setIsConfirmingDelete(false)}
+                disabled={isPending}
+                className="w-full rounded-2xl border border-zinc-700 py-3 text-sm font-black uppercase tracking-widest text-zinc-400 transition hover:bg-zinc-900 active:scale-[0.99] disabled:opacity-50"
+              >
+                CANCELAR
+              </button>
+            </div>
           )}
         </div>
       </div>
@@ -430,6 +496,30 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, activePlan }: 
 }
 
 // ── Componentes auxiliares ──
+
+function WeekNavigator({ value, onChange }: { value: string; onChange: (v: string) => void }) {
+  return (
+    <div className="flex items-center gap-2">
+      <button
+        type="button"
+        onClick={() => onChange(shiftWeek(value, -1))}
+        className="h-10 w-10 shrink-0 rounded-xl border-2 border-zinc-800 bg-zinc-900 flex items-center justify-center text-zinc-300 hover:border-yellow-400 hover:text-yellow-400 transition-all active:scale-95"
+      >
+        <ChevronLeft className="h-4 w-4" />
+      </button>
+      <div className="flex-1 rounded-xl border-2 border-zinc-800 bg-zinc-900 py-2.5 px-2 text-center">
+        <p className="text-xs font-black text-zinc-100">Lun. {value ? formatMonday(value) : "—"}</p>
+      </div>
+      <button
+        type="button"
+        onClick={() => onChange(shiftWeek(value, 1))}
+        className="h-10 w-10 shrink-0 rounded-xl border-2 border-zinc-800 bg-zinc-900 flex items-center justify-center text-zinc-300 hover:border-yellow-400 hover:text-yellow-400 transition-all active:scale-95"
+      >
+        <ChevronRight className="h-4 w-4" />
+      </button>
+    </div>
+  );
+}
 
 function Field({
   label,

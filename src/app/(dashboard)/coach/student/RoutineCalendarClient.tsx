@@ -2,6 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useQueryClient } from "@tanstack/react-query";
+import { useRouter } from "next/navigation";
 import { ExerciseFormModal } from "@/components/ExerciseFormModal";
 import {
   ChevronLeft,
@@ -12,7 +13,7 @@ import {
   X,
   Copy,
   Trash2,
-  CalendarClock
+  CalendarClock,
 } from "lucide-react";
 import type { Tables } from "@/types/supabase";
 import {
@@ -86,6 +87,7 @@ export function RoutineCalendarClient({
   exercisesBySession
 }: RoutineCalendarClientProps) {
   const queryClient = useQueryClient();
+  const router = useRouter();
   const [isPending, startTransition] = useTransition();
   const { data: allExercises = [] } = useExercises();
 
@@ -161,14 +163,21 @@ export function RoutineCalendarClient({
 
   // -- MANEJADORES DE ACCIONES -- //
 
-  const activePlan = useMemo(() => {
-    return allPlans.find(p => p.is_active) ?? null;
-  }, [allPlans]);
+  const managedPlan = useMemo(() => {
+    if (!currentViewedPlan) return null;
+    const found = allPlans.find(p => String(p.id) === currentViewedPlan.id);
+    return found ? {
+      id: found.id,
+      name: found.name,
+      start_date: found.start_date,
+      end_date: found.end_date,
+    } : null;
+  }, [currentViewedPlan, allPlans]);
 
-  const handleDeleteSelectedPlan = () => {
-    if (!currentViewedPlan) return;
-    alert("Función para eliminar plan (Requiere endpoint en actions.ts)");
-  };
+  const managedPlanHasSessions = useMemo(() => {
+    if (!currentViewedPlan) return false;
+    return sessions.some(s => s.plan_id === Number(currentViewedPlan.id));
+  }, [currentViewedPlan, sessions]);
 
   const handleAddDay = () => {
     if (!currentViewedPlan || !newDayForm) return;
@@ -177,6 +186,7 @@ export function RoutineCalendarClient({
     startTransition(async () => {
       await addDayToWeek(Number(currentViewedPlan.id), viewedWeekNumber, nextOrder, "Day", newDayForm.date);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      router.refresh();
       setIsAddingDay(false);
       setSelectedDate(newDayForm.date);
       setNewDayForm(null);
@@ -191,8 +201,9 @@ export function RoutineCalendarClient({
       try {
         await moveSession(sessionId, newDate);
         await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+        router.refresh();
         setIsRescheduling(false);
-        setSelectedDate(newDate); 
+        setSelectedDate(newDate);
       } catch (error: any) {
         alert(error.message || "Error al reagendar la sesión");
       }
@@ -209,6 +220,7 @@ export function RoutineCalendarClient({
       try {
         await duplicateSession(sourceSessionId, targetDate);
         await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+        router.refresh();
         alert("Día duplicado con éxito");
       } catch (error) {
         console.error("Error duplicating day:", error);
@@ -250,6 +262,7 @@ export function RoutineCalendarClient({
       try {
         await deleteDayFromPlan(targetSessionId);
         await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+        router.refresh();
       } catch (error) {
         console.error("Error deleting day:", error);
       }
@@ -271,7 +284,8 @@ export function RoutineCalendarClient({
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
           studentId={studentId}
-          activePlan={activePlan}
+          managedPlan={managedPlan}
+          planHasSessions={managedPlanHasSessions}
         />
       )}
 
@@ -305,11 +319,6 @@ export function RoutineCalendarClient({
                   {!currentViewedPlan && <Plus className="h-3 w-3" />}
                   {currentViewedPlan ? "Gestionar" : "Nuevo Plan"}
                 </button>
-                {currentViewedPlan && (
-                  <button onClick={handleDeleteSelectedPlan} className="rounded-lg p-1.5 text-red-500/70 hover:bg-red-500/10 hover:text-red-500 transition-colors">
-                    <Trash2 className="h-4 w-4" />
-                  </button>
-                )}
               </div>
             )}
           </div>

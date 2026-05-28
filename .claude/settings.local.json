@@ -7,7 +7,9 @@
       "Bash(npx tsc *)",
       "Bash(npm run *)",
       "Bash(node -e \"const v = require\\('./node_modules/vitest/dist/index.js'\\); console.log\\(typeof v.describe\\)\")",
-      "Bash(node -e ' *)"
+      "Bash(node -e ' *)",
+      "Bash(npm test *)",
+      "Bash(node -e \"const p = require\\('./package.json'\\); console.log\\(JSON.stringify\\({vitest: p.devDependencies?.vitest, scripts: p.scripts?.test}, null, 2\\)\\)\")"
     ]
   }
 }

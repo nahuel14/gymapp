@@ -81,6 +81,65 @@ function distributeTemplateSessions(startMonday: string, selectedDays: number[],
   return sessions;
 }
 
+function checkPlanShiftCollision(
+  otherPlans: Array<{ name: string; start_date: string; end_date: string }>,
+  newStart: string,
+  newEnd: string
+): { hasCollision: boolean; conflictPlan?: string } {
+  const conflict = otherPlans.find(p => p.start_date <= newEnd && p.end_date >= newStart);
+  return conflict ? { hasCollision: true, conflictPlan: conflict.name } : { hasCollision: false };
+}
+
+function hasShiftedSessionOutside(
+  sessions: { date: string }[],
+  offsetDays: number,
+  newEndDate: string
+): boolean {
+  return sessions.some(s => {
+    const d = new Date(s.date + "T00:00:00");
+    d.setDate(d.getDate() + offsetDays);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return `${y}-${m}-${day}` > newEndDate;
+  });
+}
+
+function shiftSessionDates(sessions: { id: number; date: string | null }[], offsetDays: number) {
+  return sessions.map(s => {
+    if (!s.date) return s;
+    const d = new Date(s.date + "T00:00:00");
+    d.setDate(d.getDate() + offsetDays);
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, "0");
+    const day = String(d.getDate()).padStart(2, "0");
+    return { ...s, date: `${y}-${m}-${day}` };
+  });
+}
+
+function computeEndDateBlocked(planHasSessions: boolean, newEndDate: string, currentEndDate: string): boolean {
+  if (!planHasSessions) return false;
+  return newEndDate < currentEndDate;
+}
+
+function calcEndDateLocal(mondayStr: string, weeks: number): string {
+  const start = new Date(mondayStr + "T00:00:00");
+  start.setDate(start.getDate() + Math.max(weeks, 1) * 7 - 1);
+  const y = start.getFullYear();
+  const m = String(start.getMonth() + 1).padStart(2, "0");
+  const d = String(start.getDate()).padStart(2, "0");
+  return `${y}-${m}-${d}`;
+}
+
+function shiftWeekLocal(dateStr: string, weeks: number): string {
+  const d = new Date(dateStr + "T00:00:00");
+  d.setDate(d.getDate() + weeks * 7);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const day = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${day}`;
+}
+
 // --- Tests ---
 
 describe('ESCENARIO 1: Creacion de Plan', () => {
@@ -171,6 +230,160 @@ describe('ESCENARIO 3: Distribucion de Sesiones al Importar Plantilla', () => {
   });
 });
 
+
+describe('ESCENARIO 5: Edicion de Plan - Calculo de Offset al Cambiar Fecha de Inicio', () => {
+  it('calcula offset de -7 cuando se mueve la fecha 1 semana atras', () => {
+    const currentStart = '2026-06-01';
+    const newStart = '2026-05-25';
+    const offsetDays = Math.round(
+      (new Date(newStart + "T00:00:00").getTime() - new Date(currentStart + "T00:00:00").getTime())
+      / (1000 * 60 * 60 * 24)
+    );
+    expect(offsetDays).toBe(-7);
+  });
+
+  it('calcula offset de +14 cuando se mueve la fecha 2 semanas adelante', () => {
+    const currentStart = '2026-06-01';
+    const newStart = '2026-06-15';
+    const offsetDays = Math.round(
+      (new Date(newStart + "T00:00:00").getTime() - new Date(currentStart + "T00:00:00").getTime())
+      / (1000 * 60 * 60 * 24)
+    );
+    expect(offsetDays).toBe(14);
+  });
+
+  it('calcula offset de 0 cuando la fecha no cambia', () => {
+    const currentStart = '2026-06-01';
+    const newStart = '2026-06-01';
+    const offsetDays = Math.round(
+      (new Date(newStart + "T00:00:00").getTime() - new Date(currentStart + "T00:00:00").getTime())
+      / (1000 * 60 * 60 * 24)
+    );
+    expect(offsetDays).toBe(0);
+  });
+
+  it('las sesiones se desplazan con el mismo offset que el inicio del plan', () => {
+    // Plan Jun 1-14, mover inicio a May 25 (offset -7): sesiones deben moverse -7 dias
+    const sessions = [{ id: 1, date: '2026-06-01' }, { id: 2, date: '2026-06-08' }];
+    const shifted = shiftSessionDates(sessions, -7);
+    expect(shifted[0].date).toBe('2026-05-25');
+    expect(shifted[1].date).toBe('2026-06-01');
+  });
+});
+
+describe('ESCENARIO 6: Edicion de Plan - Restriccion Lunes/Domingo', () => {
+  it('calcEndDateLocal siempre retorna un domingo', () => {
+    expect(new Date(calcEndDateLocal('2026-06-01', 4) + "T00:00:00").getDay()).toBe(0);
+  });
+
+  it('calcEndDateLocal: 4 semanas desde Lun 01/06 termina el Dom 28/06', () => {
+    expect(calcEndDateLocal('2026-06-01', 4)).toBe('2026-06-28');
+  });
+
+  it('calcEndDateLocal: 1 semana desde Lun 01/06 termina el Dom 07/06', () => {
+    expect(calcEndDateLocal('2026-06-01', 1)).toBe('2026-06-07');
+  });
+
+  it('calcEndDateLocal: 8 semanas termina en domingo', () => {
+    const result = calcEndDateLocal('2026-06-01', 8);
+    expect(new Date(result + "T00:00:00").getDay()).toBe(0);
+  });
+
+  it('shiftWeekLocal mantiene el lunes al navegar hacia adelante', () => {
+    const result = shiftWeekLocal('2026-06-01', 1);
+    expect(result).toBe('2026-06-08');
+    expect(new Date(result + "T00:00:00").getDay()).toBe(1);
+  });
+
+  it('shiftWeekLocal mantiene el lunes al navegar hacia atras', () => {
+    const result = shiftWeekLocal('2026-06-01', -1);
+    expect(result).toBe('2026-05-25');
+    expect(new Date(result + "T00:00:00").getDay()).toBe(1);
+  });
+
+  it('navegar 5 semanas hacia adelante siempre cae en lunes', () => {
+    let date = '2026-06-01';
+    for (let i = 0; i < 5; i++) { date = shiftWeekLocal(date, 1); }
+    expect(new Date(date + "T00:00:00").getDay()).toBe(1);
+  });
+
+  it('navegar 3 semanas hacia atras siempre cae en lunes', () => {
+    let date = '2026-06-01';
+    for (let i = 0; i < 3; i++) { date = shiftWeekLocal(date, -1); }
+    expect(new Date(date + "T00:00:00").getDay()).toBe(1);
+  });
+});
+
+describe('ESCENARIO 7: Reduccion de Duracion del Plan con Sesiones', () => {
+  it('bloquea cuando el plan tiene sesiones y el nuevo fin es anterior al actual', () => {
+    // Plan Jun 1-14 (2 sem), se intenta reducir a 1 sem (fin Jun 7)
+    expect(computeEndDateBlocked(true, '2026-06-07', '2026-06-14')).toBe(true);
+  });
+
+  it('no bloquea cuando el plan no tiene sesiones aunque se reduzca la duracion', () => {
+    expect(computeEndDateBlocked(false, '2026-06-07', '2026-06-14')).toBe(false);
+  });
+
+  it('no bloquea cuando el nuevo fin es igual al actual', () => {
+    expect(computeEndDateBlocked(true, '2026-06-14', '2026-06-14')).toBe(false);
+  });
+
+  it('no bloquea cuando el nuevo fin es posterior al actual (expansion)', () => {
+    expect(computeEndDateBlocked(true, '2026-06-21', '2026-06-14')).toBe(false);
+  });
+
+  it('detecta que sesion del 13/06 queda fuera si el nuevo fin es el 07/06', () => {
+    const newEnd = '2026-06-07';
+    const sessionsOutside = [{ date: '2026-06-13' }].filter(s => s.date > newEnd);
+    expect(sessionsOutside.length).toBeGreaterThan(0);
+  });
+
+  it('no detecta sesiones fuera si todas estan dentro del nuevo rango', () => {
+    const newEnd = '2026-06-14';
+    const sessionsOutside = [{ date: '2026-06-01' }, { date: '2026-06-03' }].filter(s => s.date > newEnd);
+    expect(sessionsOutside.length).toBe(0);
+  });
+});
+
+describe('ESCENARIO 8: Shift de Sesiones al Cambiar Fecha de Inicio', () => {
+  it('desplaza sesiones 7 dias hacia atras al mover inicio una semana atras', () => {
+    const sessions = [
+      { id: 1, date: '2026-06-13' },
+      { id: 2, date: '2026-06-03' },
+    ];
+    const result = shiftSessionDates(sessions, -7);
+    expect(result[0].date).toBe('2026-06-06');
+    expect(result[1].date).toBe('2026-05-27');
+  });
+
+  it('desplaza sesiones 7 dias hacia adelante al mover inicio una semana adelante', () => {
+    const sessions = [{ id: 1, date: '2026-06-01' }, { id: 2, date: '2026-06-05' }];
+    const result = shiftSessionDates(sessions, 7);
+    expect(result[0].date).toBe('2026-06-08');
+    expect(result[1].date).toBe('2026-06-12');
+  });
+
+  it('sesiones con date null no se modifican', () => {
+    const sessions = [{ id: 1, date: null }, { id: 2, date: '2026-06-01' }];
+    const result = shiftSessionDates(sessions, -7);
+    expect(result[0].date).toBeNull();
+    expect(result[1].date).toBe('2026-05-25');
+  });
+
+  it('el dia relativo dentro de la semana se preserva al hacer shift', () => {
+    // Sabado de semana 2 (13-Jun) debe seguir siendo Sabado tras shift -7 (6-Jun)
+    const sessions = [{ id: 1, date: '2026-06-13' }];
+    const result = shiftSessionDates(sessions, -7);
+    expect(new Date(result[0].date! + "T00:00:00").getDay()).toBe(6); // Sabado
+  });
+
+  it('shift de 14 dias desplaza dos semanas correctamente', () => {
+    const sessions = [{ id: 1, date: '2026-06-01' }];
+    expect(shiftSessionDates(sessions, 14)[0].date).toBe('2026-06-15');
+    expect(shiftSessionDates(sessions, -14)[0].date).toBe('2026-05-18');
+  });
+});
+
 describe('ESCENARIO 4: Movimiento de Sesiones y Colision', () => {
   it('permite mover a un dia libre y recalcula el day_name', () => {
     const sessions = [{ date: '2026-05-18' }, { date: '2026-05-20' }];
@@ -187,5 +400,59 @@ describe('ESCENARIO 4: Movimiento de Sesiones y Colision', () => {
     expect(() => simulateMoveSession(sessions, '2026-05-22')).toThrow(
       "Ya existe un entrenamiento en esta fecha. Selecciona un dia libre."
     );
+  });
+});
+
+describe('ESCENARIO 9: Colision al Desplazar Fecha de Inicio del Plan', () => {
+  it('bloquea desplazamiento para atras cuando otro plan ocupa el nuevo rango', () => {
+    // Plan actual: Jun 1-14. Nuevo inicio: May 25 → nuevo fin: Jun 7.
+    // Otro plan activo: May 18-31 → se superpone con May 25-Jun 7.
+    const otherPlans = [{ name: "Plan Fuerza", start_date: "2026-05-18", end_date: "2026-05-31" }];
+    const result = checkPlanShiftCollision(otherPlans, "2026-05-25", "2026-06-07");
+    expect(result.hasCollision).toBe(true);
+    expect(result.conflictPlan).toBe("Plan Fuerza");
+  });
+
+  it('permite desplazamiento para atras cuando el rango nuevo esta libre', () => {
+    // Plan actual: Jun 1-14. Nuevo inicio: May 25 → nuevo fin: Jun 7.
+    // Otro plan termina May 18 → no se superpone.
+    const otherPlans = [{ name: "Plan Fuerza", start_date: "2026-05-01", end_date: "2026-05-18" }];
+    const result = checkPlanShiftCollision(otherPlans, "2026-05-25", "2026-06-07");
+    expect(result.hasCollision).toBe(false);
+  });
+
+  it('bloquea desplazamiento para adelante cuando otro plan ocupa el nuevo rango', () => {
+    // Plan actual: Jun 1-14. Nuevo inicio: Jun 8 → nuevo fin: Jun 21.
+    // Otro plan: Jun 16-30 → se superpone con Jun 8-21.
+    const otherPlans = [{ name: "Plan Potencia", start_date: "2026-06-16", end_date: "2026-06-30" }];
+    const result = checkPlanShiftCollision(otherPlans, "2026-06-08", "2026-06-21");
+    expect(result.hasCollision).toBe(true);
+    expect(result.conflictPlan).toBe("Plan Potencia");
+  });
+
+  it('permite desplazamiento para adelante cuando el rango nuevo esta libre', () => {
+    // Nuevo rango: Jun 8-21. Otro plan empieza Jun 22 → no se superpone.
+    const otherPlans = [{ name: "Plan Potencia", start_date: "2026-06-22", end_date: "2026-06-30" }];
+    const result = checkPlanShiftCollision(otherPlans, "2026-06-08", "2026-06-21");
+    expect(result.hasCollision).toBe(false);
+  });
+
+  it('un plan inactivo tambien bloquea el desplazamiento', () => {
+    // No se filtra por is_active: planes inactivos tambien cuentan como colision
+    const otherPlans = [{ name: "Plan Anterior (inactivo)", start_date: "2026-05-18", end_date: "2026-05-31" }];
+    const result = checkPlanShiftCollision(otherPlans, "2026-05-25", "2026-06-07");
+    expect(result.hasCollision).toBe(true);
+  });
+
+  it('detecta sesion que queda fuera del rango tras el desplazamiento', () => {
+    // Sesion Jun 14. Offset -7 → Jun 7. Nuevo fin Jun 6 → Jun 7 > Jun 6 → fuera del rango.
+    const sessions = [{ date: '2026-06-14' }];
+    expect(hasShiftedSessionOutside(sessions, -7, '2026-06-06')).toBe(true);
+  });
+
+  it('no detecta sesion fuera cuando todas quedan dentro tras el desplazamiento', () => {
+    // Sesiones Jun 1, Jun 8. Offset -7 → May 25, Jun 1. Nuevo fin Jun 14 → ambas dentro.
+    const sessions = [{ date: '2026-06-01' }, { date: '2026-06-08' }];
+    expect(hasShiftedSessionOutside(sessions, -7, '2026-06-14')).toBe(false);
   });
 });
