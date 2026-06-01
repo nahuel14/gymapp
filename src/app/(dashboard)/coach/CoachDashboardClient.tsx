@@ -249,27 +249,12 @@ export function CoachDashboardClient({ errorKey }: Props) {
               </Link>
 
               <div className="flex items-center shrink-0 pl-2">
-                {!student.planId ? (
-                  <Button
-                    variant="outline"
-                    size="icon"
-                    onClick={() => {
-                      setSelectedStudent({ id: student.studentId, name: student.studentName });
-                      setIsModalOpen(true);
-                    }}
-                    className="h-8 w-8 rounded-lg border-destructive/20 text-destructive hover:bg-primary hover:text-primary-foreground hover:border-primary transition-all"
-                    title="Asignar Plan"
-                  >
-                    <Plus className="h-4 w-4" />
-                  </Button>
-                ) : (
-                  <Link 
-                    href={`/coach/student/${student.studentId}`}
-                    className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground group-hover:translate-x-0.5 transition-transform"
-                  >
-                    <ChevronRight className="h-4 w-4" />
-                  </Link>
-                )}
+                <Link
+                  href={`/coach/student/${student.studentId}`}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground group-hover:translate-x-0.5 transition-transform"
+                >
+                  <ChevronRight className="h-4 w-4" />
+                </Link>
               </div>
             </div>
           ))}

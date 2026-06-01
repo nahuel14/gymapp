@@ -103,6 +103,7 @@ export function RoutineCalendarClient({
   const [duplicateTargetDate, setDuplicateTargetDate] = useState<string>("");
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const [newDayForm, setNewDayForm] = useState<{ date: string } | null>(null);
+  const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
 
   const [newExForm, setNewExForm] = useState({
     exerciseId: "",
@@ -273,14 +274,20 @@ export function RoutineCalendarClient({
     });
   };
 
-  const handleDeleteDay = async () => {
+  const handleDeleteDay = () => {
     const targetSessionId = activeSessionsForDate[0]?.id;
     if (!targetSessionId) return;
-    if (!window.confirm("¿Estás seguro de eliminar este día y todos sus ejercicios?")) return;
+    setIsConfirmingDelete(true);
+  };
+
+  const handleConfirmDelete = () => {
+    const targetSessionId = activeSessionsForDate[0]?.id;
+    if (!targetSessionId) return;
 
     startTransition(async () => {
       try {
         await deleteDayFromPlan(targetSessionId);
+        setIsConfirmingDelete(false);
         await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
         router.refresh();
       } catch (error) {
@@ -427,14 +434,17 @@ export function RoutineCalendarClient({
             {/* Acciones de COACH (Duplicar, Borrar, Añadir Ex) */}
             {role === "COACH" && activeSessionsForDate.length > 0 && !isAddingDay && (
               <>
-                <button onClick={handleDuplicateDay} className="flex h-9 w-9 items-center justify-center rounded-lg bg-zinc-900 border border-zinc-800 text-zinc-400 transition hover:text-yellow-400 active:scale-95">
-                  <Copy className="h-4 w-4" />
+                <button onClick={handleDuplicateDay} className="flex h-9 w-9 sm:w-auto items-center justify-center sm:gap-1.5 rounded-lg bg-zinc-900 border border-zinc-800 sm:px-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition hover:text-yellow-400 active:scale-95">
+                  <Copy className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Duplicar</span>
                 </button>
-                <button onClick={handleDeleteDay} className="flex h-9 w-9 items-center justify-center rounded-lg bg-red-500/10 border border-red-500/20 text-red-400 transition hover:bg-red-500/20 active:scale-95">
-                  <Trash2 className="h-4 w-4" />
+                <button onClick={handleDeleteDay} className="flex h-9 w-9 sm:w-auto items-center justify-center sm:gap-1.5 rounded-lg bg-red-500/10 border border-red-500/20 sm:px-3 text-[10px] font-black uppercase tracking-widest text-red-400 transition hover:bg-red-500/20 active:scale-95">
+                  <Trash2 className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Eliminar</span>
                 </button>
-                <button onClick={() => setIsAddingExercise(true)} className="flex h-9 items-center gap-1.5 rounded-lg bg-yellow-400 px-3 text-[10px] font-black uppercase tracking-widest text-black transition active:scale-95">
-                  <Plus className="h-4 w-4 shrink-0" /> <span className="hidden sm:inline">Ejercicio</span>
+                <button onClick={() => setIsAddingExercise(true)} className="flex h-9 w-9 sm:w-auto items-center justify-center sm:gap-1.5 rounded-lg bg-yellow-400 sm:px-3 text-[10px] font-black uppercase tracking-widest text-black transition active:scale-95">
+                  <Plus className="h-4 w-4 shrink-0" />
+                  <span className="hidden sm:inline">Ejercicio</span>
                 </button>
               </>
             )}
@@ -539,6 +549,46 @@ export function RoutineCalendarClient({
           </div>
         )}
 
+        {/* MODAL CONFIRMAR ELIMINAR DÍA */}
+        {isConfirmingDelete && (
+          <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+            <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col">
+              <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+                <div className="flex items-center gap-3">
+                  <div className="h-10 w-10 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center">
+                    <Trash2 className="h-5 w-5 text-red-400" />
+                  </div>
+                  <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Eliminar Día</h4>
+                </div>
+                <button onClick={() => setIsConfirmingDelete(false)} className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
+              <div className="px-6 pb-2">
+                <p className="text-sm text-zinc-400 leading-relaxed">
+                  ¿Estás seguro de eliminar este día y todos sus ejercicios? Esta acción no se puede deshacer.
+                </p>
+              </div>
+              <div className="px-6 pt-4 pb-8 sm:pb-6 flex gap-3">
+                <button
+                  onClick={() => setIsConfirmingDelete(false)}
+                  disabled={isPending}
+                  className="flex-1 h-14 rounded-2xl border border-zinc-700 bg-zinc-900 text-sm font-black uppercase tracking-widest text-zinc-300 transition-all hover:bg-zinc-800 active:scale-95 disabled:opacity-50"
+                >
+                  Cancelar
+                </button>
+                <button
+                  onClick={handleConfirmDelete}
+                  disabled={isPending}
+                  className="flex-1 h-14 rounded-2xl bg-red-500 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-red-500/20 transition-all hover:bg-red-400 active:scale-95 disabled:opacity-50"
+                >
+                  {isPending ? "Eliminando..." : "Eliminar"}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
         {isAddingExercise && role === "COACH" && (
           <ExerciseFormModal isOpen={isAddingExercise} onClose={() => setIsAddingExercise(false)} formState={newExForm} setFormState={setNewExForm} onSave={handleAddExercise} isPending={isPending} allExercises={allExercises} />
         )}
@@ -585,14 +635,6 @@ export function RoutineCalendarClient({
             <ExerciseExcelGrid exercises={activeExercises} role={role === "ADMIN" ? "COACH" : role} />
           )}
 
-          {role === "COACH" && !isAddingExercise && activeSessionsForDate.length > 0 && (
-            <button
-              onClick={() => setIsAddingExercise(true)}
-              className="flex items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-zinc-800 p-4 text-xs font-black text-zinc-500 hover:border-yellow-400 hover:text-yellow-400 transition-all uppercase tracking-widest"
-            >
-              <Plus className="h-4 w-4" /> Agregar Ejercicio
-            </button>
-          )}
         </div>
       )}
     </div>
