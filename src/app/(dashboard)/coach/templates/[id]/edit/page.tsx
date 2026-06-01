@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Save, Plus, Calendar, Dumbbell, X, Trash2 } from "lucide-react";
+import { ArrowLeft, Save, Plus, Calendar, Dumbbell, Trash2 } from "lucide-react";
 import { useTemplate } from "@/hooks/useTemplates";
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "@/app/(dashboard)/coach/student/ExerciseExcelGrid";
@@ -20,8 +20,6 @@ export default function TemplateEditPage() {
 
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
-  const [exerciseSearch, setExerciseSearch] = useState("");
-  const [isExerciseDropdownOpen, setIsExerciseDropdownOpen] = useState(false);
   const [isPending, setIsPending] = useState(false);
   const [templateName, setTemplateName] = useState("");
   const [planSessions, setPlanSessions] = useState<any[]>([]);
@@ -133,10 +131,6 @@ export default function TemplateEditPage() {
     }
   };
 
-  const removeSession = (orderIndex: number) => {
-    window.location.reload();
-  };
-
   const addExerciseToTemplate = async () => {
     if (!selectedSessionId || !newExForm.exerciseId || !templateId) return;
 
@@ -168,24 +162,11 @@ export default function TemplateEditPage() {
           coach_notes: ""
         });
         setIsAddingExercise(false);
-        setIsExerciseDropdownOpen(false);
         window.location.reload();
       }
     } catch (error) {
       console.error("Error adding exercise:", error);
     }
-  };
-
-  const updateArrayField = (field: string, index: number, value: string) => {
-    setNewExForm((prev: any) => {
-      const newArray = [...(prev[field] || [])];
-      if (value === "" && field.includes("weight")) {
-        newArray[index] = null;
-      } else {
-        newArray[index] = Number(value);
-      }
-      return { ...prev, [field]: newArray };
-    });
   };
 
   if (isLoading) {

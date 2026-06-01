@@ -138,7 +138,7 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
       setSelectedDays([1, 3, 5]);
       setStartDate(getNextMonday());
     }
-  }, [isOpen, managedPlan?.id]);
+  }, [isOpen, managedPlan?.id, managedPlan]);
 
   useEffect(() => {
     if (!isOpen || isManageMode) return;

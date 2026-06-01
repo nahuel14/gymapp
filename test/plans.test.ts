@@ -826,3 +826,272 @@ describe('ESCENARIO 14: Agregar Día (Iniciar Rutina)', () => {
     expect(result.success).toBe(true);
   });
 });
+
+// --- Helpers para ESCENARIO 16 ---
+
+function toggleExercise(expandedIds: Set<number>, id: number): Set<number> {
+  const next = new Set(expandedIds);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
+}
+
+function expandAll(exercises: { id: number }[]): Set<number> {
+  return new Set(exercises.map(e => e.id));
+}
+
+function collapseAll(): Set<number> {
+  return new Set<number>();
+}
+
+function isExerciseExpanded(expandedIds: Set<number>, id: number, isEditing: boolean): boolean {
+  return expandedIds.has(id) || isEditing;
+}
+
+// --- Helpers para ESCENARIO 17 ---
+
+function sortByOrderIndex(exercises: { id: number; order_index: number }[]) {
+  return [...exercises].sort((a, b) => a.order_index - b.order_index);
+}
+
+function swapOrderIndex(
+  exercises: { id: number; order_index: number }[],
+  indexA: number,
+  indexB: number
+): { id: number; order_index: number }[] {
+  const sorted = sortByOrderIndex(exercises);
+  if (indexA < 0 || indexA >= sorted.length || indexB < 0 || indexB >= sorted.length) {
+    return sorted;
+  }
+  const result = sorted.map(e => ({ ...e }));
+  const tmp = result[indexA].order_index;
+  result[indexA].order_index = result[indexB].order_index;
+  result[indexB].order_index = tmp;
+  return sortByOrderIndex(result);
+}
+
+function canMoveUp(index: number): boolean {
+  return index > 0;
+}
+
+function canMoveDown(index: number, total: number): boolean {
+  return index < total - 1;
+}
+
+describe('ESCENARIO 16: Colapsar/Expandir Ejercicios', () => {
+  const exercises = [{ id: 1 }, { id: 2 }, { id: 3 }];
+
+  it('estado inicial: todos los ejercicios empiezan colapsados (Set vacío)', () => {
+    const expandedIds = collapseAll();
+    exercises.forEach(ex => expect(expandedIds.has(ex.id)).toBe(false));
+  });
+
+  it('toggle: expandir un ejercicio lo agrega al Set sin afectar los demás', () => {
+    const result = toggleExercise(new Set<number>(), 2);
+    expect(result.has(2)).toBe(true);
+    expect(result.has(1)).toBe(false);
+    expect(result.has(3)).toBe(false);
+  });
+
+  it('toggle: volver a tocar un ejercicio expandido lo colapsa', () => {
+    const result = toggleExercise(new Set([1, 2]), 2);
+    expect(result.has(2)).toBe(false);
+    expect(result.has(1)).toBe(true);
+  });
+
+  it('"Expandir todos" agrega todos los IDs al Set', () => {
+    const result = expandAll(exercises);
+    expect(result.size).toBe(3);
+    exercises.forEach(ex => expect(result.has(ex.id)).toBe(true));
+  });
+
+  it('"Colapsar todos" vacía el Set', () => {
+    const result = collapseAll();
+    expect(result.size).toBe(0);
+  });
+
+  it('isExpanded es true cuando el ID está en el Set', () => {
+    expect(isExerciseExpanded(new Set([2]), 2, false)).toBe(true);
+  });
+
+  it('isExpanded es false cuando el ID no está en el Set y no está editando', () => {
+    expect(isExerciseExpanded(new Set<number>(), 2, false)).toBe(false);
+  });
+
+  it('isExpanded es true cuando isEditing es true aunque el ID no esté en el Set', () => {
+    expect(isExerciseExpanded(new Set<number>(), 2, true)).toBe(true);
+  });
+
+  it('auto-expand al editar: el ID se agrega al Set existente sin borrar los demás', () => {
+    const before = new Set([1]);
+    const after = new Set([...before, 3]);
+    expect(after.has(1)).toBe(true);
+    expect(after.has(3)).toBe(true);
+    expect(after.has(2)).toBe(false);
+  });
+
+  it('al cambiar de día el Set se resetea a vacío', () => {
+    const result = collapseAll();
+    expect(result.size).toBe(0);
+  });
+
+  it('toggle es inmutable: no modifica el Set original', () => {
+    const original = new Set([1, 2]);
+    toggleExercise(original, 2);
+    expect(original.has(2)).toBe(true);
+  });
+});
+
+describe('ESCENARIO 17: Reordenar Ejercicios', () => {
+  const exercises = [
+    { id: 1, order_index: 1 },
+    { id: 2, order_index: 2 },
+    { id: 3, order_index: 3 },
+  ];
+
+  it('mover arriba: el ejercicio intercambia posición con el anterior', () => {
+    const result = swapOrderIndex(exercises, 1, 0); // id=2 sube
+    expect(result[0].id).toBe(2);
+    expect(result[1].id).toBe(1);
+    expect(result[2].id).toBe(3);
+  });
+
+  it('mover abajo: el ejercicio intercambia posición con el siguiente', () => {
+    const result = swapOrderIndex(exercises, 0, 1); // id=1 baja
+    expect(result[0].id).toBe(2);
+    expect(result[1].id).toBe(1);
+    expect(result[2].id).toBe(3);
+  });
+
+  it('canMoveUp: el primer ejercicio no puede subir', () => {
+    expect(canMoveUp(0)).toBe(false);
+  });
+
+  it('canMoveUp: cualquier ejercicio que no sea el primero puede subir', () => {
+    expect(canMoveUp(1)).toBe(true);
+    expect(canMoveUp(2)).toBe(true);
+  });
+
+  it('canMoveDown: el último ejercicio no puede bajar', () => {
+    expect(canMoveDown(2, 3)).toBe(false);
+  });
+
+  it('canMoveDown: cualquier ejercicio que no sea el último puede bajar', () => {
+    expect(canMoveDown(0, 3)).toBe(true);
+    expect(canMoveDown(1, 3)).toBe(true);
+  });
+
+  it('después del swap no hay order_index duplicados', () => {
+    const result = swapOrderIndex(exercises, 0, 1);
+    const orders = result.map(e => e.order_index);
+    expect(new Set(orders).size).toBe(orders.length);
+  });
+
+  it('mover el último ejercicio hacia arriba 2 veces lo deja primero', () => {
+    let ex = exercises.map(e => ({ ...e }));
+    ex = swapOrderIndex(ex, 2, 1);
+    ex = swapOrderIndex(ex, 1, 0);
+    expect(ex[0].id).toBe(3);
+  });
+
+  it('mover el primer ejercicio hacia abajo 2 veces lo deja último', () => {
+    let ex = exercises.map(e => ({ ...e }));
+    ex = swapOrderIndex(ex, 0, 1);
+    ex = swapOrderIndex(ex, 1, 2);
+    expect(ex[2].id).toBe(1);
+  });
+
+  it('índice fuera de rango no modifica la lista', () => {
+    const result = swapOrderIndex(exercises, 0, -1);
+    expect(result[0].id).toBe(1);
+    expect(result[1].id).toBe(2);
+    expect(result[2].id).toBe(3);
+  });
+
+  it('swapOrderIndex es inmutable: no modifica el array original', () => {
+    swapOrderIndex(exercises, 0, 1);
+    expect(exercises[0].id).toBe(1);
+    expect(exercises[0].order_index).toBe(1);
+  });
+});
+
+// --- Helpers para ESCENARIO 15 ---
+
+function getMonday(dateStr: string): string {
+  const d = new Date(dateStr + "T00:00:00");
+  const day = d.getDay();
+  const diff = day === 0 ? -6 : 1 - day;
+  d.setDate(d.getDate() + diff);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, "0");
+  const dd = String(d.getDate()).padStart(2, "0");
+  return `${y}-${m}-${dd}`;
+}
+
+function shouldShowTodayButton(currentMonday: string, todayMonday: string): boolean {
+  return currentMonday !== todayMonday;
+}
+
+describe('ESCENARIO 15: Botón "Hoy" - Lógica de Visibilidad y Navegación', () => {
+  // getMonday
+  it('getMonday: un lunes retorna el mismo dia', () => {
+    expect(getMonday('2026-06-01')).toBe('2026-06-01'); // lunes
+  });
+
+  it('getMonday: un miercoles retorna el lunes de esa semana', () => {
+    expect(getMonday('2026-06-03')).toBe('2026-06-01');
+  });
+
+  it('getMonday: un domingo retorna el lunes de esa misma semana ISO (6 dias antes)', () => {
+    expect(getMonday('2026-06-07')).toBe('2026-06-01');
+  });
+
+  it('getMonday: un sabado retorna el lunes de esa semana', () => {
+    expect(getMonday('2026-06-06')).toBe('2026-06-01');
+  });
+
+  it('getMonday: resultado siempre es dia 1 (lunes)', () => {
+    const dates = ['2026-06-01', '2026-06-02', '2026-06-03', '2026-06-04', '2026-06-05', '2026-06-06', '2026-06-07'];
+    dates.forEach(d => {
+      expect(new Date(getMonday(d) + "T00:00:00").getDay()).toBe(1);
+    });
+  });
+
+  it('getMonday: dos dias de la misma semana retornan el mismo lunes', () => {
+    expect(getMonday('2026-06-02')).toBe(getMonday('2026-06-05')); // martes y viernes misma semana
+  });
+
+  it('getMonday: dias de semanas distintas retornan lunes distintos', () => {
+    expect(getMonday('2026-06-01')).not.toBe(getMonday('2026-06-08'));
+  });
+
+  // shouldShowTodayButton
+  it('oculta el botón cuando se está viendo la semana actual', () => {
+    const todayMonday = '2026-06-01';
+    expect(shouldShowTodayButton('2026-06-01', todayMonday)).toBe(false);
+  });
+
+  it('muestra el botón cuando se está viendo una semana pasada', () => {
+    const todayMonday = '2026-06-08';
+    expect(shouldShowTodayButton('2026-06-01', todayMonday)).toBe(true);
+  });
+
+  it('muestra el botón cuando se está viendo una semana futura', () => {
+    const todayMonday = '2026-06-01';
+    expect(shouldShowTodayButton('2026-06-15', todayMonday)).toBe(true);
+  });
+
+  it('muestra el botón al navegar 3 semanas hacia atrás', () => {
+    const todayMonday = '2026-06-22';
+    const viewingMonday = '2026-06-01'; // 3 semanas antes
+    expect(shouldShowTodayButton(viewingMonday, todayMonday)).toBe(true);
+  });
+
+  it('al hacer click en Hoy, selectedDate pasa a ser el lunes de la semana actual', () => {
+    const today = '2026-06-03'; // miercoles
+    const todayMonday = getMonday(today);
+    expect(todayMonday).toBe('2026-06-01');
+    // Tras navegar a hoy, la semana visible debe ser la de hoy
+    expect(shouldShowTodayButton(todayMonday, todayMonday)).toBe(false);
+  });
+});

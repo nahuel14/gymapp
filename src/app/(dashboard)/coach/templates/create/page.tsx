@@ -14,7 +14,6 @@ import {
   X
 } from "lucide-react";
 import { createTemplatePlan } from "../../student/actions";
-import { createSupabaseServerClient } from "@/lib/supabase";
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "../../student/ExerciseExcelGrid";
 
@@ -42,7 +41,7 @@ export default function CreateTemplatePage() {
     sessions: []
   });
   
-  const [isSaving, setIsSaving] = useState(false);
+  const [isSaving] = useState(false);
   const [templateId, setTemplateId] = useState<number | null>(null);
   const [isAddingExercise, setIsAddingExercise] = useState(false);
   const [selectedSessionId, setSelectedSessionId] = useState<number | null>(null);
@@ -210,25 +209,6 @@ export default function CreateTemplatePage() {
       }
     } catch (error) {
       console.error("Error adding exercise:", error);
-    }
-  };
-
-  const fetchTemplateData = async () => {
-    if (!templateId) return;
-    
-    try {
-      const response = await fetch(`/api/templates/${templateId}`);
-      const data = await response.json();
-      
-      // Actualizar solo las sesiones, preservando el resto del template (incluido el nombre)
-      setTemplate(prev => ({
-        ...prev,
-        sessions: data.sessions || [],
-        // Preservar el nombre actual si existe, sino usar el del servidor
-        name: prev.name || data.name
-      }));
-    } catch (error) {
-      console.error("Error fetching template data:", error);
     }
   };
 
@@ -510,8 +490,6 @@ function AddExerciseForm({
       return { ...prev, [field]: newArray };
     });
   };
-
-  const selectedExercise = exercises.find(ex => ex.id === form.exerciseId);
 
   return (
     <div className="rounded-xl border-2 border-zinc-800 bg-zinc-950 p-6 space-y-4">

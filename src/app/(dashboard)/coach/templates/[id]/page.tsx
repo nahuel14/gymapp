@@ -6,7 +6,6 @@ import { useTemplate } from "@/hooks/useTemplates";
 import { ExerciseExcelGrid } from "@/app/(dashboard)/coach/student/ExerciseExcelGrid";
 import { deleteDayFromPlan, deleteTemplatePlan } from "@/app/(dashboard)/coach/student/actions";
 import { useQueryClient } from "@tanstack/react-query";
-import { ExerciseFormModal } from "@/components/ExerciseFormModal"
 
 export default function TemplateViewPage() {
   const params = useParams();

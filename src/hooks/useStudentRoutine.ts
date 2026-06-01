@@ -2,7 +2,7 @@
 
 import { useQuery } from "@tanstack/react-query";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
-import type { Database, Tables } from "@/types/supabase";
+import type { Tables } from "@/types/supabase";
 
 type Profile = Pick<Tables<"profiles">, "id" | "role" | "name" | "last_name">;
 type TrainingPlan = Pick<

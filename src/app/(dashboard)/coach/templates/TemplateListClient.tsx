@@ -168,7 +168,7 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
 
         {/* Templates Grid/List */}
         {localTemplates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 px-4 rounded-[2rem] border-2 border-dashed border-zinc-800 bg-zinc-950/50">
+          <div className="flex flex-col items-center justify-center py-24 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
             <LayoutTemplate className="h-16 w-16 text-zinc-700 mb-4" />
             <h3 className="text-xl font-bold text-zinc-300 mb-2">No hay plantillas aún</h3>
             <p className="text-zinc-500 text-center max-w-md mb-6">
@@ -206,15 +206,15 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
   );
 }
 
-function TemplateCard({ 
-  template, 
-  onDuplicate, 
-  onEdit, 
+function TemplateCard({
+  template,
+  onDuplicate: _onDuplicate,
+  onEdit,
   onPreview,
   onDelete,
   userRole,
   viewMode
-}: { 
+}: {
   template: TemplatePlan;
   onDuplicate: () => void;
   onEdit: () => void;

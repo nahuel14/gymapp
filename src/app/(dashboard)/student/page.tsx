@@ -9,8 +9,8 @@ type StudentPageProps = {
 };
 
 export default async function StudentPage({ searchParams }: StudentPageProps) {
-  const params = await searchParams;
-  
+  await searchParams;
+
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
 

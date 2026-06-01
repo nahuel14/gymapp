@@ -2,15 +2,10 @@
 
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
-import { 
-  UserPlus, 
-  Users, 
-  Shield, 
-  UserCheck, 
-  Mail, 
-  Plus,
+import {
+  UserPlus,
+  Mail,
   X,
-  Check,
   Search,
   Square,
   CheckSquare,
@@ -20,10 +15,9 @@ import {
   Trash2
 } from "lucide-react";
 import type { Tables, Database } from "@/types/supabase";
-import { 
-  inviteUser, 
-  updateUserRole, 
-  assignCoachToStudent, 
+import {
+  inviteUser,
+  assignCoachToStudent,
   removeCoachFromStudent,
   updateUserAsAdmin,
   deleteUser
@@ -102,7 +96,6 @@ export function AdminDashboardClient({
   });
 
   const coaches = profiles.filter(p => p.role === "COACH" || p.role === "ADMIN");
-  const students = profiles.filter(p => p.role === "STUDENT");
 
   const handleInvite = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -114,17 +107,6 @@ export function AdminDashboardClient({
         alert("Usuario invitado con éxito");
       } catch (error: any) {
         alert("Error al invitar: " + error.message);
-      }
-    });
-  };
-
-  const handleRoleChange = async (userId: string, newRole: UserRole) => {
-    if (!confirm(`¿Estás seguro de cambiar el rol a ${newRole}?`)) return;
-    startTransition(async () => {
-      try {
-        await updateUserRole(userId, newRole);
-      } catch (error: any) {
-        alert("Error al actualizar rol: " + error.message);
       }
     });
   };
@@ -189,7 +171,7 @@ export function AdminDashboardClient({
 
       <div className="flex flex-col gap-4 md:hidden">
         {filteredProfiles.map((profile) => (
-          <div key={profile.id} className="rounded-[1.5rem] border-2 border-border bg-card p-5 shadow-sm">
+          <div key={profile.id} className="rounded-3xl border-2 border-border bg-card p-5 shadow-sm">
             <div className="flex flex-col gap-1">
               <span className="text-lg font-black text-foreground">
                 {(profile as any).name} {(profile as any).last_name}
@@ -236,7 +218,7 @@ export function AdminDashboardClient({
       </div>
 
       {/* Users Table */}
-      <div className="hidden bg-card border-2 border-border rounded-[2rem] overflow-hidden shadow-sm md:block">
+      <div className="hidden bg-card border-2 border-border rounded-4xl overflow-hidden shadow-sm md:block">
         <div className="overflow-x-auto">
           <table className="w-full text-left border-collapse">
             <thead>
@@ -393,7 +375,7 @@ export function AdminDashboardClient({
 
               <button 
                 disabled={isPending}
-                className="mt-4 bg-foreground text-background py-5 rounded-[1.5rem] font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50"
+                className="mt-4 bg-foreground text-background py-5 rounded-3xl font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50"
               >
                 {isPending ? "PROCESANDO..." : "ENVIAR INVITACIÓN"}
               </button>
@@ -455,7 +437,7 @@ export function AdminDashboardClient({
 
               <button 
                 disabled={isPending}
-                className="mt-4 flex items-center justify-center gap-2 bg-foreground text-background py-5 rounded-[1.5rem] font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50"
+                className="mt-4 flex items-center justify-center gap-2 bg-foreground text-background py-5 rounded-3xl font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50"
               >
                 {isPending ? (
                   <>

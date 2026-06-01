@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
   SelectContent,
@@ -268,7 +268,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
           else setIsModalOpen(true);
         }}
       >
-        <DialogContent className="sm:max-w-md rounded-[2rem] border-border bg-card shadow-2xl">
+        <DialogContent className="sm:max-w-md rounded-4xl border-border bg-card shadow-2xl">
           <DialogHeader>
             <DialogTitle className="text-xl font-black tracking-tight">Nuevo Plan</DialogTitle>
             <DialogDescription className="text-xs font-bold uppercase tracking-widest text-muted-foreground">

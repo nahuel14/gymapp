@@ -2,8 +2,6 @@
 
 import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
-import type { Database } from "@/types/supabase";
-
 // --- Helpers de fechas y validación de colisiones ---
 
 function normalizeToMonday(dateStr: string): string {
@@ -644,7 +642,7 @@ export async function instantiateTemplateToStudent(
 
     // Pre-computar las fechas de sesión para determinar end_date antes de escribir
     const sessionDates: string[] = [];
-    let currentDate = new Date(normalizedStart + "T00:00:00");
+    const currentDate = new Date(normalizedStart + "T00:00:00");
 
     for (let i = 0; i < (templateSessions?.length || 0); i++) {
       while (!preferredDaysOfWeek.includes(currentDate.getDay())) {
@@ -1131,6 +1129,22 @@ export async function updatePlanMeta(
     .eq("id", planId);
 
   if (error) throw error;
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+  return { success: true };
+}
+
+export async function swapExerciseOrder(id1: number, orderIndex1: number, id2: number, orderIndex2: number) {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  await Promise.all([
+    supabase.from("session_exercises").update({ order_index: orderIndex1 } as any).eq("id", id1),
+    supabase.from("session_exercises").update({ order_index: orderIndex2 } as any).eq("id", id2),
+  ]);
 
   revalidatePath("/coach/student/[studentId]", "page");
   revalidatePath("/student", "page");

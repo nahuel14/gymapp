@@ -4,11 +4,8 @@ import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  BookOpen,
-  CalendarClock,
   Dumbbell,
   LayoutDashboard,
-  LayoutTemplate,
   UserCircle,
   Users,
   ClipboardList,
@@ -84,6 +81,8 @@ function SidebarContent({
   role: UserRole;
   roleLabel: string;
 }) {
+  const pathname = usePathname();
+
   return (
     <>
       <div className="mb-8 flex items-center gap-2">
@@ -96,7 +95,6 @@ function SidebarContent({
 
       <nav className="flex flex-1 flex-col gap-1">
         {navItems.map((item) => {
-          const pathname = usePathname();
           const isActive = checkIsActive(pathname, item.href);
           
           return (
@@ -223,7 +221,7 @@ function BottomNavigation({ role }: { role: UserRole }) {
 
 export function DashboardShell({ children, fullName, navItems, role, roleLabel }: DashboardShellProps) {
   return (
-    <div className="flex h-[100dvh] w-screen overflow-hidden bg-zinc-950">
+    <div className="flex h-dvh w-screen overflow-hidden bg-zinc-950">
       
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 px-4 py-6 md:flex">
@@ -231,7 +229,7 @@ export function DashboardShell({ children, fullName, navItems, role, roleLabel }
       </aside>
 
       {/* Área Principal y Barra Inferior */}
-      <div className="flex flex-1 flex-col min-w-0 h-[100dvh]">
+      <div className="flex flex-1 flex-col min-w-0 h-dvh">
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-zinc-950 relative">
           {children}
         </main>

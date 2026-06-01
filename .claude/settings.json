@@ -13,7 +13,11 @@
       "PowerShell(node -e \"const rdp = require\\('./node_modules/react-day-picker'\\); console.log\\(Object.keys\\(rdp\\).slice\\(0,20\\)\\)\")",
       "PowerShell(npm install react-day-picker@9 2>&1)",
       "PowerShell(tail -5)",
-      "PowerShell(node -e \"const { es } = require\\('react-day-picker/locale'\\); console.log\\(es ? 'OK: es locale found' : 'ERROR: es locale not found'\\)\")"
+      "PowerShell(node -e \"const { es } = require\\('react-day-picker/locale'\\); console.log\\(es ? 'OK: es locale found' : 'ERROR: es locale not found'\\)\")",
+      "Bash(npx eslint *)",
+      "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\);d.forEach\\(f=>{if\\(f.messages.length\\){console.log\\(f.filePath.replace\\(/.*src/,'src'\\)\\);f.messages.forEach\\(m=>console.log\\('  ',m.severity===2?'ERR':'WRN',m.line,m.ruleId,m.message.slice\\(0,80\\)\\)\\)}}\\)\")",
+      "Bash(grep -E \"^\\\\S.*\\\\.tsx?$|error|warning\")",
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\(0,'utf8'\\);JSON.parse\\(d\\).forEach\\(f=>f.messages.forEach\\(m=>console.log\\(m.line,m.ruleId,m.message.slice\\(0,60\\)\\)\\)\\)\")"
     ]
   }
 }

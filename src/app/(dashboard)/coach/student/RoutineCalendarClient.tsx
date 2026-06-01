@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useTransition, useMemo } from "react";
+import { useState, useTransition, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { ExerciseFormModal } from "@/components/ExerciseFormModal";
@@ -14,14 +14,14 @@ import {
   Copy,
   Trash2,
   CalendarClock,
+  ChevronsUpDown,
+  ChevronsDownUp,
 } from "lucide-react";
 import type { Tables } from "@/types/supabase";
 import {
   addDayToWeek,
   addExerciseToSession,
-  deleteExerciseFromSession,
   deleteDayFromPlan,
-  updateExerciseInSession,
   duplicateSession,
   moveSession
 } from "./actions";
@@ -104,6 +104,11 @@ export function RoutineCalendarClient({
   const [duplicateError, setDuplicateError] = useState<string | null>(null);
   const [newDayForm, setNewDayForm] = useState<{ date: string } | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
+  const [allExpanded, setAllExpanded] = useState(false);
+
+  useEffect(() => {
+    setAllExpanded(false);
+  }, [selectedDate]);
 
   const [newExForm, setNewExForm] = useState({
     exerciseId: "",
@@ -114,10 +119,6 @@ export function RoutineCalendarClient({
     rest: 60,
     notes: ""
   });
-
-  const formatDateDisplay = (dateStr: string, options?: Intl.DateTimeFormatOptions) => {
-    return new Intl.DateTimeFormat("es-AR", options).format(new Date(dateStr + "T00:00:00"));
-  };
 
   // 1. Mapear planes con rangos seguros
   const plansWithRanges = useMemo(() => {
@@ -355,13 +356,23 @@ export function RoutineCalendarClient({
               <Calendar className="h-3.5 w-3.5" />
               {currentViewedPlan ? `Semana ${viewedWeekNumber}` : "Navegación Libre"}
             </span>
-            <div className="flex items-center gap-1 bg-zinc-950 rounded-lg border border-zinc-800 p-0.5">
-              <button onClick={() => setSelectedDate(shiftDate(currentMonday, -7))} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
-                <ChevronLeft className="h-4 w-4" />
-              </button>
-              <button onClick={() => setSelectedDate(shiftDate(currentMonday, 7))} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
-                <ChevronRight className="h-4 w-4" />
-              </button>
+            <div className="flex items-center gap-1.5">
+              {getMonday(toLocalISODate(new Date())) !== currentMonday && (
+                <button
+                  onClick={() => setSelectedDate(toLocalISODate(new Date()))}
+                  className="px-2.5 py-1 rounded-lg border border-zinc-700 bg-zinc-900 text-[10px] font-black uppercase tracking-widest text-zinc-300 hover:text-white hover:border-zinc-500 transition-all active:scale-95"
+                >
+                  Hoy
+                </button>
+              )}
+              <div className="flex items-center gap-1 bg-zinc-950 rounded-lg border border-zinc-800 p-0.5">
+                <button onClick={() => setSelectedDate(shiftDate(currentMonday, -7))} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
+                  <ChevronLeft className="h-4 w-4" />
+                </button>
+                <button onClick={() => setSelectedDate(shiftDate(currentMonday, 7))} className="p-1.5 text-zinc-400 hover:text-white transition-colors">
+                  <ChevronRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -409,8 +420,8 @@ export function RoutineCalendarClient({
 
       {/* INFO DEL DÍA Y BOTONES SUPERIORES */}
       <div className="flex flex-col gap-3 px-4">
-        <div className="flex items-center justify-between">
-          <div className="flex flex-col">
+        <div className="flex items-center gap-2">
+          <div className="flex flex-col flex-1 min-w-0">
             <h3 className="text-[10px] font-black uppercase tracking-widest text-zinc-500">
               {activeSessionsForDate.length > 0 ? "Entrenamiento" : role === "STUDENT" ? "Día de Descanso" : "Día Libre"}
             </h3>
@@ -419,12 +430,23 @@ export function RoutineCalendarClient({
             </p>
           </div>
 
-          <div className="flex items-center gap-1.5">
+          <div className="flex items-center gap-1 shrink-0">
+            {/* BOTÓN EXPANDIR/COLAPSAR TODOS */}
+            {activeExercises.length > 0 && !isAddingDay && (
+              <button
+                onClick={() => setAllExpanded(prev => !prev)}
+                className="flex h-9 w-9 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 hover:text-zinc-200 hover:bg-zinc-800 transition-all active:scale-95"
+                title={allExpanded ? "Colapsar todos" : "Expandir todos"}
+              >
+                {allExpanded ? <ChevronsDownUp className="h-4 w-4" /> : <ChevronsUpDown className="h-4 w-4" />}
+              </button>
+            )}
+
             {/* BOTÓN REAGENDAR: Visible para Alumno y Coach si hay sesión */}
             {activeSessionsForDate.length > 0 && !isAddingDay && (
               <button
                 onClick={handleOpenReschedule}
-                className="flex h-9 items-center gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 px-3 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition hover:bg-zinc-700 hover:text-white active:scale-95"
+                className="flex h-9 w-9 sm:w-auto items-center justify-center sm:gap-1.5 rounded-lg border border-zinc-700 bg-zinc-800 sm:px-3 text-[10px] font-black uppercase tracking-widest text-zinc-300 transition hover:bg-zinc-700 hover:text-white active:scale-95"
               >
                 <CalendarClock className="h-4 w-4 shrink-0" />
                 <span className="hidden sm:inline">Reagendar</span>
@@ -632,7 +654,7 @@ export function RoutineCalendarClient({
               <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">Sin ejercicios para este día</p>
             </div>
           ) : (
-            <ExerciseExcelGrid exercises={activeExercises} role={role === "ADMIN" ? "COACH" : role} />
+            <ExerciseExcelGrid exercises={activeExercises} role={role === "ADMIN" ? "COACH" : role} allExpanded={allExpanded} />
           )}
 
         </div>

@@ -1,15 +1,18 @@
 "use client";
 
-import { useState, useTransition } from "react";
-import { 
-  Play, 
-  Settings2, 
-  Trash2, 
-  X,
-  PlusCircle
+import { useState, useTransition, useEffect } from "react";
+import {
+  Play,
+  Settings2,
+  Trash2,
+  PlusCircle,
+  ChevronDown,
+  ChevronUp,
+  ArrowUp,
+  ArrowDown
 } from "lucide-react";
 import { BODY_ZONE_LABELS, EXERCISE_CATEGORY_LABELS } from "@/lib/constants";
-import { updateExerciseInSession, deleteExerciseFromSession } from "./actions";
+import { updateExerciseInSession, deleteExerciseFromSession, swapExerciseOrder } from "./actions";
 import { useQueryClient } from "@tanstack/react-query";
 
 type SessionExercise = any;
@@ -18,14 +21,30 @@ interface Props {
   exercises: SessionExercise[];
   role: "COACH" | "STUDENT";
   isTemplate?: boolean;
+  allExpanded?: boolean;
 }
 
-export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props) {
+export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpanded = false }: Props) {
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
   const sortedExercises = [...exercises].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
+
+  const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+
+  useEffect(() => {
+    setExpandedIds(allExpanded ? new Set(exercises.map(e => e.id)) : new Set());
+  }, [allExpanded, exercises]);
+
+  const toggleExpand = (id: number) => {
+    setExpandedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id);
+      else next.add(id);
+      return next;
+    });
+  };
 
   const getRpeColor = (rpe: number | null) => {
     if (!rpe) return "text-muted-foreground";
@@ -38,6 +57,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
   };
 
   const handleStartEdit = (ex: any) => {
+    setExpandedIds(prev => new Set([...prev, ex.id]));
     setEditingId(ex.id);
     
     const hasStudentData = ex.actual_sets && ex.actual_sets > 0;
@@ -74,6 +94,26 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
     });
   };
 
+  const handleMoveUp = (index: number) => {
+    if (index === 0) return;
+    const curr = sortedExercises[index];
+    const prev = sortedExercises[index - 1];
+    startTransition(async () => {
+      await swapExerciseOrder(curr.id, prev.order_index ?? index - 1, prev.id, curr.order_index ?? index);
+      await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+    });
+  };
+
+  const handleMoveDown = (index: number) => {
+    if (index === sortedExercises.length - 1) return;
+    const curr = sortedExercises[index];
+    const next = sortedExercises[index + 1];
+    startTransition(async () => {
+      await swapExerciseOrder(curr.id, next.order_index ?? index + 1, next.id, curr.order_index ?? index);
+      await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+    });
+  };
+
   const handleDelete = async (id: number) => {
     if (!confirm("¿Eliminar ejercicio?")) return;
     startTransition(async () => {
@@ -96,9 +136,10 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
 
   return (
     <div className="flex flex-col gap-3 w-full max-w-full">
-      {sortedExercises.map((ex) => {
+      {sortedExercises.map((ex, index) => {
         const exerciseData = ex.exercise || ex.exercises;
         const isEditing = editingId === ex.id;
+        const isExpanded = expandedIds.has(ex.id) || isEditing;
         const data = isEditing ? editForm : ex;
         const coachSets = Number(data.target_sets || 0);
         const studentSets = Number(data.actual_sets || coachSets);
@@ -114,43 +155,72 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
             {/* Cabecera del Ejercicio */}
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0 flex flex-col gap-1">
-                <div className="flex flex-wrap items-center gap-1.5">
-                  <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
-                    {exerciseData?.body_zone ? BODY_ZONE_LABELS[exerciseData.body_zone as keyof typeof BODY_ZONE_LABELS] : "--"}
-                  </span>
-                  <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
-                    {exerciseData?.category ? EXERCISE_CATEGORY_LABELS[exerciseData.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
-                  </span>
-                </div>
+                {isExpanded && (
+                  <div className="flex flex-wrap items-center gap-1.5">
+                    <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                      {exerciseData?.body_zone ? BODY_ZONE_LABELS[exerciseData.body_zone as keyof typeof BODY_ZONE_LABELS] : "--"}
+                    </span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
+                      {exerciseData?.category ? EXERCISE_CATEGORY_LABELS[exerciseData.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
+                    </span>
+                  </div>
+                )}
                 <h3 className="text-sm font-black uppercase tracking-tight text-zinc-100 leading-snug">
                   {exerciseData?.name || "--"}
                 </h3>
               </div>
 
-              <div className="flex flex-col items-end gap-1.5 shrink-0">
+              <div className="flex items-center gap-1 shrink-0">
                 {exerciseData?.video_url && (
                   <a
                     href={exerciseData.video_url}
                     target="_blank"
                     rel="noopener noreferrer"
-                    className="inline-flex items-center justify-center h-8 w-8 rounded-lg bg-zinc-800 text-yellow-400 hover:bg-yellow-400 hover:text-black hover:scale-105 active:scale-95 transition-all shadow-sm"
+                    className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-zinc-800 text-yellow-400 hover:bg-yellow-400 hover:text-black hover:scale-105 active:scale-95 transition-all shadow-sm"
                   >
-                    <Play className="h-3.5 w-3.5 fill-current" />
+                    <Play className="h-3 w-3 fill-current" />
                   </a>
                 )}
-                {role === "COACH" && !isEditing && (
-                  <div className="flex gap-1">
+                {role === "COACH" && !isEditing && !isExpanded && (
+                  <div className="flex gap-0.5">
+                    <button
+                      onClick={() => handleMoveUp(index)}
+                      disabled={index === 0 || isPending}
+                      className="h-7 w-6 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 active:scale-95 transition-all disabled:opacity-20 disabled:cursor-default"
+                    >
+                      <ArrowUp className="h-3 w-3" />
+                    </button>
+                    <button
+                      onClick={() => handleMoveDown(index)}
+                      disabled={index === sortedExercises.length - 1 || isPending}
+                      className="h-7 w-6 flex items-center justify-center rounded-md text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 active:scale-95 transition-all disabled:opacity-20 disabled:cursor-default"
+                    >
+                      <ArrowDown className="h-3 w-3" />
+                    </button>
+                  </div>
+                )}
+                {role === "COACH" && !isEditing && isExpanded && (
+                  <>
                     <button onClick={() => handleStartEdit(ex)} className="h-7 w-7 flex items-center justify-center rounded-md bg-zinc-800/50 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-400/10 active:scale-95 transition-all">
                       <Settings2 className="h-3.5 w-3.5" />
                     </button>
                     <button onClick={() => handleDelete(ex.id)} className="h-7 w-7 flex items-center justify-center rounded-md bg-red-500/10 text-red-400 hover:bg-red-500/20 active:scale-95 transition-all">
                       <Trash2 className="h-3.5 w-3.5" />
                     </button>
-                  </div>
+                  </>
+                )}
+                {!isEditing && (
+                  <button
+                    onClick={() => toggleExpand(ex.id)}
+                    className="h-7 w-7 flex items-center justify-center rounded-md bg-zinc-800/30 text-zinc-500 hover:text-zinc-200 hover:bg-zinc-800 active:scale-95 transition-all"
+                  >
+                    {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
+                  </button>
                 )}
               </div>
             </div>
 
+            {isExpanded && (
             <div className="flex flex-col md:flex-row gap-2 w-full">
               {/* Sección COACH */}
               <div className="flex-1 rounded-lg bg-zinc-950/80 border border-zinc-800/80 p-2 flex flex-col gap-2 w-full">
@@ -170,6 +240,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                           type="number"
                           className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-yellow-400 outline-none focus:border-yellow-400"
                           value={data.target_sets || 0}
+                          onFocus={(e) => e.target.select()}
                           onChange={e => setEditForm({ ...editForm, target_sets: Number(e.target.value) })}
                         />
                       </div>
@@ -180,6 +251,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                           step="0.5"
                           className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-yellow-400 outline-none focus:border-yellow-400"
                           value={data.target_rpe || 0}
+                          onFocus={(e) => e.target.select()}
                           onChange={e => setEditForm({ ...editForm, target_rpe: Number(e.target.value) })}
                         />
                       </div>
@@ -189,6 +261,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                           type="number"
                           className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-yellow-400 outline-none focus:border-yellow-400"
                           value={data.rest_seconds || 0}
+                          onFocus={(e) => e.target.select()}
                           onChange={e => setEditForm({ ...editForm, rest_seconds: Number(e.target.value) })}
                         />
                       </div>
@@ -207,6 +280,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                                 placeholder="Reps"
                                 className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400"
                                 value={data.target_reps?.[i] ?? ""}
+                                onFocus={(e) => e.target.select()}
                                 onChange={e => updateArrayField("target_reps", i, e.target.value)}
                               />
                               <input
@@ -215,6 +289,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                                 placeholder="Kg"
                                 className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400"
                                 value={data.target_weight?.[i] ?? ""}
+                                onFocus={(e) => e.target.select()}
                                 onChange={e => updateArrayField("target_weight", i, e.target.value)}
                               />
                             </div>
@@ -226,7 +301,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                     <div className="flex flex-col gap-1">
                       <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Notas</label>
                       <textarea
-                        className="min-h-[40px] w-full rounded-md border border-zinc-700 bg-zinc-900 p-2 text-[11px] text-zinc-100 outline-none focus:border-yellow-400 resize-none"
+                        className="min-h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 p-2 text-[11px] text-zinc-100 outline-none focus:border-yellow-400 resize-none"
                         value={data.coach_notes || ""}
                         onChange={e => setEditForm({ ...editForm, coach_notes: e.target.value })}
                       />
@@ -254,8 +329,8 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                         <div key={i} className="flex items-center justify-between bg-zinc-900/40 px-2 py-1.5 rounded border border-zinc-800/50">
                           <span className="text-[9px] font-black text-zinc-500 shrink-0">SET {i+1}</span>
                           <div className="flex items-center gap-3">
-                            <span className="text-xs font-bold text-zinc-200 min-w-[36px] text-right">{data.target_reps?.[i] ?? "-"} reps</span>
-                            <span className="text-[11px] font-medium text-zinc-400 min-w-[32px] text-right">{data.target_weight?.[i] ? `${data.target_weight[i]}kg` : "--"}</span>
+                            <span className="text-xs font-bold text-zinc-200 min-w-9 text-right">{data.target_reps?.[i] ?? "-"} reps</span>
+                            <span className="text-[11px] font-medium text-zinc-400 min-w-8 text-right">{data.target_weight?.[i] ? `${data.target_weight[i]}kg` : "--"}</span>
                           </div>
                         </div>
                       ))}
@@ -263,7 +338,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
 
                     {data.coach_notes && (
                       <div className="bg-yellow-400/5 border border-yellow-400/10 rounded-md p-2">
-                        <p className="text-[10px] text-yellow-500/80 italic leading-snug">"{data.coach_notes}"</p>
+                        <p className="text-[10px] text-yellow-500/80 italic leading-snug">&quot;{data.coach_notes}&quot;</p>
                       </div>
                     )}
                   </div>
@@ -299,6 +374,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                             type="number"
                             className="h-8 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-900 px-1 text-center text-xs font-black text-emerald-400 outline-none focus:border-emerald-400"
                             value={data.actual_sets || 0}
+                            onFocus={(e) => e.target.select()}
                             onChange={e => setEditForm({ ...editForm, actual_sets: Number(e.target.value) })}
                           />
                         </div>
@@ -316,6 +392,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                             }`}
                             value={data.actual_rpe || ""}
                             placeholder="Del 1 al 10"
+                            onFocus={(e) => e.target.select()}
                             onChange={e => setEditForm({ ...editForm, actual_rpe: Number(e.target.value) })}
                           />
                         </div>
@@ -334,6 +411,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                                   placeholder="Reps"
                                   className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-emerald-400"
                                   value={data.actual_reps?.[i] ?? ""}
+                                  onFocus={(e) => e.target.select()}
                                   onChange={e => updateArrayField("actual_reps", i, e.target.value)}
                                 />
                                 <input
@@ -342,6 +420,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                                   placeholder="Kg"
                                   className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-emerald-400"
                                   value={data.actual_weight?.[i] ?? ""}
+                                  onFocus={(e) => e.target.select()}
                                   onChange={e => updateArrayField("actual_weight", i, e.target.value)}
                                 />
                               </div>
@@ -353,7 +432,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                       <div className="flex flex-col gap-1">
                         <label className="text-[8px] font-black uppercase tracking-widest text-zinc-500">Mis notas</label>
                         <textarea
-                          className="min-h-[40px] w-full rounded-md border border-zinc-700 bg-zinc-900 p-2 text-[11px] text-zinc-100 outline-none focus:border-emerald-400 resize-none"
+                          className="min-h-10 w-full rounded-md border border-zinc-700 bg-zinc-900 p-2 text-[11px] text-zinc-100 outline-none focus:border-emerald-400 resize-none"
                           placeholder="Ej: Me dolió un poco el hombro..."
                           value={data.student_notes || ""}
                           onChange={e => setEditForm({ ...editForm, student_notes: e.target.value })}
@@ -380,8 +459,8 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                               <div key={i} className="flex items-center justify-between bg-zinc-900/40 px-2 py-1.5 rounded border border-zinc-800/50">
                                 <span className="text-[9px] font-black text-zinc-500 shrink-0">SET {i+1}</span>
                                 <div className="flex items-center gap-3">
-                                  <span className="text-xs font-bold text-zinc-200 min-w-[36px] text-right">{ex.actual_reps?.[i] ?? "-"} reps</span>
-                                  <span className="text-[11px] font-medium text-emerald-400 min-w-[32px] text-right">{ex.actual_weight?.[i] ? `${ex.actual_weight[i]}kg` : "--"}</span>
+                                  <span className="text-xs font-bold text-zinc-200 min-w-9 text-right">{ex.actual_reps?.[i] ?? "-"} reps</span>
+                                  <span className="text-[11px] font-medium text-emerald-400 min-w-8 text-right">{ex.actual_weight?.[i] ? `${ex.actual_weight[i]}kg` : "--"}</span>
                                 </div>
                               </div>
                             ))}
@@ -389,7 +468,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
 
                           {ex.student_notes && (
                             <div className="bg-emerald-400/5 border border-emerald-400/10 rounded-md p-2">
-                              <p className="text-[10px] text-emerald-500/80 italic leading-snug">"{ex.student_notes}"</p>
+                              <p className="text-[10px] text-emerald-500/80 italic leading-snug">&quot;{ex.student_notes}&quot;</p>
                             </div>
                           )}
                         </>
@@ -413,6 +492,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false }: Props
                 </div>
               )}
             </div>
+            )}
 
             {/* Acciones de Guardado */}
             {isEditing && (

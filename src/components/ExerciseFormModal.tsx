@@ -97,7 +97,7 @@ export function ExerciseFormModal({
   const displayExerciseName = selectedExerciseObj?.name || (formState.exerciseId ? newLibraryEx.name : "Buscar ejercicio...");
 
   return (
-    <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
+    <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
       <div className="w-full max-h-[90vh] flex flex-col bg-zinc-950 rounded-2xl border border-zinc-800 shadow-2xl animate-in fade-in zoom-in-95 max-w-lg">
         
         {/* HEADER */}
@@ -118,7 +118,7 @@ export function ExerciseFormModal({
         </div>
 
         {/* CUERPO DEL MODAL */}
-        <div className="flex-1 overflow-y-auto p-4 flex flex-col gap-4 no-scrollbar">
+        <div className="flex-1 overflow-y-auto p-3 flex flex-col gap-3 no-scrollbar">
           
           {/* VISTA 1: CREAR EJERCICIO NUEVO */}
           {isCreatingInline ? (
@@ -169,7 +169,7 @@ export function ExerciseFormModal({
             </div>
           ) : (
             /* VISTA 2: FORMULARIO NORMAL */
-            <div className="flex flex-col gap-4 animate-in slide-in-from-left-4">
+            <div className="flex flex-col gap-3 animate-in slide-in-from-left-4">
               
               {/* SELECTOR CON BUSCADOR (Ahora usa localExercises) */}
               <div className="flex flex-col gap-1.5 relative">
@@ -187,7 +187,7 @@ export function ExerciseFormModal({
                   </button>
 
                   {isExerciseDropdownOpen && (
-                    <div className="absolute top-full left-0 z-[70] mt-2 w-full bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95">
+                    <div className="absolute top-full left-0 z-70 mt-2 w-full bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95">
                       <div className="p-2 border-b border-zinc-800 bg-zinc-900">
                         <input
                           autoFocus
@@ -225,7 +225,7 @@ export function ExerciseFormModal({
                           }}
                           className="w-full py-2.5 rounded-lg bg-yellow-400/10 text-yellow-400 text-[10px] font-black uppercase tracking-widest hover:bg-yellow-400/20 transition-all flex items-center justify-center gap-2"
                         >
-                          <Plus className="h-3.5 w-3.5" /> Crear "{exerciseSearch || "Nuevo"}"
+                          <Plus className="h-3.5 w-3.5" /> Crear &quot;{exerciseSearch || "Nuevo"}&quot;
                         </button>
                       </div>
                     </div>
@@ -237,7 +237,7 @@ export function ExerciseFormModal({
               <div className="grid grid-cols-3 gap-2">
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Sets</label>
-                  <input type="number" className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400" value={formState.target_sets} onChange={(e) => {
+                  <input type="number" className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400" value={formState.target_sets} onFocus={(e) => e.target.select()} onChange={(e) => {
                     const sets = Math.max(1, Math.min(10, Number(e.target.value)));
                     setFormState({
                       ...formState, target_sets: sets,
@@ -248,11 +248,11 @@ export function ExerciseFormModal({
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">RPE</label>
-                  <input type="number" step="0.5" className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400" value={formState.target_rpe} onChange={(e) => setFormState({ ...formState, target_rpe: Number(e.target.value) })} />
+                  <input type="number" step="0.5" className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400" value={formState.target_rpe} onFocus={(e) => e.target.select()} onChange={(e) => setFormState({ ...formState, target_rpe: Number(e.target.value) })} />
                 </div>
                 <div className="flex flex-col gap-1">
                   <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 text-center">Pausa</label>
-                  <input type="number" className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400" value={formState.rest} onChange={(e) => setFormState({ ...formState, rest: Number(e.target.value) })} />
+                  <input type="number" className="h-9 w-full rounded-lg border border-zinc-800 bg-zinc-900 text-center text-sm font-black text-yellow-400 outline-none focus:border-yellow-400" value={formState.rest} onFocus={(e) => e.target.select()} onChange={(e) => setFormState({ ...formState, rest: Number(e.target.value) })} />
                 </div>
               </div>
 
@@ -264,8 +264,8 @@ export function ExerciseFormModal({
                     <div key={idx} className="flex items-center gap-2 w-full">
                       <span className="w-5 shrink-0 text-[10px] font-black text-zinc-500">S{idx + 1}</span>
                       <div className="flex-1 grid grid-cols-2 gap-2">
-                        <input type="number" placeholder="Reps" className="h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center text-xs text-zinc-100 outline-none focus:border-yellow-400 transition-colors" value={rep} onChange={(e) => updateArrayField("target_reps", idx, e.target.value)} />
-                        <input type="number" step="0.5" placeholder="Kg" className="h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center text-xs text-zinc-100 outline-none focus:border-yellow-400 transition-colors" value={formState.target_weight[idx] ?? ""} onChange={(e) => updateArrayField("target_weight", idx, e.target.value)} />
+                        <input type="number" placeholder="Reps" className="h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center text-xs text-zinc-100 outline-none focus:border-yellow-400 transition-colors" value={rep} onFocus={(e) => e.target.select()} onChange={(e) => updateArrayField("target_reps", idx, e.target.value)} />
+                        <input type="number" step="0.5" placeholder="Kg" className="h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center text-xs text-zinc-100 outline-none focus:border-yellow-400 transition-colors" value={formState.target_weight[idx] ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateArrayField("target_weight", idx, e.target.value)} />
                       </div>
                     </div>
                   ))}
@@ -276,7 +276,7 @@ export function ExerciseFormModal({
               <div className="flex flex-col gap-1">
                 <label className="text-[10px] font-black uppercase tracking-widest text-zinc-500 ml-1">Notas para el alumno</label>
                 <textarea 
-                  className="min-h-[50px] rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-xs text-zinc-100 outline-none focus:border-yellow-400 resize-none transition-colors" 
+                  className="min-h-9.5 rounded-lg border border-zinc-800 bg-zinc-900 p-2 text-xs text-zinc-100 outline-none focus:border-yellow-400 resize-none transition-colors" 
                   placeholder="Opcional..." 
                   value={formState.notes || formState.coach_notes || ""} 
                   onChange={(e) => setFormState({ ...formState, notes: e.target.value, coach_notes: e.target.value })} 
