@@ -68,16 +68,26 @@ async function fetchCoachStudents(): Promise<CoachStudentsResult | null> {
     .select("id, name, last_name")
     .in("id", studentIds);
 
-  // 3. Obtener planes activos de esos estudiantes
-  const { data: activePlans } = await supabase
+  // 3. Obtener planes vigentes de esos estudiantes (por rango de fechas)
+  const { data: allStudentPlans } = await supabase
     .from("training_plans")
-    .select("id, name, student_id, start_date")
-    .eq("is_active", true)
-    .in("student_id", studentIds);
+    .select("id, name, student_id, start_date, end_date")
+    .eq("is_template", false)
+    .in("student_id", studentIds)
+    .not("start_date", "is", null)
+    .order("start_date", { ascending: false });
 
-  const plansByStudent = new Map(
-    activePlans?.map(p => [p.student_id, p]) || []
-  );
+  const today = new Date().toISOString().split("T")[0];
+  const plansByStudent = new Map<string, NonNullable<typeof allStudentPlans>[0]>();
+
+  for (const sid of studentIds) {
+    const sp = (allStudentPlans ?? []).filter(p => p.student_id === sid);
+    const current =
+      sp.find(
+        (p) => p.start_date! <= today && (p.end_date == null || p.end_date >= today)
+      ) ?? sp[0] ?? null;
+    if (current) plansByStudent.set(sid, current);
+  }
 
   const students = (studentProfiles || []).map(p => {
     const plan = plansByStudent.get(p.id);

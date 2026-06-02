@@ -7,7 +7,7 @@ import type { Tables } from "@/types/supabase";
 type Profile = Pick<Tables<"profiles">, "id" | "role" | "name" | "last_name">;
 type TrainingPlan = Pick<
   Tables<"training_plans">,
-  "id" | "name" | "start_date" | "is_active" | "end_date"
+  "id" | "name" | "start_date" | "end_date"
 >;
 type Session = Tables<"sessions">;
 type SessionExercise = Tables<"session_exercises"> & {
@@ -38,15 +38,27 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
 
   const typedProfile = profile as Profile | null;
 
-  // 2. Todos los planes del estudiante, y el plan activo
+  // 2. Todos los planes del estudiante
   const { data: allPlansData } = await supabase
     .from("training_plans")
-    .select("id, name, start_date, end_date, is_active")
+    .select("id, name, start_date, end_date")
     .eq("student_id", studentId as any)
-    .order("created_at", { ascending: false });
+    .eq("is_template", false)
+    .order("start_date", { ascending: false });
 
   const allPlans = (allPlansData ?? []) as TrainingPlan[];
-  const plan = allPlans.find((p) => p.is_active) ?? null;
+
+  // Encontrar el plan vigente por rango de fechas
+  const today = new Date().toISOString().split("T")[0];
+  const plan =
+    allPlans.find(
+      (p) =>
+        p.start_date != null &&
+        p.start_date <= today &&
+        (p.end_date == null || p.end_date >= today)
+    ) ??
+    allPlans[0] ??
+    null;
 
   if (allPlans.length === 0) {
     return {
@@ -58,7 +70,7 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
     };
   }
 
-  // 3. Sesiones de TODOS los planes del alumno (no solo el activo)
+  // 3. Sesiones de TODOS los planes del alumno (no solo el vigente)
   const allPlanIds = allPlans.map((p) => p.id);
   const { data: sessions } = await supabase
     .from("sessions")
@@ -118,5 +130,4 @@ export function useStudentRoutine(studentId: string) {
     enabled: !!studentId,
   });
 }
-
 

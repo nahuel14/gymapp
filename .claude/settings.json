@@ -17,7 +17,10 @@
       "Bash(npx eslint *)",
       "Bash(node -e \"const d=JSON.parse\\(require\\('fs'\\).readFileSync\\('/dev/stdin','utf8'\\)\\);d.forEach\\(f=>{if\\(f.messages.length\\){console.log\\(f.filePath.replace\\(/.*src/,'src'\\)\\);f.messages.forEach\\(m=>console.log\\('  ',m.severity===2?'ERR':'WRN',m.line,m.ruleId,m.message.slice\\(0,80\\)\\)\\)}}\\)\")",
       "Bash(grep -E \"^\\\\S.*\\\\.tsx?$|error|warning\")",
-      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\(0,'utf8'\\);JSON.parse\\(d\\).forEach\\(f=>f.messages.forEach\\(m=>console.log\\(m.line,m.ruleId,m.message.slice\\(0,60\\)\\)\\)\\)\")"
+      "Bash(node -e \"const d=require\\('fs'\\).readFileSync\\(0,'utf8'\\);JSON.parse\\(d\\).forEach\\(f=>f.messages.forEach\\(m=>console.log\\(m.line,m.ruleId,m.message.slice\\(0,60\\)\\)\\)\\)\")",
+      "PowerShell(npx tsc --noEmit 2>&1 | Where-Object { $_ -match \"error TS\" } | Select-Object -First 20)",
+      "PowerShell(npm test 2>&1)",
+      "PowerShell(npm run lint 2>&1)"
     ]
   }
 }

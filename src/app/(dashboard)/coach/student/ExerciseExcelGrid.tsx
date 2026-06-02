@@ -93,7 +93,17 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
 
   const handleSave = async (id: number) => {
     startTransition(async () => {
-      await updateExerciseInSession(id, editForm);
+      const dataToSave = role === "COACH"
+        ? {
+            target_sets: editForm.target_sets,
+            target_reps: editForm.target_reps,
+            target_weight: editForm.target_weight,
+            target_rpe: editForm.target_rpe,
+            rest_seconds: editForm.rest_seconds,
+            coach_notes: editForm.coach_notes,
+          }
+        : editForm;
+      await updateExerciseInSession(id, dataToSave);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
       setEditingId(null);
     });

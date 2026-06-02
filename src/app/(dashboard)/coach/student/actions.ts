@@ -30,7 +30,6 @@ async function assertNoPlanCollision(
     .select("id, name, start_date, end_date")
     .eq("student_id", studentId as any)
     .eq("is_template", false as any)
-    .eq("is_active", true as any)
     .not("end_date", "is", null)
     .lte("start_date", newEnd)
     .gte("end_date", newStart);
@@ -263,7 +262,6 @@ export async function duplicatePlan(planId: number, targetStudentId?: string) {
       name: targetStudentId ? originalPlan.name : `${originalPlan.name} (Copia)`,
       coach_id: originalPlan.coach_id,
       student_id: targetStudentId || null,
-      is_active: !!targetStudentId,
       is_template: !targetStudentId,
       start_date: originalPlan.start_date,
       end_date: (originalPlan as any).end_date || null
@@ -453,11 +451,6 @@ export async function createTrainingPlan(
 
   await assertNoPlanCollision(supabaseAdmin, studentId, normalizedStart, endDateStr);
 
-  await supabaseAdmin
-    .from("training_plans")
-    .update({ is_active: false } as any)
-    .eq("student_id", studentId as any);
-
   const { data: plan, error } = await supabaseAdmin
     .from("training_plans")
     .insert({
@@ -466,7 +459,6 @@ export async function createTrainingPlan(
       name: planName,
       start_date: normalizedStart,
       end_date: endDateStr,
-      is_active: true
     } as any)
     .select()
     .single();
@@ -499,11 +491,6 @@ export async function createBlankPlan(
 
   await assertNoPlanCollision(supabaseAdmin, studentId, normalizedStart, endDateStr);
 
-  await supabaseAdmin
-    .from("training_plans")
-    .update({ is_active: false } as any)
-    .eq("student_id", studentId as any);
-
   const { data: plan, error } = await supabaseAdmin
     .from("training_plans")
     .insert({
@@ -512,7 +499,6 @@ export async function createBlankPlan(
       name: planName,
       start_date: normalizedStart,
       end_date: endDateStr,
-      is_active: true
     } as any)
     .select()
     .single();
@@ -539,9 +525,8 @@ export async function createTemplatePlan(planName: string, coachId: string) {
       name: planName,
       coach_id: coachId,
       student_id: null,
-      is_active: false,
       start_date: null,
-      is_template: true 
+      is_template: true,
     };
     
     const { data: template, error } = await adminClient
@@ -668,18 +653,12 @@ export async function instantiateTemplateToStudent(
 
     // --- Fase 2: escrituras ---
 
-    await adminClient
-      .from("training_plans")
-      .update({ is_active: false } as any)
-      .eq("student_id", studentId);
-
     const { data: newPlan, error: createPlanError } = await adminClient
       .from("training_plans")
       .insert({
         name: templatePlan.name,
         coach_id: templatePlan.coach_id,
         student_id: studentId,
-        is_active: true,
         is_template: false,
         start_date: normalizedStart,
         end_date: endDateStr
@@ -772,6 +751,22 @@ export async function updateExerciseInSession(
     .eq("id", id);
 
   if (error) throw error;
+
+  // Marcar sesión como completada cuando el alumno guarda datos reales
+  if (data.actual_sets && data.actual_sets > 0) {
+    const { data: exercise } = await supabase
+      .from("session_exercises")
+      .select("session_id")
+      .eq("id", id)
+      .single();
+
+    if (exercise?.session_id) {
+      await supabase
+        .from("sessions")
+        .update({ is_completed: true } as any)
+        .eq("id", (exercise as any).session_id);
+    }
+  }
 
   revalidatePath("/coach/student/[studentId]", "page");
   revalidatePath("/student", "page");
@@ -885,12 +880,6 @@ export async function importTemplateToStudent(
 
   await assertNoPlanCollision(adminClient, studentId, normalizedStart, endDateStr);
 
-  // Desactivar todos los planes activos del alumno antes de crear el nuevo
-  await adminClient
-    .from("training_plans")
-    .update({ is_active: false } as any)
-    .eq("student_id", studentId as any);
-
   const { data: newPlan, error: createPlanError } = await adminClient
     .from("training_plans")
     .insert({
@@ -899,7 +888,6 @@ export async function importTemplateToStudent(
       name: (planName?.trim() || templatePlan.name),
       start_date: normalizedStart,
       end_date: endDateStr,
-      is_active: true,
       is_template: false
     } as any)
     .select()

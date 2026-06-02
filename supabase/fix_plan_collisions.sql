@@ -1,3 +1,5 @@
+-- ARCHIVADO: la columna is_active fue eliminada de training_plans.
+-- Este script es solo referencia histórica y ya no puede ejecutarse.
 -- =============================================================================
 -- SCRIPT: Auditoría y regularización de planes solapados
 -- Ejecutar en: Supabase → SQL Editor

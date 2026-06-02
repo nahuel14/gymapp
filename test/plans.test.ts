@@ -496,9 +496,9 @@ describe('ESCENARIO 9: Colision al Desplazar Fecha de Inicio del Plan', () => {
     expect(result.hasCollision).toBe(false);
   });
 
-  it('un plan inactivo tambien bloquea el desplazamiento', () => {
-    // No se filtra por is_active: planes inactivos tambien cuentan como colision
-    const otherPlans = [{ name: "Plan Anterior (inactivo)", start_date: "2026-05-18", end_date: "2026-05-31" }];
+  it('todos los planes (no solo activos) bloquean el desplazamiento', () => {
+    // La colisión aplica a todos los planes no-template, sin filtro de estado
+    const otherPlans = [{ name: "Plan Anterior", start_date: "2026-05-18", end_date: "2026-05-31" }];
     const result = checkPlanShiftCollision(otherPlans, "2026-05-25", "2026-06-07");
     expect(result.hasCollision).toBe(true);
   });
@@ -1448,6 +1448,22 @@ describe('ESCENARIO 19: Reordenar con Super Series', () => {
     expect(result[2].id).toBe(3);
   });
 
+  it('dos supersets independientes se mueven sin afectarse entre sí', () => {
+    // Bloques: [superset1(A,B)], [superset2(C,D)]
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: 1 },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: 2 },
+      { id: 4, order_index: 4, superset_group: 2 },
+    ];
+    const result = reorderItem(exs, { type: 'superset', group: 2 }, 'up');
+    // Resultado: [superset2(C,D)], [superset1(A,B)]
+    expect(result[0].id).toBe(3);
+    expect(result[1].id).toBe(4);
+    expect(result[2].id).toBe(1);
+    expect(result[3].id).toBe(2);
+  });
+
   it('un superset de 3 ejercicios se mueve como unidad sin separarse', () => {
     // Bloques: [standalone(A)], [superset(B,C,D)], [standalone(E)]
     const exs: ExItem[] = [
@@ -1464,5 +1480,208 @@ describe('ESCENARIO 19: Reordenar con Super Series', () => {
     expect(result[2].id).toBe(2);
     expect(result[3].id).toBe(3);
     expect(result[4].id).toBe(4);
+  });
+});
+
+// --- Helpers para ESCENARIO 20 ---
+
+function shouldMarkSessionComplete(data: Record<string, unknown>): boolean {
+  const sets = data.actual_sets as number | null | undefined;
+  return !!(sets && sets > 0);
+}
+
+function buildCoachPayload(form: {
+  target_sets: number;
+  target_reps: number[];
+  target_weight: (number | null)[];
+  target_rpe: number;
+  rest_seconds: number;
+  coach_notes: string;
+  actual_sets?: number;
+  actual_reps?: number[];
+  actual_rpe?: number;
+  student_notes?: string;
+}) {
+  return {
+    target_sets: form.target_sets,
+    target_reps: form.target_reps,
+    target_weight: form.target_weight,
+    target_rpe: form.target_rpe,
+    rest_seconds: form.rest_seconds,
+    coach_notes: form.coach_notes,
+  };
+}
+
+describe('ESCENARIO 20: is_completed y Bug de Datos del Alumno al Editar Coach', () => {
+  it('shouldMarkSessionComplete: true cuando actual_sets > 0', () => {
+    expect(shouldMarkSessionComplete({ actual_sets: 3 })).toBe(true);
+  });
+
+  it('shouldMarkSessionComplete: false cuando actual_sets es 0', () => {
+    expect(shouldMarkSessionComplete({ actual_sets: 0 })).toBe(false);
+  });
+
+  it('shouldMarkSessionComplete: false cuando actual_sets es undefined (payload del coach)', () => {
+    expect(shouldMarkSessionComplete({})).toBe(false);
+  });
+
+  it('shouldMarkSessionComplete: false cuando actual_sets es null', () => {
+    expect(shouldMarkSessionComplete({ actual_sets: null })).toBe(false);
+  });
+
+  it('buildCoachPayload no incluye ningún campo actual_', () => {
+    const form = {
+      target_sets: 3,
+      target_reps: [10, 10, 10],
+      target_weight: [null, null, null],
+      target_rpe: 8,
+      rest_seconds: 60,
+      coach_notes: 'Buena forma',
+      actual_sets: 3,
+      actual_reps: [10, 10, 10],
+      actual_rpe: 7,
+      student_notes: 'Me costó',
+    };
+    const payload = buildCoachPayload(form);
+    expect('actual_sets' in payload).toBe(false);
+    expect('actual_reps' in payload).toBe(false);
+    expect('actual_rpe' in payload).toBe(false);
+    expect('student_notes' in payload).toBe(false);
+  });
+
+  it('buildCoachPayload incluye todos los campos target_', () => {
+    const form = {
+      target_sets: 4,
+      target_reps: [8, 8, 8, 8],
+      target_weight: [60, 60, 60, 60],
+      target_rpe: 9,
+      rest_seconds: 90,
+      coach_notes: '',
+    };
+    const payload = buildCoachPayload(form);
+    expect(payload.target_sets).toBe(4);
+    expect(payload.target_rpe).toBe(9);
+    expect(payload.rest_seconds).toBe(90);
+  });
+
+  it('el payload del coach nunca marca la sesión como completada', () => {
+    const coachPayload = buildCoachPayload({
+      target_sets: 3,
+      target_reps: [10, 10, 10],
+      target_weight: [null, null, null],
+      target_rpe: 8,
+      rest_seconds: 60,
+      coach_notes: '',
+    });
+    expect(shouldMarkSessionComplete(coachPayload)).toBe(false);
+  });
+
+  it('cambiar target_sets de 3 a 2 no sobreescribe actual_sets del alumno', () => {
+    // El coach cambia target_sets de 3 a 2; el editForm tiene actual_sets=3 (del init)
+    const editForm = {
+      target_sets: 2,          // coach cambió de 3 a 2
+      target_reps: [10, 10],
+      target_weight: [null, null],
+      target_rpe: 8,
+      rest_seconds: 60,
+      coach_notes: '',
+      actual_sets: 3,           // inicializado al abrir el editor, NO debe guardarse
+      actual_reps: [10, 10, 10],
+      actual_rpe: 0,
+      student_notes: '',
+    };
+    const coachPayload = buildCoachPayload(editForm);
+    expect('actual_sets' in coachPayload).toBe(false);
+    expect(shouldMarkSessionComplete(coachPayload)).toBe(false);
+  });
+
+  it('el alumno con actual_sets=1 activa el marcado de sesión como completada', () => {
+    expect(shouldMarkSessionComplete({ actual_sets: 1 })).toBe(true);
+  });
+
+  it('el alumno con actual_sets=5 activa el marcado de sesión como completada', () => {
+    expect(shouldMarkSessionComplete({ actual_sets: 5 })).toBe(true);
+  });
+
+  it('payload que solo tiene coach_notes no marca sesión como completada', () => {
+    expect(shouldMarkSessionComplete({ actual_sets: undefined })).toBe(false);
+  });
+
+  it('buildCoachPayload es inmutable: no modifica el editForm original', () => {
+    const form = {
+      target_sets: 3,
+      target_reps: [10, 10, 10],
+      target_weight: [null, null, null],
+      target_rpe: 8,
+      rest_seconds: 60,
+      coach_notes: '',
+      actual_sets: 3,
+    };
+    buildCoachPayload(form);
+    expect(form.actual_sets).toBe(3); // no se eliminó del original
+  });
+
+  it('coach edita cuando alumno NO tiene datos: no se crean registros de alumno', () => {
+    // Sin datos del alumno, el editForm inicializa actual_sets con target_sets
+    const editForm = {
+      target_sets: 3,
+      target_reps: [10, 10, 10],
+      target_weight: [null, null, null],
+      target_rpe: 8,
+      rest_seconds: 60,
+      coach_notes: '',
+      actual_sets: 3,        // inicializado desde target_sets (no dato real del alumno)
+      actual_reps: [10, 10, 10],
+      actual_rpe: 0,
+      student_notes: '',
+    };
+    const payload = buildCoachPayload(editForm);
+    expect('actual_sets' in payload).toBe(false);
+    expect('actual_reps' in payload).toBe(false);
+    expect('actual_rpe' in payload).toBe(false);
+    expect('student_notes' in payload).toBe(false);
+    expect(shouldMarkSessionComplete(payload)).toBe(false);
+  });
+
+  it('coach edita cuando alumno SÍ tiene datos: los datos del alumno no se sobreescriben', () => {
+    // El alumno completó 4 sets con RPE 7; el coach reduce target_sets a 3
+    const editForm = {
+      target_sets: 3,
+      target_reps: [10, 10, 10],
+      target_weight: [null, null, null],
+      target_rpe: 8,
+      rest_seconds: 60,
+      coach_notes: 'Reducir sets',
+      actual_sets: 4,           // datos reales del alumno (del init)
+      actual_reps: [12, 10, 10, 9],
+      actual_rpe: 7,
+      student_notes: 'Estuvo pesado',
+    };
+    const payload = buildCoachPayload(editForm);
+    expect('actual_sets' in payload).toBe(false);
+    expect('actual_rpe' in payload).toBe(false);
+    expect((payload as Record<string, unknown>).actual_sets).toBeUndefined();
+    expect((payload as Record<string, unknown>).actual_rpe).toBeUndefined();
+    expect(shouldMarkSessionComplete(payload)).toBe(false);
+  });
+
+  it('el payload del coach es idéntico independientemente de si el alumno completó o no', () => {
+    const baseTargets = {
+      target_sets: 3,
+      target_reps: [10, 10, 10],
+      target_weight: [60, 60, 60],
+      target_rpe: 8,
+      rest_seconds: 90,
+      coach_notes: 'Foco en la bajada',
+    };
+    const payloadSinDatos = buildCoachPayload({ ...baseTargets });
+    const payloadConDatos = buildCoachPayload({
+      ...baseTargets,
+      actual_sets: 4,
+      actual_reps: [12, 10, 10, 8],
+      actual_rpe: 9,
+      student_notes: 'Muy pesado',
+    });
+    expect(payloadSinDatos).toEqual(payloadConDatos);
   });
 });

@@ -43,9 +43,7 @@ type SessionExercise = Tables<"session_exercises"> & {
   } | null;
 };
 
-type TrainingPlan = Pick<Tables<"training_plans">, "id" | "name" | "is_active" | "start_date"> & {
-  end_date?: string | null;
-};
+type TrainingPlan = Pick<Tables<"training_plans">, "id" | "name" | "start_date" | "end_date">;
 
 type RoutineCalendarClientProps = {
   studentId?: string;
@@ -127,7 +125,6 @@ export function RoutineCalendarClient({
       name: p.name,
       startDate: p.start_date || toLocalISODate(new Date()),
       endDate: p.end_date || shiftDate(p.start_date || toLocalISODate(new Date()), 27),
-      is_active: p.is_active
     }));
   }, [allPlans]);
 

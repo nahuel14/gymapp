@@ -6,7 +6,7 @@ import type { Database, Tables } from "@/types/supabase";
 type Profile = Pick<Tables<"profiles">, "id" | "role" | "name" | "last_name">;
 type TrainingPlan = Pick<
   Tables<"training_plans">,
-  "id" | "name" | "start_date" | "is_active"
+  "id" | "name" | "start_date" | "end_date"
 >;
 type Session = Tables<"sessions">;
 type SessionExercise = Tables<"session_exercises"> & {
@@ -63,15 +63,22 @@ async function fetchStudentSession(): Promise<StudentSessionResult> {
     };
   }
 
-  const { data: plans } = await supabase
-    .from("training_plans")
-    .select("id, name, start_date, is_active")
-    .eq("student_id", user.id as any)
-    .eq("is_active", true as never)
-    .order("created_at", { ascending: false })
-    .limit(1);
+  const today = new Date().toISOString().split("T")[0];
 
-  const plan = plans?.[0] ?? null;
+  const { data: allPlans } = await supabase
+    .from("training_plans")
+    .select("id, name, start_date, end_date")
+    .eq("student_id", user.id as any)
+    .eq("is_template", false)
+    .not("start_date", "is", null)
+    .order("start_date", { ascending: false });
+
+  const plan =
+    (allPlans ?? []).find(
+      (p) => p.start_date! <= today && (p.end_date == null || p.end_date >= today)
+    ) ??
+    allPlans?.[0] ??
+    null;
 
   if (!plan) {
     return {
