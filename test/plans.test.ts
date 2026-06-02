@@ -1095,3 +1095,374 @@ describe('ESCENARIO 15: Botón "Hoy" - Lógica de Visibilidad y Navegación', ()
     expect(shouldShowTodayButton(todayMonday, todayMonday)).toBe(false);
   });
 });
+
+// --- Helpers para ESCENARIO 18 ---
+
+function resolveSuperset(
+  exercises: { id: number; superset_group: number | null }[],
+  sourceId: number,
+  targetId: number
+): { id: number; superset_group: number | null }[] {
+  const ex1 = exercises.find(e => e.id === sourceId);
+  const ex2 = exercises.find(e => e.id === targetId);
+  if (!ex1 || !ex2) return exercises.map(e => ({ ...e }));
+
+  let groupNumber: number;
+  if (ex1.superset_group !== null) {
+    groupNumber = ex1.superset_group;
+  } else if (ex2.superset_group !== null) {
+    groupNumber = ex2.superset_group;
+  } else {
+    const maxGroup = Math.max(0, ...exercises.map(e => e.superset_group ?? 0));
+    groupNumber = maxGroup + 1;
+  }
+
+  const groupsToMerge = [ex1.superset_group, ex2.superset_group].filter(
+    (g): g is number => g !== null && g !== groupNumber
+  );
+
+  return exercises.map(e => {
+    if (e.id === sourceId || e.id === targetId) return { ...e, superset_group: groupNumber };
+    if (groupsToMerge.includes(e.superset_group as number)) return { ...e, superset_group: groupNumber };
+    return { ...e };
+  });
+}
+
+function removeFromSupersetLocal(
+  exercises: { id: number; superset_group: number | null }[],
+  exerciseId: number
+): { id: number; superset_group: number | null }[] {
+  return exercises.map(e => e.id === exerciseId ? { ...e, superset_group: null } : { ...e });
+}
+
+function isSameGroupAsLinking(
+  exercises: { id: number; superset_group: number | null }[],
+  linkingId: number,
+  targetId: number
+): boolean {
+  const source = exercises.find(e => e.id === linkingId);
+  const target = exercises.find(e => e.id === targetId);
+  if (!source || !target) return false;
+  if (source.superset_group === null) return false;
+  return source.superset_group === target.superset_group;
+}
+
+// --- Helpers para ESCENARIO 19 ---
+
+type ExItem = { id: number; order_index: number; superset_group: number | null };
+type BlockItem =
+  | { type: 'standalone'; ex: ExItem }
+  | { type: 'superset'; group: number; exs: ExItem[] };
+
+function buildBlocks(exercises: ExItem[]): BlockItem[] {
+  const sorted = [...exercises].sort((a, b) => a.order_index - b.order_index);
+  const blocks: BlockItem[] = [];
+  const seenGroups = new Set<number>();
+  for (const ex of sorted) {
+    const g = ex.superset_group;
+    if (g === null) {
+      blocks.push({ type: 'standalone', ex });
+    } else if (!seenGroups.has(g)) {
+      seenGroups.add(g);
+      blocks.push({ type: 'superset', group: g, exs: sorted.filter(e => e.superset_group === g) });
+    }
+  }
+  return blocks;
+}
+
+function reorderItem(
+  exercises: ExItem[],
+  itemKey: { type: 'standalone'; exerciseId: number } | { type: 'superset'; group: number },
+  direction: 'up' | 'down'
+): { id: number; order_index: number }[] {
+  const blocks = buildBlocks(exercises);
+  const blockIdx = itemKey.type === 'standalone'
+    ? blocks.findIndex(b => b.type === 'standalone' && (b as any).ex.id === itemKey.exerciseId)
+    : blocks.findIndex(b => b.type === 'superset' && (b as any).group === itemKey.group);
+
+  if (blockIdx === -1) return [...exercises].sort((a, b) => a.order_index - b.order_index).map(e => ({ id: e.id, order_index: e.order_index }));
+
+  const targetIdx = direction === 'up' ? blockIdx - 1 : blockIdx + 1;
+  if (targetIdx < 0 || targetIdx >= blocks.length) {
+    return [...exercises].sort((a, b) => a.order_index - b.order_index).map(e => ({ id: e.id, order_index: e.order_index }));
+  }
+
+  const newBlocks = [...blocks];
+  [newBlocks[blockIdx], newBlocks[targetIdx]] = [newBlocks[targetIdx], newBlocks[blockIdx]];
+
+  let idx = 1;
+  const result: { id: number; order_index: number }[] = [];
+  for (const block of newBlocks) {
+    if (block.type === 'standalone') {
+      result.push({ id: (block as any).ex.id, order_index: idx++ });
+    } else {
+      for (const ex of (block as any).exs) {
+        result.push({ id: ex.id, order_index: idx++ });
+      }
+    }
+  }
+  return result.sort((a, b) => a.order_index - b.order_index);
+}
+
+describe('ESCENARIO 18: Super Series - Agrupar y Desagrupar', () => {
+  it('dos ejercicios sin grupo reciben grupo nuevo (max + 1 = 1)', () => {
+    const exs = [
+      { id: 1, superset_group: null },
+      { id: 2, superset_group: null },
+      { id: 3, superset_group: null },
+    ];
+    const result = resolveSuperset(exs, 1, 2);
+    expect(result.find(e => e.id === 1)!.superset_group).toBe(1);
+    expect(result.find(e => e.id === 2)!.superset_group).toBe(1);
+    expect(result.find(e => e.id === 3)!.superset_group).toBeNull();
+  });
+
+  it('si ya existe un grupo 1, el nuevo grupo asignado es 2', () => {
+    const exs = [
+      { id: 1, superset_group: 1 },
+      { id: 2, superset_group: 1 },
+      { id: 3, superset_group: null },
+      { id: 4, superset_group: null },
+    ];
+    const result = resolveSuperset(exs, 3, 4);
+    expect(result.find(e => e.id === 3)!.superset_group).toBe(2);
+    expect(result.find(e => e.id === 4)!.superset_group).toBe(2);
+  });
+
+  it('si el source ya tiene grupo, el target adopta el grupo del source', () => {
+    const exs = [
+      { id: 1, superset_group: 1 },
+      { id: 2, superset_group: null },
+    ];
+    const result = resolveSuperset(exs, 1, 2);
+    expect(result.find(e => e.id === 2)!.superset_group).toBe(1);
+    expect(result.find(e => e.id === 1)!.superset_group).toBe(1);
+  });
+
+  it('si solo el target tiene grupo, el source adopta el grupo del target', () => {
+    const exs = [
+      { id: 1, superset_group: null },
+      { id: 2, superset_group: 3 },
+    ];
+    const result = resolveSuperset(exs, 1, 2);
+    expect(result.find(e => e.id === 1)!.superset_group).toBe(3);
+    expect(result.find(e => e.id === 2)!.superset_group).toBe(3);
+  });
+
+  it('si ambos están en el mismo grupo, el resultado no cambia', () => {
+    const exs = [
+      { id: 1, superset_group: 1 },
+      { id: 2, superset_group: 1 },
+    ];
+    const result = resolveSuperset(exs, 1, 2);
+    expect(result.find(e => e.id === 1)!.superset_group).toBe(1);
+    expect(result.find(e => e.id === 2)!.superset_group).toBe(1);
+  });
+
+  it('si ambos tienen grupos distintos, todos los del grupo viejo pasan al del source', () => {
+    const exs = [
+      { id: 1, superset_group: 1 },
+      { id: 2, superset_group: 1 },
+      { id: 3, superset_group: 2 },
+      { id: 4, superset_group: 2 },
+    ];
+    const result = resolveSuperset(exs, 1, 3); // source=grupo 1, target=grupo 2
+    expect(result.every(e => e.superset_group === 1)).toBe(true);
+  });
+
+  it('removeFromSuperset deja el ejercicio con superset_group null', () => {
+    const exs = [
+      { id: 1, superset_group: 1 },
+      { id: 2, superset_group: 1 },
+    ];
+    const result = removeFromSupersetLocal(exs, 1);
+    expect(result.find(e => e.id === 1)!.superset_group).toBeNull();
+  });
+
+  it('removeFromSuperset no afecta a los demás ejercicios del mismo grupo', () => {
+    const exs = [
+      { id: 1, superset_group: 1 },
+      { id: 2, superset_group: 1 },
+      { id: 3, superset_group: 1 },
+    ];
+    const result = removeFromSupersetLocal(exs, 1);
+    expect(result.find(e => e.id === 2)!.superset_group).toBe(1);
+    expect(result.find(e => e.id === 3)!.superset_group).toBe(1);
+  });
+
+  it('isSameGroupAsLinking: true cuando source y target tienen el mismo grupo', () => {
+    const exs = [
+      { id: 1, superset_group: 1 },
+      { id: 2, superset_group: 1 },
+    ];
+    expect(isSameGroupAsLinking(exs, 1, 2)).toBe(true);
+  });
+
+  it('isSameGroupAsLinking: false cuando el source no tiene grupo (null)', () => {
+    const exs = [
+      { id: 1, superset_group: null },
+      { id: 2, superset_group: 1 },
+    ];
+    expect(isSameGroupAsLinking(exs, 1, 2)).toBe(false);
+  });
+
+  it('encadenar 3 ejercicios en dos pasos (A-B luego A-C) deja los 3 en el mismo grupo', () => {
+    let exs: { id: number; superset_group: number | null }[] = [
+      { id: 1, superset_group: null },
+      { id: 2, superset_group: null },
+      { id: 3, superset_group: null },
+    ];
+    exs = resolveSuperset(exs, 1, 2); // A-B → grupo 1
+    exs = resolveSuperset(exs, 1, 3); // A-C → C adopta grupo 1
+    expect(exs.find(e => e.id === 1)!.superset_group).toBe(1);
+    expect(exs.find(e => e.id === 2)!.superset_group).toBe(1);
+    expect(exs.find(e => e.id === 3)!.superset_group).toBe(1);
+  });
+});
+
+describe('ESCENARIO 19: Reordenar con Super Series', () => {
+  it('mover standalone arriba entre standalones hace swap simple', () => {
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: null },
+      { id: 2, order_index: 2, superset_group: null },
+      { id: 3, order_index: 3, superset_group: null },
+    ];
+    const result = reorderItem(exs, { type: 'standalone', exerciseId: 2 }, 'up');
+    expect(result[0].id).toBe(2);
+    expect(result[1].id).toBe(1);
+    expect(result[2].id).toBe(3);
+  });
+
+  it('mover standalone abajo entre standalones hace swap simple', () => {
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: null },
+      { id: 2, order_index: 2, superset_group: null },
+      { id: 3, order_index: 3, superset_group: null },
+    ];
+    const result = reorderItem(exs, { type: 'standalone', exerciseId: 2 }, 'down');
+    expect(result[0].id).toBe(1);
+    expect(result[1].id).toBe(3);
+    expect(result[2].id).toBe(2);
+  });
+
+  it('mover standalone arriba cuando el anterior es un bloque superset pasa por encima de todo el bloque', () => {
+    // Bloques: [superset(A,B)], [standalone(C)]
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: 1 },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: null },
+    ];
+    const result = reorderItem(exs, { type: 'standalone', exerciseId: 3 }, 'up');
+    // Resultado esperado: [standalone(C)], [superset(A,B)]
+    expect(result[0].id).toBe(3);
+    expect(result[1].id).toBe(1);
+    expect(result[2].id).toBe(2);
+  });
+
+  it('mover standalone abajo cuando el siguiente es un bloque superset pasa por debajo del bloque entero', () => {
+    // Bloques: [standalone(A)], [superset(B,C)]
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: null },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: 1 },
+    ];
+    const result = reorderItem(exs, { type: 'standalone', exerciseId: 1 }, 'down');
+    // Resultado esperado: [superset(B,C)], [standalone(A)]
+    expect(result[0].id).toBe(2);
+    expect(result[1].id).toBe(3);
+    expect(result[2].id).toBe(1);
+  });
+
+  it('mover superset block hacia arriba sube el bloque completo', () => {
+    // Bloques: [standalone(A)], [superset(B,C)]
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: null },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: 1 },
+    ];
+    const result = reorderItem(exs, { type: 'superset', group: 1 }, 'up');
+    // Resultado esperado: [superset(B,C)], [standalone(A)]
+    expect(result[0].id).toBe(2);
+    expect(result[1].id).toBe(3);
+    expect(result[2].id).toBe(1);
+  });
+
+  it('mover superset block hacia abajo baja el bloque completo', () => {
+    // Bloques: [superset(A,B)], [standalone(C)]
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: 1 },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: null },
+    ];
+    const result = reorderItem(exs, { type: 'superset', group: 1 }, 'down');
+    // Resultado esperado: [standalone(C)], [superset(A,B)]
+    expect(result[0].id).toBe(3);
+    expect(result[1].id).toBe(1);
+    expect(result[2].id).toBe(2);
+  });
+
+  it('los ejercicios del superset se mantienen juntos después de mover el bloque', () => {
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: null },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: 1 },
+      { id: 4, order_index: 4, superset_group: null },
+    ];
+    const result = reorderItem(exs, { type: 'superset', group: 1 }, 'up');
+    // B y C deben quedar consecutivos
+    const idxB = result.findIndex(e => e.id === 2);
+    const idxC = result.findIndex(e => e.id === 3);
+    expect(Math.abs(idxB - idxC)).toBe(1);
+  });
+
+  it('el order_index se reasigna secuencialmente sin huecos después del reorden', () => {
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: 1 },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: null },
+    ];
+    const result = reorderItem(exs, { type: 'superset', group: 1 }, 'down');
+    const orders = result.map(e => e.order_index).sort((a, b) => a - b);
+    expect(orders).toEqual([1, 2, 3]);
+  });
+
+  it('el primer bloque no puede subir: el orden no cambia', () => {
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: null },
+      { id: 2, order_index: 2, superset_group: null },
+    ];
+    const result = reorderItem(exs, { type: 'standalone', exerciseId: 1 }, 'up');
+    expect(result[0].id).toBe(1);
+    expect(result[1].id).toBe(2);
+  });
+
+  it('el último bloque no puede bajar: el orden no cambia', () => {
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: null },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: 1 },
+    ];
+    const result = reorderItem(exs, { type: 'superset', group: 1 }, 'down');
+    expect(result[0].id).toBe(1);
+    expect(result[1].id).toBe(2);
+    expect(result[2].id).toBe(3);
+  });
+
+  it('un superset de 3 ejercicios se mueve como unidad sin separarse', () => {
+    // Bloques: [standalone(A)], [superset(B,C,D)], [standalone(E)]
+    const exs: ExItem[] = [
+      { id: 1, order_index: 1, superset_group: null },
+      { id: 2, order_index: 2, superset_group: 1 },
+      { id: 3, order_index: 3, superset_group: 1 },
+      { id: 4, order_index: 4, superset_group: 1 },
+      { id: 5, order_index: 5, superset_group: null },
+    ];
+    const result = reorderItem(exs, { type: 'superset', group: 1 }, 'down');
+    // Bloques después: [standalone(A)], [standalone(E)], [superset(B,C,D)]
+    expect(result[0].id).toBe(1);
+    expect(result[1].id).toBe(5);
+    expect(result[2].id).toBe(2);
+    expect(result[3].id).toBe(3);
+    expect(result[4].id).toBe(4);
+  });
+});

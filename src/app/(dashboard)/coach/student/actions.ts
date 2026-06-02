@@ -180,7 +180,8 @@ export async function duplicateSession(sessionId: number, targetDate: string) {
       target_rpe: ex.target_rpe,
       rest_seconds: ex.rest_seconds,
       coach_notes: ex.coach_notes,
-      order_index: ex.order_index
+      order_index: ex.order_index,
+      superset_group: ex.superset_group ?? null,
     }));
 
     const { error: insertExError } = await adminClient
@@ -311,7 +312,8 @@ export async function duplicatePlan(planId: number, targetStudentId?: string) {
         target_rpe: ex.target_rpe,
         rest_seconds: ex.rest_seconds,
         coach_notes: ex.coach_notes,
-        order_index: ex.order_index
+        order_index: ex.order_index,
+        superset_group: ex.superset_group ?? null,
       }));
 
       await adminClient.from("session_exercises").insert(duplicatedEx as any);
@@ -728,7 +730,8 @@ export async function instantiateTemplateToStudent(
           target_rpe: ex.target_rpe,
           rest_seconds: ex.rest_seconds,
           coach_notes: ex.coach_notes,
-          order_index: ex.order_index
+          order_index: ex.order_index,
+          superset_group: ex.superset_group ?? null,
         }));
 
         await adminClient.from("session_exercises").insert(duplicatedExercises as any);
@@ -952,7 +955,8 @@ export async function importTemplateToStudent(
         target_rpe: exercise.target_rpe,
         rest_seconds: exercise.rest_seconds,
         coach_notes: exercise.coach_notes,
-        order_index: exercise.order_index
+        order_index: exercise.order_index,
+        superset_group: exercise.superset_group ?? null,
       }));
 
       const { error: insertExercisesError } = await adminClient
@@ -1145,6 +1149,155 @@ export async function swapExerciseOrder(id1: number, orderIndex1: number, id2: n
     supabase.from("session_exercises").update({ order_index: orderIndex1 } as any).eq("id", id1),
     supabase.from("session_exercises").update({ order_index: orderIndex2 } as any).eq("id", id2),
   ]);
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+  return { success: true };
+}
+
+export async function setSuperset(sourceId: number, targetId: number, sessionId: number) {
+  const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const { data: exercises } = await adminClient
+    .from("session_exercises")
+    .select("id, superset_group")
+    .eq("session_id", sessionId as any)
+    .in("id", [sourceId, targetId]);
+
+  const ex1 = (exercises ?? []).find((e: any) => e.id === sourceId) as any;
+  const ex2 = (exercises ?? []).find((e: any) => e.id === targetId) as any;
+
+  if (!ex1 || !ex2) throw new Error("Ejercicios no encontrados");
+
+  let groupNumber: number;
+  if (ex1.superset_group !== null && ex1.superset_group !== undefined) {
+    groupNumber = ex1.superset_group;
+  } else if (ex2.superset_group !== null && ex2.superset_group !== undefined) {
+    groupNumber = ex2.superset_group;
+  } else {
+    const { data: allEx } = await adminClient
+      .from("session_exercises")
+      .select("superset_group")
+      .eq("session_id", sessionId as any);
+    const maxGroup = Math.max(0, ...((allEx ?? []).map((e: any) => e.superset_group ?? 0)));
+    groupNumber = maxGroup + 1;
+  }
+
+  const groupsToMerge = [ex1.superset_group, ex2.superset_group].filter(
+    (g): g is number => g !== null && g !== undefined && g !== groupNumber
+  );
+
+  await Promise.all([
+    adminClient.from("session_exercises").update({ superset_group: groupNumber } as any).eq("id", sourceId),
+    adminClient.from("session_exercises").update({ superset_group: groupNumber } as any).eq("id", targetId),
+  ]);
+
+  for (const oldGroup of groupsToMerge) {
+    await (adminClient as any)
+      .from("session_exercises")
+      .update({ superset_group: groupNumber })
+      .eq("session_id", sessionId)
+      .eq("superset_group", oldGroup);
+  }
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+  return { success: true };
+}
+
+export async function removeFromSuperset(exerciseId: number) {
+  const supabase = await createSupabaseServerClient();
+
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  await supabase
+    .from("session_exercises")
+    .update({ superset_group: null } as any)
+    .eq("id", exerciseId);
+
+  revalidatePath("/coach/student/[studentId]", "page");
+  revalidatePath("/student", "page");
+  return { success: true };
+}
+
+export async function reorderSessionItem(
+  sessionId: number,
+  exerciseId: number | null,
+  supersetGroup: number | null,
+  direction: 'up' | 'down'
+) {
+  const supabase = await createSupabaseServerClient();
+  const { data: { user } } = await supabase.auth.getUser();
+  if (!user) throw new Error("No autenticado");
+
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: exercises, error } = await adminClient
+    .from("session_exercises")
+    .select("id, order_index, superset_group")
+    .eq("session_id", sessionId as any)
+    .order("order_index", { ascending: true });
+
+  if (error) throw error;
+  if (!exercises || exercises.length === 0) return { success: true };
+
+  // Build render blocks identical to frontend grouping logic
+  type Block =
+    | { type: 'standalone'; ex: any }
+    | { type: 'superset'; group: number; exs: any[] };
+
+  const blocks: Block[] = [];
+  const seenGroups = new Set<number>();
+
+  for (const ex of exercises as any[]) {
+    const group = ex.superset_group as number | null;
+    if (group === null || group === undefined) {
+      blocks.push({ type: 'standalone', ex });
+    } else if (!seenGroups.has(group)) {
+      seenGroups.add(group);
+      blocks.push({
+        type: 'superset',
+        group,
+        exs: (exercises as any[]).filter(e => (e as any).superset_group === group),
+      });
+    }
+  }
+
+  // Find the block to move
+  const blockIdx = exerciseId !== null
+    ? blocks.findIndex(b => b.type === 'standalone' && (b as any).ex.id === exerciseId)
+    : blocks.findIndex(b => b.type === 'superset' && (b as any).group === supersetGroup);
+
+  if (blockIdx === -1) return { success: true };
+
+  const targetIdx = direction === 'up' ? blockIdx - 1 : blockIdx + 1;
+  if (targetIdx < 0 || targetIdx >= blocks.length) return { success: true };
+
+  // Swap blocks
+  [blocks[blockIdx], blocks[targetIdx]] = [blocks[targetIdx], blocks[blockIdx]];
+
+  // Flatten and reassign sequential order_indices
+  let idx = 1;
+  for (const block of blocks) {
+    if (block.type === 'standalone') {
+      await adminClient
+        .from("session_exercises")
+        .update({ order_index: idx++ } as any)
+        .eq("id", (block as any).ex.id);
+    } else {
+      for (const ex of (block as any).exs) {
+        await adminClient
+          .from("session_exercises")
+          .update({ order_index: idx++ } as any)
+          .eq("id", ex.id);
+      }
+    }
+  }
 
   revalidatePath("/coach/student/[studentId]", "page");
   revalidatePath("/student", "page");
