@@ -4,7 +4,7 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { X, Minus, Plus, ChevronLeft, ChevronRight } from "lucide-react";
-import { importTemplateToStudent, createBlankPlan, updatePlanMeta, deletePlan } from "./actions";
+import { importTemplateToStudent, createBlankPlan, updatePlanMeta, deletePlan, duplicatePlan } from "./actions";
 
 type TemplateOption = {
   id: number;
@@ -92,9 +92,10 @@ function computeInitialWeeks(startDate?: string | null, endDate?: string | null)
 }
 
 function getDefaultDaysForCount(count: number): number[] {
-  if (count === 2) return [1, 4];
-  if (count === 3) return [1, 3, 5];
-  if (count === 4) return [1, 2, 4, 5];
+  if (count === 2) return [1, 3];   // Lun + Mié
+  if (count === 3) return [1, 3, 5]; // Lun + Mié + Vie
+  if (count === 4) return [1, 2, 4, 5]; // Lun + Mar + Jue + Vie
+  if (count === 5) return [1, 2, 3, 4, 5]; // Lun a Vie
   return [1, 3, 5].slice(0, Math.max(1, Math.min(count, 3)));
 }
 
@@ -271,6 +272,20 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
       } catch (e: any) {
         setError(e?.message ?? "No se pudo eliminar el plan.");
         setIsConfirmingDelete(false);
+      }
+    });
+  };
+
+  const handleSaveAsTemplate = () => {
+    if (!managedPlan) return;
+    startTransition(async () => {
+      try {
+        await duplicatePlan(managedPlan.id);
+        await queryClient.invalidateQueries({ queryKey: ["templates"] });
+        onClose();
+      } catch (e: any) {
+        const msg = e?.message ?? "No se pudo guardar como plantilla.";
+        setError(msg.replace("TEMPLATE_NON_UNIFORM:", ""));
       }
     });
   };
@@ -455,6 +470,16 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
               className="w-full rounded-2xl bg-yellow-400 py-3 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
             >
               {isPending ? "Guardando..." : "GUARDAR CAMBIOS"}
+            </button>
+          )}
+
+          {isManageMode && !isConfirmingDelete && (
+            <button
+              onClick={handleSaveAsTemplate}
+              disabled={isPending}
+              className="w-full rounded-2xl border border-zinc-700 py-2.5 text-sm font-black uppercase tracking-widest text-zinc-300 transition hover:bg-zinc-800 active:scale-[0.99] disabled:opacity-50"
+            >
+              {isPending ? "Guardando..." : "GUARDAR COMO PLANTILLA"}
             </button>
           )}
 

@@ -256,6 +256,31 @@ export async function duplicatePlan(planId: number, targetStudentId?: string) {
 
   if (fetchPlanError || !originalPlan) throw new Error("No se encontró el plan original");
 
+  const { data: sessions, error: fetchSessionsError } = await supabase
+    .from("sessions")
+    .select("*")
+    .eq("plan_id", planId);
+
+  if (fetchSessionsError) throw fetchSessionsError;
+
+  // Al crear una plantilla, validar que todas las semanas tengan el mismo nº de días
+  if (!targetStudentId) {
+    const weekCounts = new Map<number, number>();
+    for (const s of (sessions ?? []) as any[]) {
+      weekCounts.set(s.week_number, (weekCounts.get(s.week_number) ?? 0) + 1);
+    }
+    const counts = [...weekCounts.values()];
+    if (counts.length > 1 && !counts.every(c => c === counts[0])) {
+      const detail = [...weekCounts.entries()]
+        .sort(([a], [b]) => a - b)
+        .map(([wk, n]) => `Semana ${wk}: ${n} ${n === 1 ? 'día' : 'días'}`)
+        .join(', ');
+      throw new Error(
+        `TEMPLATE_NON_UNIFORM:Para exportar como plantilla todas las semanas deben tener la misma cantidad de días. ${detail}.`
+      );
+    }
+  }
+
   const { data: newPlan, error: createPlanError } = await adminClient
     .from("training_plans")
     .insert({
@@ -270,13 +295,6 @@ export async function duplicatePlan(planId: number, targetStudentId?: string) {
     .single();
 
   if (createPlanError || !newPlan) throw createPlanError;
-
-  const { data: sessions, error: fetchSessionsError } = await supabase
-    .from("sessions")
-    .select("*")
-    .eq("plan_id", planId);
-
-  if (fetchSessionsError) throw fetchSessionsError;
 
   for (const session of (sessions || [])) {
     const s = session as any;
@@ -1315,4 +1333,196 @@ export async function createInlineExercise(data: { name: string; body_zone: stri
 
   revalidatePath("/coach/library");
   return newExercise;
+}
+
+// ─── Template structure actions (uniform weeks × days) ───────────────────────
+
+function parseDayNumber(dayName: string): number {
+  const match = dayName.match(/D[íi]a\s+(\d+)/i);
+  return match ? parseInt(match[1], 10) : 0;
+}
+
+export async function addDayToAllWeeks(planId: number) {
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: sessions, error } = await adminClient
+    .from("sessions")
+    .select("id, week_number, day_name, order_index")
+    .eq("plan_id", planId as any)
+    .order("order_index", { ascending: true });
+
+  if (error) throw error;
+
+  const allSessions = (sessions ?? []) as any[];
+
+  // If no sessions yet, create the first week with day 1
+  if (allSessions.length === 0) {
+    await adminClient.from("sessions").insert({
+      plan_id: planId,
+      week_number: 1,
+      day_name: "Día 1",
+      order_index: 1,
+      is_completed: false,
+      date: null,
+    } as any);
+    revalidatePath("/coach/templates");
+    return { success: true };
+  }
+
+  const weekNumbers = [...new Set(allSessions.map((s) => s.week_number as number))].sort((a, b) => a - b);
+  const maxDay = Math.max(0, ...allSessions.map((s) => parseDayNumber(s.day_name)));
+  const newDayName = `Día ${maxDay + 1}`;
+  const maxOrderIndex = Math.max(0, ...allSessions.map((s) => s.order_index ?? 0));
+
+  const toInsert = weekNumbers.map((wk, i) => ({
+    plan_id: planId,
+    week_number: wk,
+    day_name: newDayName,
+    order_index: maxOrderIndex + i + 1,
+    is_completed: false,
+    date: null,
+  }));
+
+  const { error: insertError } = await adminClient.from("sessions").insert(toInsert as any);
+  if (insertError) throw insertError;
+
+  revalidatePath("/coach/templates");
+  revalidatePath(`/coach/templates/${planId}/edit`);
+  return { success: true };
+}
+
+export async function removeDayFromAllWeeks(planId: number) {
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: sessions, error } = await adminClient
+    .from("sessions")
+    .select("id, week_number, day_name")
+    .eq("plan_id", planId as any);
+
+  if (error) throw error;
+
+  const allSessions = (sessions ?? []) as any[];
+  const dayNumbers = allSessions.map((s) => parseDayNumber(s.day_name));
+  const maxDay = Math.max(0, ...dayNumbers);
+
+  if (maxDay <= 1) {
+    return { success: false, reason: "min_days" as const };
+  }
+
+  const toDelete = allSessions.filter((s) => parseDayNumber(s.day_name) === maxDay);
+  const idsToDelete = toDelete.map((s) => s.id as number);
+
+  if (idsToDelete.length === 0) return { success: true };
+
+  const { error: delExError } = await adminClient
+    .from("session_exercises")
+    .delete()
+    .in("session_id", idsToDelete as any);
+  if (delExError) throw delExError;
+
+  const { error: delSesError } = await adminClient
+    .from("sessions")
+    .delete()
+    .in("id", idsToDelete as any);
+  if (delSesError) throw delSesError;
+
+  revalidatePath("/coach/templates");
+  revalidatePath(`/coach/templates/${planId}/edit`);
+  return { success: true };
+}
+
+export async function removeWeekFromTemplate(planId: number, weekNumber: number) {
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: sessions, error } = await adminClient
+    .from("sessions")
+    .select("id, week_number")
+    .eq("plan_id", planId as any);
+
+  if (error) throw error;
+
+  const allSessions = (sessions ?? []) as any[];
+  const weekNumbers = [...new Set(allSessions.map((s) => s.week_number as number))];
+
+  if (weekNumbers.length <= 1) {
+    return { success: false, reason: "min_weeks" as const };
+  }
+
+  const toDelete = allSessions.filter((s) => s.week_number === weekNumber);
+  const idsToDelete = toDelete.map((s) => s.id as number);
+
+  if (idsToDelete.length > 0) {
+    const { error: delExError } = await adminClient
+      .from("session_exercises")
+      .delete()
+      .in("session_id", idsToDelete as any);
+    if (delExError) throw delExError;
+
+    const { error: delSesError } = await adminClient
+      .from("sessions")
+      .delete()
+      .in("id", idsToDelete as any);
+    if (delSesError) throw delSesError;
+  }
+
+  revalidatePath("/coach/templates");
+  revalidatePath(`/coach/templates/${planId}/edit`);
+  return { success: true };
+}
+
+export async function addWeekToTemplate(planId: number) {
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: sessions, error } = await adminClient
+    .from("sessions")
+    .select("id, week_number, day_name, order_index")
+    .eq("plan_id", planId as any)
+    .order("order_index", { ascending: true });
+
+  if (error) throw error;
+
+  const allSessions = (sessions ?? []) as any[];
+
+  // If no sessions at all, create week 1 + day 1
+  if (allSessions.length === 0) {
+    await adminClient.from("sessions").insert({
+      plan_id: planId,
+      week_number: 1,
+      day_name: "Día 1",
+      order_index: 1,
+      is_completed: false,
+      date: null,
+    } as any);
+    revalidatePath("/coach/templates");
+    return { success: true };
+  }
+
+  const weekNumbers = [...new Set(allSessions.map((s) => s.week_number as number))].sort((a, b) => a - b);
+  const maxWeek = Math.max(...weekNumbers);
+  const maxOrderIndex = Math.max(0, ...allSessions.map((s) => s.order_index ?? 0));
+
+  // Use day names from the first week as the template for the new week
+  const firstWeekSessions = allSessions
+    .filter((s) => s.week_number === weekNumbers[0])
+    .sort((a, b) => parseDayNumber(a.day_name) - parseDayNumber(b.day_name));
+
+  const dayNames = firstWeekSessions.length > 0
+    ? firstWeekSessions.map((s) => s.day_name as string)
+    : ["Día 1"];
+
+  const toInsert = dayNames.map((dayName, i) => ({
+    plan_id: planId,
+    week_number: maxWeek + 1,
+    day_name: dayName,
+    order_index: maxOrderIndex + i + 1,
+    is_completed: false,
+    date: null,
+  }));
+
+  const { error: insertError } = await adminClient.from("sessions").insert(toInsert as any);
+  if (insertError) throw insertError;
+
+  revalidatePath("/coach/templates");
+  revalidatePath(`/coach/templates/${planId}/edit`);
+  return { success: true };
 }

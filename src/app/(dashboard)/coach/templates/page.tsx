@@ -24,13 +24,27 @@ export default async function TemplatesPage() {
     );
   }
 
-  // Fetch templates desde Supabase
-  const { data: templates, error } = await supabase
+  // Check role — admins see all coaches' templates
+  const { data: profile } = await supabase
+    .from('profiles')
+    .select('role')
+    .eq('id', user.id)
+    .single();
+
+  const isAdmin = profile?.role === 'ADMIN';
+
+  // Fetch templates: admins see all, coaches see only their own
+  let templateQuery = supabase
     .from('training_plans')
     .select('*')
-    .eq('coach_id', user.id)
     .eq('is_template', true)
     .order('created_at', { ascending: false });
+
+  if (!isAdmin) {
+    templateQuery = templateQuery.eq('coach_id', user.id);
+  }
+
+  const { data: templates, error } = await templateQuery;
 
   if (error) {
     console.error('Error fetching templates:', error);

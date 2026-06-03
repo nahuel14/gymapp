@@ -76,7 +76,7 @@ function getNavItems(role: UserRole): NavItem[] {
   }
 
   return [
-    { href: "/student", label: "Sesión de hoy" },
+    { href: "/student", label: "Rutina" },
     ...commonItems,
   ];
 }

@@ -16,8 +16,17 @@ export async function GET(
       return NextResponse.json({ error: "No autorizado" }, { status: 401 });
     }
 
-    // Get template with sessions and exercises - SIN columnas que no existen
-    const { data: template, error } = await supabase
+    // Check if user is ADMIN — admins can view any coach's template
+    const { data: profile } = await supabase
+      .from("profiles")
+      .select("role")
+      .eq("id", user.id)
+      .single();
+
+    const isAdmin = profile?.role === "ADMIN";
+
+    // Get template with sessions and exercises
+    let templateQuery = supabase
       .from("training_plans")
       .select(`
         id,
@@ -39,6 +48,7 @@ export async function GET(
             rest_seconds,
             coach_notes,
             order_index,
+            superset_group,
             exercises (
               id,
               name,
@@ -49,9 +59,13 @@ export async function GET(
         )
       `)
       .eq("id", templateId)
-      .eq("is_template", true)
-      .eq("coach_id", user.id)
-      .single();
+      .eq("is_template", true);
+
+    if (!isAdmin) {
+      templateQuery = templateQuery.eq("coach_id", user.id);
+    }
+
+    const { data: template, error } = await templateQuery.single();
 
     if (error) {
       console.error("Error fetching template:", error);
@@ -74,44 +88,3 @@ export async function GET(
   }
 }
 
-export async function PATCH(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  try {
-    const supabase = await createSupabaseServerClient();
-    const { id } = await params;
-    const templateId = Number(id);
-    const { name } = await request.json();
-
-    // Get current user
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      return NextResponse.json({ error: "No autorizado" }, { status: 401 });
-    }
-
-    // Update template name
-    const { data: template, error } = await supabase
-      .from("training_plans")
-      .update({ name })
-      .eq("id", templateId)
-      .eq("coach_id", user.id)
-      .eq("is_template", true)
-      .select()
-      .single();
-
-    if (error) throw error;
-    if (!template) {
-      return NextResponse.json({ error: "Plantilla no encontrada" }, { status: 404 });
-    }
-
-    return NextResponse.json(template);
-    
-  } catch (error) {
-    console.error("Error updating template:", error);
-    return NextResponse.json(
-      { error: "Error interno del servidor" },
-      { status: 500 }
-    );
-  }
-}

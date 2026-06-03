@@ -30,9 +30,10 @@ interface Props {
   role: "COACH" | "STUDENT";
   isTemplate?: boolean;
   allExpanded?: boolean;
+  onMutated?: () => void;
 }
 
-export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpanded = false }: Props) {
+export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpanded = false, onMutated }: Props) {
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -105,6 +106,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
         : editForm;
       await updateExerciseInSession(id, dataToSave);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      onMutated?.();
       setEditingId(null);
     });
   };
@@ -114,6 +116,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     startTransition(async () => {
       await reorderSessionItem(ex.session_id, ex.id, null, direction);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      onMutated?.();
     });
   };
 
@@ -124,6 +127,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     startTransition(async () => {
       await reorderSessionItem(sessionId, null, group, direction);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      onMutated?.();
     });
   };
 
@@ -132,6 +136,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     startTransition(async () => {
       await deleteExerciseFromSession(id);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      onMutated?.();
     });
   };
 
@@ -142,6 +147,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     startTransition(async () => {
       await setSuperset(sourceId, targetEx.id, targetEx.session_id);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      onMutated?.();
     });
   };
 
@@ -149,6 +155,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     startTransition(async () => {
       await removeFromSuperset(exerciseId);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
+      onMutated?.();
     });
   };
 
