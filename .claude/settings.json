@@ -26,7 +26,8 @@
       "Bash(Write-Host \"Deleted\")",
       "Bash(grep -n \"describe\\\\|ESCENARIO\\\\|^//\" test/plans.test.ts)",
       "Bash(awk '/ESCENARIO 20/,/^describe/')",
-      "Bash(git stash *)"
+      "Bash(git stash *)",
+      "Bash(npm install *)"
     ]
   }
 }

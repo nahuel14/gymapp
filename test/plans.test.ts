@@ -1,114 +1,73 @@
 import { describe, it, expect } from 'vitest';
 
+// ─── src/lib imports ──────────────────────────────────────────────────────────
+import {
+  calculatePlanDates, calculateExtendedEnd, calcEndDateLocal,
+  shiftWeekLocal, getMonday,
+} from '@/lib/plans/dates';
+
+import {
+  simulateExtendCollision, checkPlanShiftCollision,
+  computeEndDateBlocked, hasShiftedSessionOutside,
+} from '@/lib/plans/validation';
+
+import {
+  distributeTemplateSessions, shiftSessionDates,
+  simulateMoveSession, simulateMoveSessionWithRange,
+  simulateDuplicateSession, simulateDeleteSession,
+  simulateAddSession, simulateCopyExercises,
+} from '@/lib/plans/sessions';
+
+import {
+  toggleExercise, expandAll, collapseAll, isExerciseExpanded,
+  shouldShowTodayButton, shouldMarkSessionComplete,
+} from '@/lib/exercises/ui';
+
+import {
+  type ExItem, swapOrderIndex, canMoveUp, canMoveDown,
+  reorderItem,
+} from '@/lib/exercises/reorder';
+
+import {
+  resolveSuperset, removeFromSuperset, isSameGroupAsLinking,
+} from '@/lib/exercises/superset';
+
+import {
+  buildCoachPayload, buildStudentPayload,
+  shouldMarkCompleteFromStudent, validateActualReps, canStudentEditTargets,
+} from '@/lib/student/payload';
+
+import {
+  type TemplateSession, parseDayNumber, isTemplateUniform,
+  addDayToAllWeeks as addDayToAllWeeksLocal,
+  removeDayFromAllWeeks as removeDayFromAllWeeksLocal,
+  addWeekToTemplate as addWeekToTemplateLocal,
+  removeWeekFromTemplate as removeWeekFromTemplateLocal,
+  filterTemplatesByCoach, buildInitialTemplate, remainingWeeks,
+  swapWeeks as swapWeeksLocal, swapDays as swapDaysLocal,
+  normalizeSessionDayNames, removeSelectedDay as removeSelectedDayLocal,
+  getEditorModeState,
+} from '@/lib/templates/structure';
+
+import {
+  type AdminProfile, type AdminAssignment,
+  filterProfiles, getCoachProfiles, isCoachAssignedToStudent,
+  toggleAssignment as toggleAssignmentLocal,
+  countCoachesForStudent, validateInviteForm, canDeleteUser,
+} from '@/lib/admin/filters';
+
+import {
+  type LibraryExercise, filterExercises, validateExerciseName,
+  getBodyZoneLabel, getCategoryLabel,
+} from '@/lib/exercises/library';
+
+// Alias — removeFromSupersetLocal kept for backward compat with test names
+const removeFromSupersetLocal = removeFromSuperset;
+
 // ════════════════════════════════════════════════════════════════
 // Módulo: Planes de Alumno
 // Creación, edición de fechas, extensión, colisiones entre planes
 // ════════════════════════════════════════════════════════════════
-
-function calculatePlanDates(startDate: string, durationWeeks: number) {
-  const chosenStart = new Date(startDate + "T00:00:00");
-  const startDay = chosenStart.getDay();
-  const diffToMonday = startDay === 0 ? -6 : 1 - startDay;
-  chosenStart.setDate(chosenStart.getDate() + diffToMonday);
-  const startDateStr = chosenStart.toISOString().split("T")[0];
-
-  const exactEnd = new Date(chosenStart);
-  exactEnd.setDate(chosenStart.getDate() + Math.max(durationWeeks, 1) * 7 - 1);
-  const endDateStr = exactEnd.toISOString().split("T")[0];
-
-  const getDayNameInEnglish = (dateStr: string) => {
-    const d = new Date(dateStr + "T00:00:00");
-    return d.toLocaleDateString('en-US', { weekday: 'long' });
-  };
-
-  return {
-    start_date: startDateStr,
-    end_date: endDateStr,
-    generated_day_name: getDayNameInEnglish(startDateStr),
-  };
-}
-
-function calculateExtendedEnd(currentEndDate: string, additionalWeeks: number) {
-  if (additionalWeeks < 1) throw new Error("Debe agregar al menos 1 semana");
-  const d = new Date(currentEndDate + "T00:00:00");
-  d.setDate(d.getDate() + additionalWeeks * 7);
-  const dow = d.getDay();
-  if (dow !== 0) d.setDate(d.getDate() + (7 - dow));
-  return d.toISOString().split("T")[0];
-}
-
-function simulateExtendCollision(
-  otherPlans: Array<{ name: string; start_date: string }>,
-  currentEndDate: string,
-  newEndDate: string
-) {
-  const conflict = otherPlans.find(
-    p => p.start_date > currentEndDate && p.start_date <= newEndDate
-  );
-  if (conflict) {
-    throw new Error('No se puede extender: el plan "' + conflict.name + '" comienza el ' + conflict.start_date + '.');
-  }
-  return { success: true, newEndDate };
-}
-
-function checkPlanShiftCollision(
-  otherPlans: Array<{ name: string; start_date: string; end_date: string }>,
-  newStart: string,
-  newEnd: string
-): { hasCollision: boolean; conflictPlan?: string } {
-  const conflict = otherPlans.find(p => p.start_date <= newEnd && p.end_date >= newStart);
-  return conflict ? { hasCollision: true, conflictPlan: conflict.name } : { hasCollision: false };
-}
-
-function hasShiftedSessionOutside(
-  sessions: { date: string }[],
-  offsetDays: number,
-  newEndDate: string
-): boolean {
-  return sessions.some(s => {
-    const d = new Date(s.date + "T00:00:00");
-    d.setDate(d.getDate() + offsetDays);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return `${y}-${m}-${day}` > newEndDate;
-  });
-}
-
-function shiftSessionDates(sessions: { id: number; date: string | null }[], offsetDays: number) {
-  return sessions.map(s => {
-    if (!s.date) return s;
-    const d = new Date(s.date + "T00:00:00");
-    d.setDate(d.getDate() + offsetDays);
-    const y = d.getFullYear();
-    const m = String(d.getMonth() + 1).padStart(2, "0");
-    const day = String(d.getDate()).padStart(2, "0");
-    return { ...s, date: `${y}-${m}-${day}` };
-  });
-}
-
-function computeEndDateBlocked(planHasSessions: boolean, newEndDate: string, currentEndDate: string): boolean {
-  if (!planHasSessions) return false;
-  return newEndDate < currentEndDate;
-}
-
-function calcEndDateLocal(mondayStr: string, weeks: number): string {
-  const start = new Date(mondayStr + "T00:00:00");
-  start.setDate(start.getDate() + Math.max(weeks, 1) * 7 - 1);
-  const y = start.getFullYear();
-  const m = String(start.getMonth() + 1).padStart(2, "0");
-  const d = String(start.getDate()).padStart(2, "0");
-  return `${y}-${m}-${d}`;
-}
-
-function shiftWeekLocal(dateStr: string, weeks: number): string {
-  const d = new Date(dateStr + "T00:00:00");
-  d.setDate(d.getDate() + weeks * 7);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const day = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${day}`;
-}
 
 describe('Estudiantes', () => {
 
@@ -362,105 +321,6 @@ describe('Planes de Alumno', () => {
 // Distribución de sesiones al importar, duplicar, reagendar,
 // eliminar y agregar días dentro de un plan
 // ════════════════════════════════════════════════════════════════
-
-function distributeTemplateSessions(startMonday: string, selectedDays: number[], totalWeeks: number) {
-  const sorted = [...selectedDays].sort((a, b) => (a === 0 ? 7 : a) - (b === 0 ? 7 : b));
-  const sessions: Array<{ week: number; date: string; dayName: string }> = [];
-  const monday = new Date(startMonday + "T00:00:00");
-
-  for (let week = 1; week <= totalWeeks; week++) {
-    const weekMonday = new Date(monday);
-    weekMonday.setDate(monday.getDate() + (week - 1) * 7);
-    for (const dayOfWeek of sorted) {
-      const offset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
-      const sessionDate = new Date(weekMonday);
-      sessionDate.setDate(weekMonday.getDate() + offset);
-      sessions.push({
-        week,
-        date: sessionDate.toISOString().split("T")[0],
-        dayName: sessionDate.toLocaleDateString('en-US', { weekday: 'long' }),
-      });
-    }
-  }
-  return sessions;
-}
-
-function simulateMoveSession(currentSessions: { date: string }[], newDate: string) {
-  const hasCollision = currentSessions.some(s => s.date === newDate);
-  if (hasCollision) {
-    throw new Error("Ya existe un entrenamiento en esta fecha. Selecciona un dia libre.");
-  }
-  const d = new Date(newDate + "T00:00:00");
-  return {
-    success: true,
-    new_date: newDate,
-    new_day_name: d.toLocaleDateString('en-US', { weekday: 'long' }),
-  };
-}
-
-function simulateDuplicateSession(
-  existingSessions: { date: string }[],
-  targetDate: string,
-  planRange: { start_date: string; end_date: string }
-): { success: boolean; date: string } {
-  if (!targetDate) throw new Error("Seleccioná una fecha destino.");
-  if (targetDate < planRange.start_date || targetDate > planRange.end_date) {
-    throw new Error("La fecha destino está fuera del rango del plan.");
-  }
-  if (existingSessions.some(s => s.date === targetDate)) {
-    throw new Error("Ya existe un entrenamiento en esa fecha.");
-  }
-  return { success: true, date: targetDate };
-}
-
-function simulateCopyExercises(
-  sourceExercises: { exercise_id: number; target_sets: number }[]
-): { exercise_id: number; target_sets: number }[] {
-  return sourceExercises.map(ex => ({ ...ex }));
-}
-
-function simulateMoveSessionWithRange(
-  existingSessions: { date: string }[],
-  newDate: string,
-  planRange: { start_date: string | null; end_date: string | null }
-): { success: boolean; new_date: string } {
-  if (planRange.start_date && newDate < planRange.start_date) {
-    throw new Error("La fecha está fuera del rango del plan.");
-  }
-  if (planRange.end_date && newDate > planRange.end_date) {
-    throw new Error("La fecha está fuera del rango del plan.");
-  }
-  if (existingSessions.some(s => s.date === newDate)) {
-    throw new Error("Ya existe un entrenamiento en esa fecha.");
-  }
-  return { success: true, new_date: newDate };
-}
-
-function simulateDeleteSession(
-  sessions: { id: number; date: string; exercises?: { id: number }[] }[],
-  sessionId: number
-): { sessions: { id: number; date: string; exercises?: { id: number }[] }[]; deleted: boolean } {
-  const index = sessions.findIndex(s => s.id === sessionId);
-  if (index === -1) return { sessions, deleted: false };
-  const updated = sessions.filter(s => s.id !== sessionId);
-  return { sessions: updated, deleted: true };
-}
-
-function simulateAddSession(
-  existingSessions: { date: string; plan_id: number }[],
-  newDate: string,
-  planId: number,
-  planRange: { start_date: string; end_date: string }
-): { success: boolean; date: string; plan_id: number } {
-  if (!newDate) throw new Error("Seleccioná una fecha.");
-  if (newDate < planRange.start_date || newDate > planRange.end_date) {
-    throw new Error("La fecha está fuera del rango del plan.");
-  }
-  if (existingSessions.some(s => s.date === newDate && s.plan_id === planId)) {
-    throw new Error("Ya existe un entrenamiento en esa fecha.");
-  }
-  return { success: true, date: newDate, plan_id: planId };
-}
 
 describe('Sesiones del Plan', () => {
   describe('ESCENARIO 3: Distribucion de Sesiones al Importar Plantilla', () => {
@@ -737,199 +597,6 @@ describe('Sesiones del Plan', () => {
 // Módulo: Ejercicios y Rutina
 // Grid de ejercicios, superseries, reordenamiento, is_completed
 // ════════════════════════════════════════════════════════════════
-
-function getMonday(dateStr: string): string {
-  const d = new Date(dateStr + "T00:00:00");
-  const day = d.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  d.setDate(d.getDate() + diff);
-  const y = d.getFullYear();
-  const m = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${y}-${m}-${dd}`;
-}
-
-function shouldShowTodayButton(currentMonday: string, todayMonday: string): boolean {
-  return currentMonday !== todayMonday;
-}
-
-function toggleExercise(expandedIds: Set<number>, id: number): Set<number> {
-  const next = new Set(expandedIds);
-  if (next.has(id)) next.delete(id);
-  else next.add(id);
-  return next;
-}
-
-function expandAll(exercises: { id: number }[]): Set<number> {
-  return new Set(exercises.map(e => e.id));
-}
-
-function collapseAll(): Set<number> {
-  return new Set<number>();
-}
-
-function isExerciseExpanded(expandedIds: Set<number>, id: number, isEditing: boolean): boolean {
-  return expandedIds.has(id) || isEditing;
-}
-
-function sortByOrderIndex(exercises: { id: number; order_index: number }[]) {
-  return [...exercises].sort((a, b) => a.order_index - b.order_index);
-}
-
-function swapOrderIndex(
-  exercises: { id: number; order_index: number }[],
-  indexA: number,
-  indexB: number
-): { id: number; order_index: number }[] {
-  const sorted = sortByOrderIndex(exercises);
-  if (indexA < 0 || indexA >= sorted.length || indexB < 0 || indexB >= sorted.length) {
-    return sorted;
-  }
-  const result = sorted.map(e => ({ ...e }));
-  const tmp = result[indexA].order_index;
-  result[indexA].order_index = result[indexB].order_index;
-  result[indexB].order_index = tmp;
-  return sortByOrderIndex(result);
-}
-
-function canMoveUp(index: number): boolean {
-  return index > 0;
-}
-
-function canMoveDown(index: number, total: number): boolean {
-  return index < total - 1;
-}
-
-function resolveSuperset(
-  exercises: { id: number; superset_group: number | null }[],
-  sourceId: number,
-  targetId: number
-): { id: number; superset_group: number | null }[] {
-  const ex1 = exercises.find(e => e.id === sourceId);
-  const ex2 = exercises.find(e => e.id === targetId);
-  if (!ex1 || !ex2) return exercises.map(e => ({ ...e }));
-
-  let groupNumber: number;
-  if (ex1.superset_group !== null) {
-    groupNumber = ex1.superset_group;
-  } else if (ex2.superset_group !== null) {
-    groupNumber = ex2.superset_group;
-  } else {
-    const maxGroup = Math.max(0, ...exercises.map(e => e.superset_group ?? 0));
-    groupNumber = maxGroup + 1;
-  }
-
-  const groupsToMerge = [ex1.superset_group, ex2.superset_group].filter(
-    (g): g is number => g !== null && g !== groupNumber
-  );
-
-  return exercises.map(e => {
-    if (e.id === sourceId || e.id === targetId) return { ...e, superset_group: groupNumber };
-    if (groupsToMerge.includes(e.superset_group as number)) return { ...e, superset_group: groupNumber };
-    return { ...e };
-  });
-}
-
-function removeFromSupersetLocal(
-  exercises: { id: number; superset_group: number | null }[],
-  exerciseId: number
-): { id: number; superset_group: number | null }[] {
-  return exercises.map(e => e.id === exerciseId ? { ...e, superset_group: null } : { ...e });
-}
-
-function isSameGroupAsLinking(
-  exercises: { id: number; superset_group: number | null }[],
-  linkingId: number,
-  targetId: number
-): boolean {
-  const source = exercises.find(e => e.id === linkingId);
-  const target = exercises.find(e => e.id === targetId);
-  if (!source || !target) return false;
-  if (source.superset_group === null) return false;
-  return source.superset_group === target.superset_group;
-}
-
-type ExItem = { id: number; order_index: number; superset_group: number | null };
-type BlockItem =
-  | { type: 'standalone'; ex: ExItem }
-  | { type: 'superset'; group: number; exs: ExItem[] };
-
-function buildBlocks(exercises: ExItem[]): BlockItem[] {
-  const sorted = [...exercises].sort((a, b) => a.order_index - b.order_index);
-  const blocks: BlockItem[] = [];
-  const seenGroups = new Set<number>();
-  for (const ex of sorted) {
-    const g = ex.superset_group;
-    if (g === null) {
-      blocks.push({ type: 'standalone', ex });
-    } else if (!seenGroups.has(g)) {
-      seenGroups.add(g);
-      blocks.push({ type: 'superset', group: g, exs: sorted.filter(e => e.superset_group === g) });
-    }
-  }
-  return blocks;
-}
-
-function reorderItem(
-  exercises: ExItem[],
-  itemKey: { type: 'standalone'; exerciseId: number } | { type: 'superset'; group: number },
-  direction: 'up' | 'down'
-): { id: number; order_index: number }[] {
-  const blocks = buildBlocks(exercises);
-  const blockIdx = itemKey.type === 'standalone'
-    ? blocks.findIndex(b => b.type === 'standalone' && (b as any).ex.id === itemKey.exerciseId)
-    : blocks.findIndex(b => b.type === 'superset' && (b as any).group === itemKey.group);
-
-  if (blockIdx === -1) return [...exercises].sort((a, b) => a.order_index - b.order_index).map(e => ({ id: e.id, order_index: e.order_index }));
-
-  const targetIdx = direction === 'up' ? blockIdx - 1 : blockIdx + 1;
-  if (targetIdx < 0 || targetIdx >= blocks.length) {
-    return [...exercises].sort((a, b) => a.order_index - b.order_index).map(e => ({ id: e.id, order_index: e.order_index }));
-  }
-
-  const newBlocks = [...blocks];
-  [newBlocks[blockIdx], newBlocks[targetIdx]] = [newBlocks[targetIdx], newBlocks[blockIdx]];
-
-  let idx = 1;
-  const result: { id: number; order_index: number }[] = [];
-  for (const block of newBlocks) {
-    if (block.type === 'standalone') {
-      result.push({ id: (block as any).ex.id, order_index: idx++ });
-    } else {
-      for (const ex of (block as any).exs) {
-        result.push({ id: ex.id, order_index: idx++ });
-      }
-    }
-  }
-  return result.sort((a, b) => a.order_index - b.order_index);
-}
-
-function shouldMarkSessionComplete(data: Record<string, unknown>): boolean {
-  const sets = data.actual_sets as number | null | undefined;
-  return !!(sets && sets > 0);
-}
-
-function buildCoachPayload(form: {
-  target_sets: number;
-  target_reps: number[];
-  target_weight: (number | null)[];
-  target_rpe: number;
-  rest_seconds: number;
-  coach_notes: string;
-  actual_sets?: number;
-  actual_reps?: number[];
-  actual_rpe?: number;
-  student_notes?: string;
-}) {
-  return {
-    target_sets: form.target_sets,
-    target_reps: form.target_reps,
-    target_weight: form.target_weight,
-    target_rpe: form.target_rpe,
-    rest_seconds: form.rest_seconds,
-    coach_notes: form.coach_notes,
-  };
-}
 
 describe('Ejercicios y Rutina', () => {
   describe('ESCENARIO 15: Botón "Hoy" - Lógica de Visibilidad y Navegación', () => {
@@ -1541,126 +1208,6 @@ describe('Ejercicios y Rutina', () => {
 // Estructura uniforme N×M, visibilidad por coach/admin,
 // eliminar semana, export de plan como plantilla
 // ════════════════════════════════════════════════════════════════
-
-type TemplateSession = {
-  id: number;
-  plan_id: number;
-  week_number: number;
-  day_name: string;
-  order_index: number;
-};
-
-function parseDayNumber(dayName: string): number {
-  const match = dayName.match(/D[íi]a\s+(\d+)/i);
-  return match ? parseInt(match[1], 10) : 0;
-}
-
-function isTemplateUniform(sessions: TemplateSession[]): boolean {
-  if (sessions.length === 0) return true;
-  const weekMap = new Map<number, Set<string>>();
-  for (const s of sessions) {
-    if (!weekMap.has(s.week_number)) weekMap.set(s.week_number, new Set());
-    weekMap.get(s.week_number)!.add(s.day_name);
-  }
-  const sets = [...weekMap.values()];
-  const ref = sets[0];
-  return sets.every((set) => {
-    if (set.size !== ref.size) return false;
-    for (const d of ref) if (!set.has(d)) return false;
-    return true;
-  });
-}
-
-function addDayToAllWeeksLocal(sessions: TemplateSession[]): TemplateSession[] {
-  if (sessions.length === 0) {
-    return [{ id: 1, plan_id: 1, week_number: 1, day_name: 'Día 1', order_index: 1 }];
-  }
-  const weekNumbers = [...new Set(sessions.map((s) => s.week_number))].sort((a, b) => a - b);
-  const maxDay = Math.max(0, ...sessions.map((s) => parseDayNumber(s.day_name)));
-  const newDayName = `Día ${maxDay + 1}`;
-  const maxOrderIndex = Math.max(0, ...sessions.map((s) => s.order_index));
-  const nextId = Math.max(0, ...sessions.map((s) => s.id)) + 1;
-  const newSessions: TemplateSession[] = weekNumbers.map((wk, i) => ({
-    id: nextId + i,
-    plan_id: sessions[0].plan_id,
-    week_number: wk,
-    day_name: newDayName,
-    order_index: maxOrderIndex + i + 1,
-  }));
-  return [...sessions, ...newSessions];
-}
-
-function removeDayFromAllWeeksLocal(sessions: TemplateSession[]): { sessions: TemplateSession[]; success: boolean; reason?: string } {
-  const maxDay = Math.max(0, ...sessions.map((s) => parseDayNumber(s.day_name)));
-  if (maxDay <= 1) return { sessions, success: false, reason: 'min_days' };
-  const filtered = sessions.filter((s) => parseDayNumber(s.day_name) !== maxDay);
-  return { sessions: filtered, success: true };
-}
-
-function addWeekToTemplateLocal(sessions: TemplateSession[]): TemplateSession[] {
-  if (sessions.length === 0) {
-    return [{ id: 1, plan_id: 1, week_number: 1, day_name: 'Día 1', order_index: 1 }];
-  }
-  const weekNumbers = [...new Set(sessions.map((s) => s.week_number))].sort((a, b) => a - b);
-  const maxWeek = Math.max(...weekNumbers);
-  const maxOrderIndex = Math.max(0, ...sessions.map((s) => s.order_index));
-  const firstWeekSessions = sessions
-    .filter((s) => s.week_number === weekNumbers[0])
-    .sort((a, b) => parseDayNumber(a.day_name) - parseDayNumber(b.day_name));
-  const dayNames = firstWeekSessions.map((s) => s.day_name);
-  const nextId = Math.max(0, ...sessions.map((s) => s.id)) + 1;
-  const newSessions: TemplateSession[] = dayNames.map((dn, i) => ({
-    id: nextId + i,
-    plan_id: sessions[0].plan_id,
-    week_number: maxWeek + 1,
-    day_name: dn,
-    order_index: maxOrderIndex + i + 1,
-  }));
-  return [...sessions, ...newSessions];
-}
-
-function removeWeekFromTemplateLocal(
-  sessions: TemplateSession[],
-  weekNumber: number
-): { sessions: TemplateSession[]; success: boolean; reason?: string } {
-  const weekNumbers = [...new Set(sessions.map((s) => s.week_number))].sort((a, b) => a - b);
-  if (weekNumbers.length <= 1) return { sessions, success: false, reason: 'min_weeks' };
-  const filtered = sessions.filter((s) => s.week_number !== weekNumber);
-
-  // Renumerar semanas restantes para que sean consecutivas (1, 2, 3, ...)
-  const remaining = weekNumbers.filter((wk) => wk !== weekNumber).sort((a, b) => a - b);
-  const renumbered = filtered.map((s) => {
-    const newWeek = remaining.indexOf(s.week_number) + 1;
-    return newWeek > 0 ? { ...s, week_number: newWeek } : s;
-  });
-
-  return { sessions: renumbered, success: true };
-}
-
-function buildInitialTemplate(weeks: number, daysPerWeek: number): TemplateSession[] {
-  const result: TemplateSession[] = [];
-  let id = 1;
-  let orderIndex = 1;
-  for (let w = 1; w <= weeks; w++) {
-    for (let d = 1; d <= daysPerWeek; d++) {
-      result.push({ id: id++, plan_id: 1, week_number: w, day_name: `Día ${d}`, order_index: orderIndex++ });
-    }
-  }
-  return result;
-}
-
-function remainingWeeks(sessions: TemplateSession[]): number[] {
-  return [...new Set(sessions.map((s) => s.week_number))].sort((a, b) => a - b);
-}
-
-function filterTemplatesByCoach(
-  templates: Array<{ id: number; coach_id: string; is_template: boolean }>,
-  userId: string,
-  role: 'COACH' | 'ADMIN'
-): typeof templates {
-  if (role === 'ADMIN') return templates.filter((t) => t.is_template);
-  return templates.filter((t) => t.is_template && t.coach_id === userId);
-}
 
 function simulateDuplicatePlan(
   plan: { id: number; name: string; student_id: string | null; sessions: any[] },
@@ -2328,14 +1875,6 @@ describe('Plantillas', () => {
   // ESCENARIO 25: Reordenar semanas (swapWeeksInTemplate)
   // ════════════════════════════════════════════════════════════════
 
-  function swapWeeksLocal(sessions: TemplateSession[], weekA: number, weekB: number): TemplateSession[] {
-    return sessions.map(s => {
-      if (s.week_number === weekA) return { ...s, week_number: weekB };
-      if (s.week_number === weekB) return { ...s, week_number: weekA };
-      return { ...s };
-    });
-  }
-
   describe('ESCENARIO 25: Reordenar semanas', () => {
     it('intercambiar sem 1 y sem 2: todas las sesiones de sem 1 pasan a sem 2 y viceversa', () => {
       const initial = buildInitialTemplate(3, 2);
@@ -2405,36 +1944,6 @@ describe('Plantillas', () => {
   // ════════════════════════════════════════════════════════════════
   // ESCENARIO 26: Reordenar días (swapDaysInTemplate)
   // ════════════════════════════════════════════════════════════════
-
-  function swapDaysLocal(sessions: TemplateSession[], dayIndexA: number, dayIndexB: number): TemplateSession[] {
-    const weekNumbers = [...new Set(sessions.map(s => s.week_number))].sort((a, b) => a - b);
-    const result = sessions.map(s => ({ ...s }));
-
-    for (const wk of weekNumbers) {
-      const wkSorted = result
-        .filter(s => s.week_number === wk)
-        .sort((a, b) => {
-          const nA = parseInt(String(a.day_name).replace(/\D/g, ''), 10) || 0;
-          const nB = parseInt(String(b.day_name).replace(/\D/g, ''), 10) || 0;
-          return nA - nB || a.id - b.id;
-        });
-
-      const sA = wkSorted[dayIndexA];
-      const sB = wkSorted[dayIndexB];
-      if (!sA || !sB) continue;
-
-      const idxA = result.findIndex(s => s.id === sA.id);
-      const idxB = result.findIndex(s => s.id === sB.id);
-
-      const tmpName = result[idxA].day_name;
-      const tmpOrder = result[idxA].order_index;
-      result[idxA].day_name = result[idxB].day_name;
-      result[idxA].order_index = result[idxB].order_index;
-      result[idxB].day_name = tmpName;
-      result[idxB].order_index = tmpOrder;
-    }
-    return result;
-  }
 
   function sortByDayName(sessions: TemplateSession[]) {
     return [...sessions].sort((a, b) => {
@@ -2569,38 +2078,6 @@ describe('Plantillas', () => {
   // ════════════════════════════════════════════════════════════════
   // ESCENARIO 28: Eliminar día seleccionado (removeSelectedDayFromTemplate)
   // ════════════════════════════════════════════════════════════════
-
-  function removeSelectedDayLocal(
-    sessions: TemplateSession[],
-    sessionIds: number[]
-  ): { sessions: TemplateSession[]; success: boolean; reason?: string } {
-    const weekNumbers = [...new Set(sessions.map(s => s.week_number))];
-    const minDaysAfter = Math.min(
-      ...weekNumbers.map(wk => {
-        const total = sessions.filter(s => s.week_number === wk).length;
-        const removing = sessions.filter(s => s.week_number === wk && sessionIds.includes(s.id)).length;
-        return total - removing;
-      })
-    );
-    if (minDaysAfter < 1) return { sessions, success: false, reason: 'min_days' };
-    const filtered = sessions.filter(s => !sessionIds.includes(s.id));
-
-    // Renombrar días restantes para que sean consecutivos (Día 1, Día 2, ...)
-    const weekNums = [...new Set(filtered.map(s => s.week_number))];
-    const renumbered = filtered.map(s => ({ ...s }));
-    for (const wk of weekNums) {
-      const wkSessions = renumbered
-        .filter(s => s.week_number === wk)
-        .sort((a, b) => {
-          const nA = parseInt(a.day_name.replace(/\D/g, ''), 10) || 0;
-          const nB = parseInt(b.day_name.replace(/\D/g, ''), 10) || 0;
-          return nA - nB || a.id - b.id;
-        });
-      wkSessions.forEach((s, i) => { s.day_name = `Día ${i + 1}`; });
-    }
-
-    return { sessions: renumbered, success: true };
-  }
 
   describe('ESCENARIO 28: Eliminar día seleccionado', () => {
     it('elimina las sesiones con los IDs indicados', () => {
@@ -2744,22 +2221,6 @@ describe('Plantillas', () => {
         order_index: maxOrderIndex + i + 1,
       })),
     ];
-  }
-
-  function normalizeSessionDayNames(sessions: TemplateSession[]): TemplateSession[] {
-    const weekNumbers = [...new Set(sessions.map(s => s.week_number))].sort((a, b) => a - b);
-    const result: TemplateSession[] = [];
-    for (const wk of weekNumbers) {
-      const wkSessions = sessions
-        .filter(s => s.week_number === wk)
-        .sort((a, b) => {
-          const nA = parseInt(String(a.day_name).replace(/\D/g, ''), 10) || 0;
-          const nB = parseInt(String(b.day_name).replace(/\D/g, ''), 10) || 0;
-          return nA - nB || a.id - b.id;
-        });
-      wkSessions.forEach((s, i) => result.push({ ...s, day_name: `Día ${i + 1}` }));
-    }
-    return result;
   }
 
   describe('ESCENARIO 29: Normalización de day_name', () => {
@@ -3168,15 +2629,6 @@ describe('Plantillas', () => {
   // Cuando se reordena semanas, el panel de días debe silenciarse y viceversa
   // ════════════════════════════════════════════════════════════════
 
-  function getEditorModeState(reorderingWeeks: boolean, reorderingDays: boolean) {
-    return {
-      showWeekActions: !reorderingDays && !reorderingWeeks,
-      showWeekListo:   !reorderingDays && reorderingWeeks,
-      showDayActions:  !reorderingWeeks && !reorderingDays,
-      showDayListo:    !reorderingWeeks && reorderingDays,
-    };
-  }
-
   describe('ESCENARIO 31: Modo de reordenamiento exclusivo', () => {
     it('estado normal: ambas secciones muestran sus acciones, ningún Listo', () => {
       const state = getEditorModeState(false, false);
@@ -3258,55 +2710,6 @@ describe('Plantillas', () => {
 // Módulo: Administración
 // Gestión de usuarios, roles, asignaciones coach→alumno e invitaciones
 // ════════════════════════════════════════════════════════════════
-
-type AdminUserRole = 'ADMIN' | 'COACH' | 'STUDENT';
-
-type AdminProfile = {
-  id: string;
-  email: string;
-  name: string;
-  last_name: string;
-  role: AdminUserRole;
-};
-
-type AdminAssignment = { coach_id: string; student_id: string };
-
-function filterProfiles(profiles: AdminProfile[], searchTerm: string): AdminProfile[] {
-  const lower = searchTerm.toLowerCase();
-  if (!lower) return profiles;
-  return profiles.filter(p => {
-    const fullName = `${p.name} ${p.last_name}`.toLowerCase();
-    return fullName.includes(lower) || p.email.toLowerCase().includes(lower);
-  });
-}
-
-function getCoachProfiles(profiles: AdminProfile[]): AdminProfile[] {
-  return profiles.filter(p => p.role === 'COACH' || p.role === 'ADMIN');
-}
-
-function isCoachAssignedToStudent(assignments: AdminAssignment[], coachId: string, studentId: string): boolean {
-  return assignments.some(a => a.coach_id === coachId && a.student_id === studentId);
-}
-
-function toggleAssignmentLocal(assignments: AdminAssignment[], coachId: string, studentId: string): AdminAssignment[] {
-  const assigned = isCoachAssignedToStudent(assignments, coachId, studentId);
-  if (assigned) return assignments.filter(a => !(a.coach_id === coachId && a.student_id === studentId));
-  return [...assignments, { coach_id: coachId, student_id: studentId }];
-}
-
-function countCoachesForStudent(assignments: AdminAssignment[], studentId: string): number {
-  return assignments.filter(a => a.student_id === studentId).length;
-}
-
-function validateInviteForm(email: string, name: string): { valid: boolean; error?: string } {
-  if (!email || !email.includes('@')) return { valid: false, error: 'Email inválido' };
-  if (!name.trim()) return { valid: false, error: 'El nombre es obligatorio' };
-  return { valid: true };
-}
-
-function canDeleteUser(currentUserId: string, targetUserId: string): boolean {
-  return currentUserId !== targetUserId;
-}
 
 const ADMIN_PROFILES: AdminProfile[] = [
   { id: 'u1', email: 'carlos@gym.com',  name: 'Carlos',  last_name: 'López',   role: 'COACH' },
@@ -3482,58 +2885,6 @@ describe('Administración', () => {
 // Filtrado, búsqueda, etiquetas de zona/categoría y validación de CRUD
 // ════════════════════════════════════════════════════════════════
 
-const BODY_ZONE_LABELS_T: Record<string, string> = {
-  LOWER_BODY: 'Tren Inferior',
-  UPPER_BODY: 'Tren Superior',
-  CORE:       'Zona Media',
-  FULL_BODY:  'Cuerpo Completo',
-  CARDIO:     'Cardio',
-  MOBILITY:   'Movilidad',
-};
-
-const EXERCISE_CATEGORY_LABELS_T: Record<string, string> = {
-  MAIN:     'Principal',
-  BALANCE:  'Equilibrador',
-  AUX:      'Auxiliar',
-  MOBILITY: 'Movilidad',
-};
-
-type LibraryExercise = {
-  id: number;
-  name: string;
-  body_zone: string | null;
-  category: string | null;
-};
-
-function filterExercises(
-  exercises: LibraryExercise[],
-  searchTerm: string,
-  bodyZone?: string | null,
-  category?: string | null
-): LibraryExercise[] {
-  return exercises.filter(ex => {
-    const matchesName     = !searchTerm || ex.name.toLowerCase().includes(searchTerm.toLowerCase());
-    const matchesZone     = !bodyZone   || ex.body_zone === bodyZone;
-    const matchesCategory = !category   || ex.category === category;
-    return matchesName && matchesZone && matchesCategory;
-  });
-}
-
-function getBodyZoneLabel(zone: string | null): string {
-  if (!zone) return 'Sin zona';
-  return BODY_ZONE_LABELS_T[zone] ?? 'Sin zona';
-}
-
-function getCategoryLabel(category: string | null): string {
-  if (!category) return 'Sin categoría';
-  return EXERCISE_CATEGORY_LABELS_T[category] ?? 'Sin categoría';
-}
-
-function validateExerciseName(name: string): { valid: boolean; error?: string } {
-  if (!name.trim()) return { valid: false, error: 'El nombre es obligatorio' };
-  return { valid: true };
-}
-
 const LIBRARY_EXERCISES: LibraryExercise[] = [
   { id: 1, name: 'Sentadilla',       body_zone: 'LOWER_BODY', category: 'MAIN' },
   { id: 2, name: 'Press de banca',   body_zone: 'UPPER_BODY', category: 'MAIN' },
@@ -3696,43 +3047,6 @@ describe('Librería de Ejercicios', () => {
 // Módulo: Vista del Alumno
 // Completar ejercicios, payload del alumno, restricciones de edición
 // ════════════════════════════════════════════════════════════════
-
-function buildStudentPayload(form: {
-  actual_sets: number;
-  actual_reps: number[];
-  actual_rpe: number | null;
-  student_notes: string;
-  target_sets?: number;
-  target_reps?: number[];
-  target_weight?: (number | null)[];
-  target_rpe?: number;
-  coach_notes?: string;
-}) {
-  return {
-    actual_sets:   form.actual_sets,
-    actual_reps:   form.actual_reps,
-    actual_rpe:    form.actual_rpe,
-    student_notes: form.student_notes,
-  };
-}
-
-function canStudentEditTargets(): boolean {
-  return false;
-}
-
-function shouldMarkCompleteFromStudent(actual_sets: number | null | undefined): boolean {
-  return !!(actual_sets && actual_sets > 0);
-}
-
-function validateActualReps(actual_sets: number, actual_reps: number[]): { valid: boolean; error?: string } {
-  if (actual_reps.length !== actual_sets) {
-    return { valid: false, error: `Se esperan ${actual_sets} sets pero hay ${actual_reps.length} repeticiones` };
-  }
-  if (actual_reps.some(r => r < 0)) {
-    return { valid: false, error: 'Las repeticiones no pueden ser negativas' };
-  }
-  return { valid: true };
-}
 
 function buildStudentExerciseView(
   exercise: {

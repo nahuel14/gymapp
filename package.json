@@ -9,6 +9,8 @@
     "lint": "eslint",
     "test": "vitest",
     "test:run": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:coverage:watch": "vitest --coverage",
     "prepare": "husky install",
     "gym-push": "node git-fly.mjs"
   },
@@ -39,6 +41,7 @@
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
+    "@vitest/coverage-v8": "^4.1.8",
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "eslint-plugin-tailwindcss": "^3.18.3",

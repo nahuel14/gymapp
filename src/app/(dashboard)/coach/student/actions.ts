@@ -2,22 +2,12 @@
 
 import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
+import { getMonday, calcEndDateLocal } from "@/lib/plans/dates";
+import { parseDayNumber } from "@/lib/templates/structure";
 // --- Helpers de fechas y validación de colisiones ---
 
-function normalizeToMonday(dateStr: string): string {
-  const date = new Date(dateStr + "T00:00:00");
-  const day = date.getDay();
-  const diff = day === 0 ? -6 : 1 - day;
-  date.setDate(date.getDate() + diff);
-  return date.toISOString().split("T")[0];
-}
-
-function calcEndDate(mondayStr: string, weeks: number): string {
-  const start = new Date(mondayStr + "T00:00:00");
-  const end = new Date(start);
-  end.setDate(start.getDate() + Math.max(weeks, 1) * 7 - 1);
-  return end.toISOString().split("T")[0];
-}
+const normalizeToMonday = getMonday;
+const calcEndDate = calcEndDateLocal;
 
 async function assertNoPlanCollision(
   adminClient: ReturnType<typeof createSupabaseAdminClient>,
@@ -1337,11 +1327,6 @@ export async function createInlineExercise(data: { name: string; body_zone: stri
 }
 
 // ─── Template structure actions (uniform weeks × days) ───────────────────────
-
-function parseDayNumber(dayName: string): number {
-  const match = dayName.match(/D[íi]a\s+(\d+)/i);
-  return match ? parseInt(match[1], 10) : 0;
-}
 
 export async function addDayToAllWeeks(planId: number) {
   const adminClient = createSupabaseAdminClient();
