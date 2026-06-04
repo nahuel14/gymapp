@@ -141,30 +141,30 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-2xl font-semibold text-foreground">
+        <h1 className="text-xl font-black tracking-tight text-foreground">
           Librería de ejercicios
         </h1>
-        <p className="text-sm text-muted-foreground">
+        <p className="text-xs text-muted-foreground">
           Crea y gestiona los ejercicios disponibles para tus planes.
         </p>
       </header>
 
-      <section className="w-full max-w-lg rounded-lg bg-card p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">
+      <section className="w-full rounded-2xl border border-border bg-card p-4">
+        <h2 className="mb-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
           Nuevo ejercicio
         </h2>
 
         {errorMessage ? (
-          <div className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs text-red-700">
+          <div className="mb-4 rounded-xl border border-destructive/20 bg-destructive/10 px-3 py-2 text-xs font-bold text-destructive">
             {errorMessage}
           </div>
         ) : null}
 
-        <form action={createExercise} className="grid gap-3 md:grid-cols-2">
-          <div className="space-y-1 md:col-span-2">
+        <form action={createExercise} className="grid gap-4 md:grid-cols-2">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <label
               htmlFor="name"
-              className="block text-xs font-medium text-foreground"
+              className="text-[10px] font-black uppercase tracking-widest text-muted-foreground"
             >
               Nombre
             </label>
@@ -172,14 +172,14 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               id="name"
               name="name"
               required
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="w-full rounded-xl border-2 border-transparent bg-muted px-4 py-3 text-sm font-medium outline-none transition focus:border-primary"
             />
           </div>
 
-          <div className="space-y-1 md:col-span-2">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <label
               htmlFor="description"
-              className="block text-xs font-medium text-foreground"
+              className="text-[10px] font-black uppercase tracking-widest text-muted-foreground"
             >
               Descripción
             </label>
@@ -187,21 +187,21 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               id="description"
               name="description"
               rows={3}
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="w-full rounded-xl border-2 border-transparent bg-muted px-4 py-3 text-sm font-medium outline-none transition focus:border-primary resize-none"
             />
           </div>
 
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1.5">
             <label
               htmlFor="body_zone"
-              className="block text-xs font-medium text-foreground"
+              className="text-[10px] font-black uppercase tracking-widest text-muted-foreground"
             >
               Zona del cuerpo
             </label>
             <select
               id="body_zone"
               name="body_zone"
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="w-full rounded-xl border-2 border-transparent bg-muted px-4 py-3 text-sm font-medium outline-none transition focus:border-primary"
             >
               <option value="">Sin especificar</option>
               {Object.entries(BODY_ZONE_LABELS).map(([value, label]) => (
@@ -212,17 +212,17 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
             </select>
           </div>
 
-          <div className="space-y-1">
+          <div className="flex flex-col gap-1.5">
             <label
               htmlFor="category"
-              className="block text-xs font-medium text-foreground"
+              className="text-[10px] font-black uppercase tracking-widest text-muted-foreground"
             >
               Categoría
             </label>
             <select
               id="category"
               name="category"
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="w-full rounded-xl border-2 border-transparent bg-muted px-4 py-3 text-sm font-medium outline-none transition focus:border-primary"
             >
               <option value="">Sin especificar</option>
               {Object.entries(EXERCISE_CATEGORY_LABELS).map(([value, label]) => (
@@ -233,10 +233,10 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
             </select>
           </div>
 
-          <div className="space-y-1 md:col-span-2">
+          <div className="flex flex-col gap-1.5 md:col-span-2">
             <label
               htmlFor="video_url"
-              className="block text-xs font-medium text-foreground"
+              className="text-[10px] font-black uppercase tracking-widest text-muted-foreground"
             >
               URL de video (opcional)
             </label>
@@ -244,14 +244,14 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
               id="video_url"
               name="video_url"
               type="url"
-              className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
+              className="w-full rounded-xl border-2 border-transparent bg-muted px-4 py-3 text-sm font-medium outline-none transition focus:border-primary"
             />
           </div>
 
           <div className="md:col-span-2">
             <button
               type="submit"
-              className="mt-2 inline-flex items-center rounded-md bg-primary px-4 py-2 text-sm font-medium text-primary-foreground transition hover:bg-primary/90"
+              className="inline-flex items-center rounded-2xl bg-primary px-5 py-3 text-sm font-black text-primary-foreground shadow-lg shadow-primary/20 transition hover:scale-[1.02] active:scale-[0.98]"
             >
               Guardar ejercicio
             </button>
@@ -259,8 +259,8 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
         </form>
       </section>
 
-      <section className="rounded-lg bg-card p-4 shadow-sm">
-        <h2 className="mb-3 text-sm font-semibold text-foreground">
+      <section className="rounded-2xl border border-border bg-card p-4">
+        <h2 className="mb-4 text-[10px] font-black uppercase tracking-widest text-muted-foreground">
           Ejercicios creados
         </h2>
 

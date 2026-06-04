@@ -35,10 +35,10 @@ export function ProfileClient({ initialData }: ProfileProps) {
   };
 
   return (
-    <div className="mx-auto max-w-2xl px-4 py-8 md:py-12">
-      <header className="mb-8 flex flex-col gap-1">
-        <h1 className="text-3xl font-black text-foreground tracking-tight">Mi Perfil</h1>
-        <p className="text-sm text-muted-foreground font-medium">Gestiona tu información personal y de contacto.</p>
+    <div className="mx-auto max-w-4xl px-4 py-6 md:px-6 md:py-8">
+      <header className="mb-6 flex flex-col gap-1">
+        <h1 className="text-xl font-black tracking-tight text-foreground">Mi Perfil</h1>
+        <p className="text-xs text-muted-foreground">Gestiona tu información personal y de contacto.</p>
       </header>
 
       {message && (
@@ -99,7 +99,7 @@ export function ProfileClient({ initialData }: ProfileProps) {
 
           <button 
             disabled={isPending}
-            className="mt-4 flex items-center justify-center gap-2 bg-foreground text-background py-5 rounded-[1.5rem] font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50"
+            className="mt-4 flex items-center justify-center gap-2 bg-foreground text-background py-5 rounded-3xl font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50"
           >
             {isPending ? (
               <>

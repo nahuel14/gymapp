@@ -1,9 +1,9 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, LayoutTemplate, Calendar, Dumbbell, Edit, Eye, Trash2, LayoutGrid, List } from "lucide-react";
+import { Plus, Calendar, Dumbbell, Edit, Trash2, LayoutTemplate, X } from "lucide-react";
 import { createTemplatePlan, duplicatePlan, deleteTemplatePlan } from "@/app/(dashboard)/coach/student/actions";
 
 type TemplatePlan = {
@@ -23,10 +23,10 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
   const router = useRouter();
   const queryClient = useQueryClient();
   const [userRole, setUserRole] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<'grid' | 'list'>('grid');
   const [localTemplates, setLocalTemplates] = useState<TemplatePlan[]>(initialTemplates);
+  const [templateToDelete, setTemplateToDelete] = useState<number | null>(null);
+  const [isPending, startTransition] = useTransition();
 
-  // Sincronizar templates del servidor con estado local
   useEffect(() => {
     if (initialTemplates) {
       setLocalTemplates(initialTemplates);
@@ -34,7 +34,6 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
   }, [initialTemplates]);
 
   useEffect(() => {
-    // Obtener el rol del usuario
     const fetchUserRole = async () => {
       try {
         const response = await fetch("/api/user");
@@ -46,7 +45,6 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
         console.error("Error fetching user role:", error);
       }
     };
-
     fetchUserRole();
   }, []);
 
@@ -54,12 +52,10 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
     try {
       const response = await fetch("/api/user");
       const { user } = await response.json();
-      
       if (!user) {
         router.push("/login");
         return;
       }
-
       const result = await createTemplatePlan("Nueva Plantilla", user.id);
       if (result.success) {
         router.push(`/coach/templates/${result.templateId}/edit`);
@@ -79,129 +75,118 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
     }
   };
 
-  const handleDeleteTemplate = async (templateId: number) => {
-    if (!confirm("¿Estás seguro de eliminar esta plantilla? Esta acción no se puede deshacer.")) {
-      return;
-    }
+  const handleConfirmDeleteTemplate = () => {
+    if (templateToDelete === null) return;
+    const idToDelete = templateToDelete;
+    setTemplateToDelete(null);
 
-    try {
-      // Actualizar estado local inmediatamente para eliminar la tarjeta (optimistic update)
-      setLocalTemplates(prev => prev.filter(t => t.id !== templateId));
-      
-      // Intentar eliminar en el servidor
-      await deleteTemplatePlan(templateId);
-      
-      // Invalidar caché de Next.js
-      router.refresh();
-      // Invalidar caché de React Query
-      queryClient.invalidateQueries({ queryKey: ["templates"] });
-    } catch (error: any) {
-      console.error("Error deleting template:", error);
-      
-      // Si falla, revertir el cambio optimista
-      setLocalTemplates(initialTemplates);
-      
-      // Mostrar mensaje de error más específico
-      if (error?.code === 'PGRST116') {
-        alert("La plantilla ya fue eliminada");
-      } else {
-        alert("Error al eliminar la plantilla");
+    startTransition(async () => {
+      setLocalTemplates(prev => prev.filter(t => t.id !== idToDelete));
+      try {
+        await deleteTemplatePlan(idToDelete);
+        router.refresh();
+        queryClient.invalidateQueries({ queryKey: ["templates"] });
+      } catch (error: any) {
+        console.error("Error deleting template:", error);
+        setLocalTemplates(initialTemplates);
       }
-    }
+    });
   };
 
   return (
-    <div className="min-h-screen bg-zinc-950 p-6">
+    <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       {/* Header */}
-      <div className="max-w-7xl mx-auto">
-        <div className="flex items-center justify-between mb-8">
-          <div className="flex items-center gap-4">
-            <div className="h-12 w-12 rounded-xl bg-yellow-400/10 flex items-center justify-center">
-              <LayoutTemplate className="h-6 w-6 text-yellow-400" />
+      <header className="flex items-center justify-between">
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-black tracking-tight text-foreground">Plantillas</h1>
+          <p className="text-xs text-muted-foreground">
+            Crea y gestiona tus planes de entrenamiento maestros
+          </p>
+        </div>
+        <button
+          onClick={handleCreateTemplate}
+          className="flex items-center gap-2 rounded-2xl bg-primary px-4 py-2.5 text-sm font-black text-primary-foreground shadow-lg shadow-primary/20 transition-all hover:scale-[1.02] active:scale-[0.98] shrink-0"
+        >
+          <Plus className="h-4 w-4 shrink-0" />
+          <span className="hidden sm:inline">Nueva Plantilla</span>
+          <span className="sm:hidden">Nueva</span>
+        </button>
+      </header>
+
+      {/* Templates Grid/List */}
+      {localTemplates.length === 0 ? (
+        <div className="flex flex-col items-center justify-center py-20 px-4 rounded-2xl border-2 border-dashed border-border">
+          <LayoutTemplate className="h-12 w-12 text-muted-foreground mb-4" />
+          <h3 className="text-base font-black text-foreground mb-1">No hay plantillas aún</h3>
+          <p className="text-xs text-muted-foreground text-center max-w-md mb-6">
+            Crea tu primera plantilla para diseñar programas de entrenamiento reutilizables
+          </p>
+          <button
+            onClick={handleCreateTemplate}
+            className="flex items-center gap-2 rounded-2xl border-2 border-border px-4 py-2.5 text-sm font-black text-muted-foreground transition-all hover:border-primary hover:text-primary"
+          >
+            <Plus className="h-4 w-4" />
+            Crear Primera Plantilla
+          </button>
+        </div>
+      ) : (
+        <div className="flex flex-col gap-3">
+          {localTemplates.map((template) => (
+            <TemplateCard
+              key={template.id}
+              template={template}
+              onDuplicate={() => handleDuplicateTemplate(template.id)}
+              onEdit={() => router.push(`/coach/templates/${template.id}/edit`)}
+              onPreview={() => router.push(`/coach/templates/${template.id}`)}
+              onDelete={() => setTemplateToDelete(template.id)}
+              userRole={userRole}
+            />
+          ))}
+        </div>
+      )}
+
+      {/* MODAL ELIMINAR PLANTILLA */}
+      {templateToDelete !== null && (
+        <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+          <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center">
+                  <Trash2 className="h-5 w-5 text-red-400" />
+                </div>
+                <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Eliminar Plantilla</h4>
+              </div>
+              <button
+                onClick={() => setTemplateToDelete(null)}
+                className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
             </div>
-            <div>
-              <h1 className="text-3xl font-black text-zinc-100 uppercase tracking-tighter">
-                Librería de Plantillas
-              </h1>
-              <p className="text-zinc-500 text-sm font-medium">
-                Crea y gestiona tus planes de entrenamiento maestros
+            <div className="px-6 pb-2">
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                ¿Estás seguro de eliminar esta plantilla? Esta acción no se puede deshacer.
               </p>
             </div>
-          </div>
-          
-          <div className="flex items-center gap-3">
-            {/* Toggle Vista Grilla/Lista */}
-            <div className="flex items-center gap-1 rounded-lg bg-zinc-900 border border-zinc-800 p-1">
+            <div className="px-6 pt-4 pb-8 sm:pb-6 flex gap-3">
               <button
-                onClick={() => setViewMode('grid')}
-                className={`p-2 rounded-md transition-all ${
-                  viewMode === 'grid'
-                    ? 'bg-yellow-400 text-black'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-                title="Vista en grilla"
+                onClick={() => setTemplateToDelete(null)}
+                disabled={isPending}
+                className="flex-1 h-14 rounded-2xl border border-zinc-700 bg-zinc-900 text-sm font-black uppercase tracking-widest text-zinc-300 transition-all hover:bg-zinc-800 active:scale-95 disabled:opacity-50"
               >
-                <LayoutGrid className="h-4 w-4" />
+                Cancelar
               </button>
               <button
-                onClick={() => setViewMode('list')}
-                className={`p-2 rounded-md transition-all ${
-                  viewMode === 'list'
-                    ? 'bg-yellow-400 text-black'
-                    : 'text-zinc-500 hover:text-zinc-300'
-                }`}
-                title="Vista en lista"
+                onClick={handleConfirmDeleteTemplate}
+                disabled={isPending}
+                className="flex-1 h-14 rounded-2xl bg-red-500 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-red-500/20 transition-all hover:bg-red-400 active:scale-95 disabled:opacity-50"
               >
-                <List className="h-4 w-4" />
+                {isPending ? "Eliminando..." : "Eliminar"}
               </button>
             </div>
-            
-            <button
-              onClick={handleCreateTemplate}
-              className="flex items-center gap-2 rounded-xl bg-yellow-400 px-6 py-3 text-sm font-black text-black transition-all hover:scale-105 active:scale-95"
-            >
-              <Plus className="h-4 w-4" />
-              Nueva Plantilla
-            </button>
           </div>
         </div>
-
-        {/* Templates Grid/List */}
-        {localTemplates.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-24 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
-            <LayoutTemplate className="h-16 w-16 text-zinc-700 mb-4" />
-            <h3 className="text-xl font-bold text-zinc-300 mb-2">No hay plantillas aún</h3>
-            <p className="text-zinc-500 text-center max-w-md mb-6">
-              Crea tu primera plantilla para empezar a diseñar programas de entrenamiento reutilizables
-            </p>
-            <button
-              onClick={handleCreateTemplate}
-              className="flex items-center gap-2 rounded-xl border-2 border-zinc-700 px-6 py-3 text-sm font-black text-zinc-300 transition-all hover:border-yellow-400 hover:text-yellow-400"
-            >
-              <Plus className="h-4 w-4" />
-              Crear Primera Plantilla
-            </button>
-          </div>
-        ) : (
-          <div className={viewMode === 'grid' 
-            ? "grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6" 
-            : "flex flex-col gap-4"
-          }>
-            {localTemplates.map((template) => (
-              <TemplateCard
-                key={template.id}
-                template={template}
-                onDuplicate={() => handleDuplicateTemplate(template.id)}
-                onEdit={() => router.push(`/coach/templates/${template.id}/edit`)}
-                onPreview={() => router.push(`/coach/templates/${template.id}`)}
-                onDelete={() => handleDeleteTemplate(template.id)}
-                userRole={userRole}
-                viewMode={viewMode}
-              />
-            ))}
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 }
@@ -213,7 +198,6 @@ function TemplateCard({
   onPreview,
   onDelete,
   userRole,
-  viewMode
 }: {
   template: TemplatePlan;
   onDuplicate: () => void;
@@ -221,124 +205,44 @@ function TemplateCard({
   onPreview: () => void;
   onDelete: () => void;
   userRole: string | null;
-  viewMode: 'grid' | 'list';
 }) {
   const canEdit = userRole === "COACH" || userRole === "ADMIN";
 
-  if (viewMode === 'list') {
-    return (
-      <div className="group relative bg-zinc-900 border-2 border-zinc-800 rounded-2xl p-4 transition-all hover:border-yellow-400/50 hover:shadow-lg hover:shadow-yellow-400/5">
-        <div className="flex items-center gap-6">
-          {/* Info Section */}
-          <div className="flex-1">
-            <h3 className="text-lg font-bold text-zinc-100 mb-1">
-              {template.name}
-            </h3>
-            <p className="text-xs text-zinc-500 mb-3">
-              Creada: {new Date(template.created_at).toLocaleDateString('es-AR')}
-            </p>
-            
-            {/* Stats */}
-            <div className="flex items-center gap-4 text-zinc-400">
-              <div className="flex items-center gap-1.5">
-                <Calendar className="h-4 w-4" />
-                <span className="text-xs font-medium">{template.session_count || 0} sesiones</span>
-              </div>
-              <div className="flex items-center gap-1.5">
-                <Dumbbell className="h-4 w-4" />
-                <span className="text-xs font-medium">{template.exercise_count || 0} ejercicios</span>
-              </div>
-            </div>
-          </div>
-
-          {/* Actions */}
-          <div className="flex gap-2">
-            <button
-              onClick={onPreview}
-              className="flex items-center justify-center gap-1.5 rounded-lg bg-zinc-800 border border-zinc-700 px-4 py-2 text-xs font-black text-zinc-300 transition-all hover:bg-zinc-700 hover:border-zinc-600"
-            >
-              <Eye className="h-3.5 w-3.5" />
-              Vista
-            </button>
-            
-            {canEdit && (
-              <button
-                onClick={onEdit}
-                className="flex items-center justify-center gap-1.5 rounded-lg bg-zinc-800 border border-zinc-700 px-4 py-2 text-xs font-black text-zinc-300 transition-all hover:bg-zinc-700 hover:border-zinc-600"
-              >
-                <Edit className="h-3.5 w-3.5" />
-                Editar
-              </button>
-            )}
-            
-            {canEdit && (
-              <button
-                onClick={onDelete}
-                className="flex items-center justify-center gap-1.5 rounded-lg bg-red-500/10 border border-red-500/20 px-4 py-2 text-xs font-black text-red-400 transition-all hover:bg-red-500/20 hover:border-red-400"
-              >
-                <Trash2 className="h-3.5 w-3.5" />
-              </button>
-            )}
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
-    <div className="group relative bg-zinc-900 border-2 border-zinc-800 rounded-2xl p-6 transition-all hover:border-yellow-400/50 hover:shadow-lg hover:shadow-yellow-400/5">
-      
-      {/* Header */}
-      <div className="mb-4">
-        <h3 className="text-lg font-bold text-zinc-100 mb-1 line-clamp-2">
-          {template.name}
-        </h3>
-        <p className="text-xs text-zinc-500">
-          Creada: {new Date(template.created_at).toLocaleDateString('es-AR')}
-        </p>
-      </div>
-
-      {/* Stats */}
-      <div className="flex items-center gap-4 mb-6 text-zinc-400">
-        <div className="flex items-center gap-1.5">
-          <Calendar className="h-4 w-4" />
-          <span className="text-xs font-medium">{template.session_count || 0} sesiones</span>
-        </div>
-        <div className="flex items-center gap-1.5">
-          <Dumbbell className="h-4 w-4" />
-          <span className="text-xs font-medium">{template.exercise_count || 0} ejercicios</span>
+    <div
+      onClick={onPreview}
+      className="group flex items-center justify-between rounded-2xl border border-border bg-card p-3 shadow-sm hover:border-primary/40 active:scale-[0.99] transition-all cursor-pointer"
+    >
+      <div className="flex flex-1 flex-col min-w-0 justify-center">
+        <p className="text-sm font-black text-foreground truncate">{template.name}</p>
+        <div className="flex items-center gap-3 mt-0.5 text-muted-foreground">
+          <span className="flex items-center gap-1 text-xs">
+            <Calendar className="h-3 w-3" />
+            {template.session_count || 0} sesiones
+          </span>
+          <span className="flex items-center gap-1 text-xs">
+            <Dumbbell className="h-3 w-3" />
+            {template.exercise_count || 0} ejercicios
+          </span>
         </div>
       </div>
 
-      {/* Actions */}
-      <div className="flex gap-2">
-        <button
-          onClick={onPreview}
-          className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-2 text-xs font-black text-zinc-300 transition-all hover:bg-zinc-700 hover:border-zinc-600"
-        >
-          <Eye className="h-3.5 w-3.5" />
-          Vista
-        </button>
-        
-        {canEdit && (
+      {canEdit && (
+        <div className="flex items-center gap-1 shrink-0 pl-2" onClick={e => e.stopPropagation()}>
           <button
             onClick={onEdit}
-            className="flex-1 flex items-center justify-center gap-1.5 rounded-lg bg-zinc-800 border border-zinc-700 px-3 py-2 text-xs font-black text-zinc-300 transition-all hover:bg-zinc-700 hover:border-zinc-600"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
           >
-            <Edit className="h-3.5 w-3.5" />
-            Editar
+            <Edit className="h-4 w-4" />
           </button>
-        )}
-        
-        {canEdit && (
           <button
             onClick={onDelete}
-            className="flex items-center justify-center gap-1.5 rounded-lg bg-red-500/10 border border-red-500/20 px-3 py-2 text-xs font-black text-red-400 transition-all hover:bg-red-500/20 hover:border-red-400"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
           >
-            <Trash2 className="h-3.5 w-3.5" />
+            <Trash2 className="h-4 w-4" />
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

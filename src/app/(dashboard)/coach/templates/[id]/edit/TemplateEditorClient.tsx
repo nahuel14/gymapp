@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Plus, Trash2, Dumbbell, AlertTriangle } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Dumbbell, AlertTriangle, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { useTemplate } from "@/hooks/useTemplates";
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "@/app/(dashboard)/coach/student/ExerciseExcelGrid";
@@ -11,9 +11,11 @@ import { useQueryClient } from "@tanstack/react-query";
 import {
   updateTemplatePlan,
   addDayToAllWeeks,
-  removeDayFromAllWeeks,
   addWeekToTemplate,
   removeWeekFromTemplate,
+  removeSelectedDayFromTemplate,
+  swapWeeksInTemplate,
+  swapDaysInTemplate,
   addExerciseToSession,
 } from "@/app/(dashboard)/coach/student/actions";
 
@@ -41,34 +43,50 @@ export function TemplateEditorClient({ templateId }: Props) {
   const [isExModalOpen, setIsExModalOpen] = useState(false);
   const [exForm, setExForm] = useState(DEFAULT_FORM);
   const [isPending, startTransition] = useTransition();
-  const [isConfirmRemoveDay, setIsConfirmRemoveDay] = useState(false);
-  const [isConfirmRemoveWeek, setIsConfirmRemoveWeek] = useState(false);
+  const [confirmRemoveDay, setConfirmRemoveDay] = useState(false);
+  const [confirmRemoveWeek, setConfirmRemoveWeek] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
 
-  // Sync name from data on first load
   const displayName = templateName ?? template?.name ?? "";
 
   const sessions: any[] = useMemo(() => template?.sessions ?? [], [template?.sessions]);
 
-  // Derived: sorted unique week numbers
   const weekNumbers = useMemo(
     () => [...new Set(sessions.map((s: any) => s.week_number as number))].sort((a, b) => a - b),
     [sessions]
   );
 
-  // Derived: sorted unique day names for the selected week
-  const dayNames = useMemo(() => {
-    const inWeek = sessions.filter((s: any) => s.week_number === selectedWeek);
-    const names = [...new Set(inWeek.map((s: any) => s.day_name as string))];
-    names.sort((a, b) => {
-      const numA = parseInt(a.replace(/\D/g, ""), 10) || 0;
-      const numB = parseInt(b.replace(/\D/g, ""), 10) || 0;
-      return numA - numB;
-    });
-    return names;
+  // Sessions for the selected week, sorted by day_name number then by id for stability
+  const weekSessions = useMemo(() => {
+    return sessions
+      .filter((s: any) => s.week_number === selectedWeek)
+      .sort((a: any, b: any) => {
+        const numA = parseInt(String(a.day_name).replace(/\D/g, ""), 10) || 0;
+        const numB = parseInt(String(b.day_name).replace(/\D/g, ""), 10) || 0;
+        return numA - numB || a.id - b.id;
+      });
   }, [sessions, selectedWeek]);
 
-  // Detect non-uniform legacy templates
+  // Tab labels: append index when day_name is duplicated within the week
+  const dayTabLabels = useMemo(() => {
+    const nameCount: Record<string, number> = {};
+    for (const s of weekSessions) nameCount[s.day_name] = (nameCount[s.day_name] || 0) + 1;
+    const nameIdx: Record<string, number> = {};
+    return weekSessions.map((s: any) => {
+      if (nameCount[s.day_name] > 1) {
+        nameIdx[s.day_name] = (nameIdx[s.day_name] || 0) + 1;
+        return `${s.day_name} ${nameIdx[s.day_name]}`;
+      }
+      return s.day_name as string;
+    });
+  }, [weekSessions]);
+
+  // Keep a deduplicated list only for the non-uniform check (structural, not visual)
+  const dayNames = useMemo(() => {
+    const names = [...new Set(weekSessions.map((s: any) => s.day_name as string))];
+    return names;
+  }, [weekSessions]);
+
   const isUniform = useMemo(() => {
     if (weekNumbers.length <= 1) return true;
     const weekMap = new Map<number, Set<string>>();
@@ -85,11 +103,9 @@ export function TemplateEditorClient({ templateId }: Props) {
     });
   }, [sessions, weekNumbers]);
 
-  // Active session for selected week × day
-  const selectedDayName = dayNames[selectedDay - 1] ?? `Día ${selectedDay}`;
-  const activeSession = sessions.find(
-    (s: any) => s.week_number === selectedWeek && s.day_name === selectedDayName
-  );
+  // Select session by index (not by name) to support duplicate day names
+  const activeSession = weekSessions[selectedDay - 1] ?? null;
+  const selectedDayName = activeSession?.day_name ?? `Día ${selectedDay}`;
 
   const invalidateTemplate = () => {
     queryClient.invalidateQueries({ queryKey: ["template", templateId] });
@@ -106,7 +122,7 @@ export function TemplateEditorClient({ templateId }: Props) {
     startTransition(async () => {
       await updateTemplatePlan(templateId, displayName);
       invalidateTemplate();
-      showStatus("Plantilla guardada");
+      showStatus("Guardado");
     });
   };
 
@@ -114,19 +130,33 @@ export function TemplateEditorClient({ templateId }: Props) {
     startTransition(async () => {
       await addDayToAllWeeks(templateId);
       invalidateTemplate();
-      // Select the new day
-      setSelectedDay(dayNames.length + 1);
+      setSelectedDay(weekSessions.length + 1);
     });
   };
 
-  const handleRemoveDay = () => {
-    if (dayNames.length <= 1) return;
+  const handleConfirmRemoveDay = () => {
+    if (weekSessions.length <= 1) return;
+    const dayIndex = selectedDay - 1;
+
+    // Collect the session ID at position `dayIndex` for every week
+    const idsToDelete: number[] = [];
+    for (const wk of weekNumbers) {
+      const wkSessions = sessions
+        .filter((s: any) => s.week_number === wk)
+        .sort((a: any, b: any) => {
+          const numA = parseInt(String(a.day_name).replace(/\D/g, ""), 10) || 0;
+          const numB = parseInt(String(b.day_name).replace(/\D/g, ""), 10) || 0;
+          return numA - numB || a.id - b.id;
+        });
+      if (wkSessions[dayIndex]) idsToDelete.push(wkSessions[dayIndex].id);
+    }
+
     startTransition(async () => {
-      const result = await removeDayFromAllWeeks(templateId);
+      const result = await removeSelectedDayFromTemplate(templateId, idsToDelete);
       if (result.success === false) return;
       invalidateTemplate();
-      setSelectedDay((prev) => Math.min(prev, dayNames.length - 1));
-      setIsConfirmRemoveDay(false);
+      setSelectedDay((prev) => Math.min(prev, weekSessions.length - 1));
+      setConfirmRemoveDay(false);
     });
   };
 
@@ -139,17 +169,39 @@ export function TemplateEditorClient({ templateId }: Props) {
     });
   };
 
-  const handleRemoveWeek = () => {
+  const handleSwapWeek = (direction: 'left' | 'right') => {
+    const idx = weekNumbers.indexOf(selectedWeek);
+    const swapIdx = direction === 'left' ? idx - 1 : idx + 1;
+    if (swapIdx < 0 || swapIdx >= weekNumbers.length) return;
+    const weekB = weekNumbers[swapIdx];
+    startTransition(async () => {
+      await swapWeeksInTemplate(templateId, selectedWeek, weekB);
+      invalidateTemplate();
+      setSelectedWeek(weekB);
+    });
+  };
+
+  const handleSwapDay = (direction: 'left' | 'right') => {
+    const dayIdx = selectedDay - 1;
+    const swapIdx = direction === 'left' ? dayIdx - 1 : dayIdx + 1;
+    if (swapIdx < 0 || swapIdx >= weekSessions.length) return;
+    startTransition(async () => {
+      await swapDaysInTemplate(templateId, dayIdx, swapIdx);
+      invalidateTemplate();
+      setSelectedDay(swapIdx + 1);
+    });
+  };
+
+  const handleConfirmRemoveWeek = () => {
     if (weekNumbers.length <= 1) return;
     startTransition(async () => {
       const result = await removeWeekFromTemplate(templateId, selectedWeek);
       if (result.success === false) return;
       invalidateTemplate();
-      // Move to previous week or first available
       const remaining = weekNumbers.filter((wk) => wk !== selectedWeek);
       setSelectedWeek(remaining[remaining.length - 1] ?? remaining[0]);
       setSelectedDay(1);
-      setIsConfirmRemoveWeek(false);
+      setConfirmRemoveWeek(false);
     });
   };
 
@@ -193,44 +245,41 @@ export function TemplateEditorClient({ templateId }: Props) {
   const noDaySelected = !activeSession;
 
   return (
-    <div className="min-h-screen bg-zinc-950 px-4 py-6 md:px-6">
-      {/* Header */}
-      <div className="mb-6 flex flex-col gap-4">
-        <button
-          onClick={() => router.push("/coach/templates")}
-          className="flex w-fit items-center gap-2 text-sm text-zinc-400 transition hover:text-zinc-100"
-        >
-          <ArrowLeft className="h-4 w-4" />
-          Volver
-        </button>
+    <div className="min-h-screen bg-zinc-950 px-4 py-4 md:px-6 md:py-6">
 
-        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex-1">
-            <input
-              type="text"
-              value={displayName}
-              onChange={(e) => setTemplateName(e.target.value)}
-              placeholder="Nombre de la plantilla"
-              className="w-full bg-transparent text-2xl font-black uppercase tracking-tight text-zinc-100 outline-none placeholder:text-zinc-700 focus:ring-0"
-            />
-            <p className="text-xs text-zinc-500">
-              Plantilla • {weekNumbers.length} {weekNumbers.length === 1 ? "semana" : "semanas"} •{" "}
-              {dayNames.length} {dayNames.length === 1 ? "día" : "días"} por semana
-            </p>
-          </div>
-          <div className="flex items-center gap-2">
-            {statusMsg && (
-              <span className="text-xs font-bold text-yellow-400">{statusMsg}</span>
-            )}
-            <button
-              onClick={handleSaveName}
-              disabled={isPending}
-              className="flex items-center gap-2 rounded-xl bg-yellow-400 px-5 py-2.5 text-sm font-black text-black transition hover:scale-105 active:scale-95 disabled:opacity-50"
-            >
-              <Save className="h-4 w-4" />
-              {isPending ? "Guardando..." : "Guardar Plantilla"}
-            </button>
-          </div>
+      {/* Header */}
+      <div className="mb-6 flex flex-col gap-3">
+        {/* Fila: Volver + indicador de guardado */}
+        <div className="flex items-center justify-between">
+          <button
+            onClick={() => router.push(`/coach/templates/${templateId}`)}
+            className="flex items-center gap-2 text-sm text-zinc-400 transition hover:text-zinc-100"
+          >
+            <ArrowLeft className="h-4 w-4" />
+            Volver
+          </button>
+
+          {statusMsg && (
+            <span className="text-xs font-bold text-yellow-400 flex items-center gap-1">
+              <Save className="h-3 w-3" /> {statusMsg}
+            </span>
+          )}
+        </div>
+
+        {/* Título editable — se guarda automáticamente al perder el foco */}
+        <div>
+          <input
+            type="text"
+            value={displayName}
+            onChange={(e) => setTemplateName(e.target.value)}
+            onBlur={handleSaveName}
+            placeholder="Nombre de la plantilla"
+            className="w-full bg-transparent text-lg font-black uppercase tracking-tight text-zinc-100 outline-none placeholder:text-zinc-700 focus:ring-0 md:text-2xl"
+          />
+          <p className="mt-0.5 text-xs text-zinc-500">
+            Plantilla • {weekNumbers.length} {weekNumbers.length === 1 ? "semana" : "semanas"} •{" "}
+            {weekSessions.length} {weekSessions.length === 1 ? "día" : "días"} por semana
+          </p>
         </div>
       </div>
 
@@ -245,139 +294,153 @@ export function TemplateEditorClient({ templateId }: Props) {
         </div>
       )}
 
-      {/* Week tabs */}
-      <div className="mb-1 flex items-center gap-1 overflow-x-auto pb-1">
-        {weekNumbers.map((wk, i) => (
+      {/* ── Sección Semanas ── */}
+      <div className="mb-4">
+        <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Semanas</p>
+
+        {/* Tabs de semanas */}
+        <div className="flex items-center gap-1 overflow-x-auto pb-1">
+          {weekNumbers.map((wk, i) => {
+            const isActive = selectedWeek === wk;
+            return (
+              <div key={wk} className="flex shrink-0 items-center gap-0.5">
+                {isActive && i > 0 && (
+                  <button
+                    onClick={() => handleSwapWeek('left')}
+                    disabled={isPending}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition disabled:opacity-40"
+                  >
+                    <ChevronLeft className="h-3.5 w-3.5" />
+                  </button>
+                )}
+                <button
+                  onClick={() => { setSelectedWeek(wk); setSelectedDay(1); }}
+                  className={`rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
+                    isActive
+                      ? "bg-yellow-400 text-black"
+                      : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                  }`}
+                >
+                  Sem {i + 1}
+                </button>
+                {isActive && i < weekNumbers.length - 1 && (
+                  <button
+                    onClick={() => handleSwapWeek('right')}
+                    disabled={isPending}
+                    className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition disabled:opacity-40"
+                  >
+                    <ChevronRight className="h-3.5 w-3.5" />
+                  </button>
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        {/* Acciones de semana */}
+        <div className="mt-1.5 flex items-center gap-1.5">
           <button
-            key={wk}
-            onClick={() => { setSelectedWeek(wk); setSelectedDay(1); }}
-            className={`shrink-0 rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
-              selectedWeek === wk
-                ? "bg-yellow-400 text-black"
-                : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
-            }`}
-          >
-            Semana {i + 1}
-          </button>
-        ))}
-        <button
-          onClick={handleAddWeek}
-          disabled={isPending}
-          className="shrink-0 flex items-center gap-1 rounded-xl border border-dashed border-zinc-700 px-3 py-2 text-xs font-black text-zinc-500 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-40"
-        >
-          <Plus className="h-3 w-3" />
-          Semana
-        </button>
-        {weekNumbers.length > 1 && !isConfirmRemoveWeek && (
-          <button
-            onClick={() => setIsConfirmRemoveWeek(true)}
+            onClick={handleAddWeek}
             disabled={isPending}
-            className="shrink-0 flex items-center gap-1 rounded-xl border border-dashed border-zinc-700 px-3 py-2 text-xs font-black text-zinc-500 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
+            className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-40"
           >
-            <Trash2 className="h-3 w-3" />
-            Eliminar Semana
+            <Plus className="h-3 w-3" />
+            Agregar
           </button>
-        )}
-        {isConfirmRemoveWeek && (
-          <div className="flex shrink-0 items-center gap-1">
-            <span className="text-xs text-red-400">
-              ¿Eliminar Semana {weekNumbers.indexOf(selectedWeek) + 1} y todos sus ejercicios?
-            </span>
+          {weekNumbers.length > 1 && (
             <button
-              onClick={handleRemoveWeek}
+              onClick={() => setConfirmRemoveWeek(true)}
               disabled={isPending}
-              className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-black text-white transition hover:bg-red-600 disabled:opacity-50"
+              className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
             >
-              Sí
+              <Trash2 className="h-3 w-3" />
+              Eliminar
             </button>
-            <button
-              onClick={() => setIsConfirmRemoveWeek(false)}
-              className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-black text-zinc-400 transition hover:bg-zinc-800"
-            >
-              No
-            </button>
-          </div>
-        )}
+          )}
+        </div>
       </div>
 
-      {/* Day tabs */}
-      <div className="mb-4 flex items-center gap-1 overflow-x-auto pb-1">
-        {noSessions ? (
-          <p className="text-xs text-zinc-600">Agregá una semana para empezar</p>
-        ) : (
-          <>
-            {dayNames.map((name, i) => (
-              <button
-                key={name}
-                onClick={() => setSelectedDay(i + 1)}
-                className={`shrink-0 rounded-lg px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
-                  selectedDay === i + 1
-                    ? "bg-zinc-100 text-zinc-900"
-                    : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
-                }`}
-              >
-                {name}
-              </button>
-            ))}
+      {/* ── Sección Días ── */}
+      {!noSessions && (
+        <div className="mb-4">
+          <p className="mb-2 text-[10px] font-black uppercase tracking-widest text-zinc-500">Días</p>
+
+          {/* Tabs de días */}
+          <div className="flex items-center gap-1 overflow-x-auto pb-1">
+            {dayTabLabels.map((label, i) => {
+              const isActive = selectedDay === i + 1;
+              return (
+                <div key={weekSessions[i]?.id ?? i} className="flex shrink-0 items-center gap-0.5">
+                  {isActive && i > 0 && (
+                    <button
+                      onClick={() => handleSwapDay('left')}
+                      disabled={isPending}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition disabled:opacity-40"
+                    >
+                      <ChevronLeft className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                  <button
+                    onClick={() => setSelectedDay(i + 1)}
+                    className={`rounded-lg px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
+                      isActive
+                        ? "bg-zinc-100 text-zinc-900"
+                        : "border border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600 hover:text-zinc-200"
+                    }`}
+                  >
+                    {label}
+                  </button>
+                  {isActive && i < dayTabLabels.length - 1 && (
+                    <button
+                      onClick={() => handleSwapDay('right')}
+                      disabled={isPending}
+                      className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition disabled:opacity-40"
+                    >
+                      <ChevronRight className="h-3.5 w-3.5" />
+                    </button>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+
+          {/* Acciones de día */}
+          <div className="mt-1.5 flex items-center gap-1.5">
             <button
               onClick={handleAddDay}
               disabled={isPending}
-              className="shrink-0 flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-xs font-black text-zinc-500 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-40"
+              className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-40"
             >
               <Plus className="h-3 w-3" />
-              Día
+              Agregar
             </button>
-            {dayNames.length > 1 && !isConfirmRemoveDay && (
+            {weekSessions.length > 1 && (
               <button
-                onClick={() => setIsConfirmRemoveDay(true)}
+                onClick={() => setConfirmRemoveDay(true)}
                 disabled={isPending}
-                className="shrink-0 flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-3 py-2 text-xs font-black text-zinc-500 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
+                className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
               >
                 <Trash2 className="h-3 w-3" />
-                Eliminar Día
+                Eliminar
               </button>
             )}
-            {isConfirmRemoveDay && (
-              <div className="flex shrink-0 items-center gap-1">
-                <span className="text-xs text-red-400">¿Eliminar &quot;{dayNames[dayNames.length - 1]}&quot; de todas las semanas?</span>
-                <button
-                  onClick={handleRemoveDay}
-                  disabled={isPending}
-                  className="rounded-lg bg-red-500 px-3 py-1.5 text-xs font-black text-white transition hover:bg-red-600 disabled:opacity-50"
-                >
-                  Sí
-                </button>
-                <button
-                  onClick={() => setIsConfirmRemoveDay(false)}
-                  className="rounded-lg border border-zinc-700 px-3 py-1.5 text-xs font-black text-zinc-400 transition hover:bg-zinc-800"
-                >
-                  No
-                </button>
-              </div>
-            )}
-          </>
-        )}
-      </div>
+          </div>
+        </div>
+      )}
 
-      {/* Exercise area */}
+      {/* ── Área de ejercicios ── */}
       {noSessions ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-800 py-24 text-center">
           <Dumbbell className="mb-4 h-12 w-12 text-zinc-800" />
-          <p className="text-sm font-black uppercase tracking-widest text-zinc-600">
-            Sin semanas
-          </p>
-          <p className="mt-1 text-xs text-zinc-700">
-            Agrega una semana para empezar a construir tu plantilla
-          </p>
+          <p className="text-sm font-black uppercase tracking-widest text-zinc-600">Sin semanas</p>
+          <p className="mt-1 text-xs text-zinc-700">Agrega una semana para empezar</p>
         </div>
       ) : noDaySelected ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-800 py-24 text-center">
           <Dumbbell className="mb-4 h-12 w-12 text-zinc-800" />
-          <p className="text-sm font-black uppercase tracking-widest text-zinc-600">
-            Sin sesión
-          </p>
+          <p className="text-sm font-black uppercase tracking-widest text-zinc-600">Sin sesión</p>
           <p className="mt-1 text-xs text-zinc-700">
-            Esta semana no tiene un día &quot;{selectedDayName}&quot;. La estructura es no uniforme.
+            Esta semana no tiene un día &quot;{selectedDayName}&quot;.
           </p>
         </div>
       ) : (
@@ -396,7 +459,8 @@ export function TemplateEditorClient({ templateId }: Props) {
               className="flex items-center gap-1.5 rounded-xl bg-yellow-400 px-4 py-2 text-xs font-black text-black transition hover:scale-105 active:scale-95"
             >
               <Plus className="h-3.5 w-3.5" />
-              Agregar ejercicio
+              <span className="hidden sm:inline">Agregar ejercicio</span>
+              <span className="sm:hidden">Agregar</span>
             </button>
           </div>
 
@@ -420,14 +484,98 @@ export function TemplateEditorClient({ templateId }: Props) {
           ) : (
             <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-800 py-16 text-center">
               <Dumbbell className="mb-3 h-10 w-10 text-zinc-800" />
-              <p className="text-xs font-black uppercase tracking-widest text-zinc-600">
-                Sin ejercicios
-              </p>
-              <p className="mt-1 text-xs text-zinc-700">
-                Usá el botón &quot;Agregar ejercicio&quot; para empezar
-              </p>
+              <p className="text-xs font-black uppercase tracking-widest text-zinc-600">Sin ejercicios</p>
+              <p className="mt-1 text-xs text-zinc-700">Usá el botón &quot;Agregar&quot; para empezar</p>
             </div>
           )}
+        </div>
+      )}
+
+      {/* MODAL ELIMINAR SEMANA */}
+      {confirmRemoveWeek && (
+        <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+          <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center">
+                  <Trash2 className="h-5 w-5 text-red-400" />
+                </div>
+                <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">
+                  Eliminar Semana {weekNumbers.indexOf(selectedWeek) + 1}
+                </h4>
+              </div>
+              <button
+                onClick={() => setConfirmRemoveWeek(false)}
+                className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 pb-2">
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                ¿Eliminar esta semana y todos sus ejercicios? Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div className="px-6 pt-4 pb-8 sm:pb-6 flex gap-3">
+              <button
+                onClick={() => setConfirmRemoveWeek(false)}
+                disabled={isPending}
+                className="flex-1 h-14 rounded-2xl border border-zinc-700 bg-zinc-900 text-sm font-black uppercase tracking-widest text-zinc-300 transition-all hover:bg-zinc-800 active:scale-95 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmRemoveWeek}
+                disabled={isPending}
+                className="flex-1 h-14 rounded-2xl bg-red-500 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-red-500/20 transition-all hover:bg-red-400 active:scale-95 disabled:opacity-50"
+              >
+                {isPending ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL ELIMINAR DÍA */}
+      {confirmRemoveDay && (
+        <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+          <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center">
+                  <Trash2 className="h-5 w-5 text-red-400" />
+                </div>
+                <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Eliminar Día</h4>
+              </div>
+              <button
+                onClick={() => setConfirmRemoveDay(false)}
+                className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+            <div className="px-6 pb-2">
+              <p className="text-sm text-zinc-400 leading-relaxed">
+                ¿Eliminar &quot;{dayTabLabels[selectedDay - 1] ?? selectedDayName}&quot; de todas las semanas? Esta acción no se puede deshacer.
+              </p>
+            </div>
+            <div className="px-6 pt-4 pb-8 sm:pb-6 flex gap-3">
+              <button
+                onClick={() => setConfirmRemoveDay(false)}
+                disabled={isPending}
+                className="flex-1 h-14 rounded-2xl border border-zinc-700 bg-zinc-900 text-sm font-black uppercase tracking-widest text-zinc-300 transition-all hover:bg-zinc-800 active:scale-95 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmRemoveDay}
+                disabled={isPending}
+                className="flex-1 h-14 rounded-2xl bg-red-500 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-red-500/20 transition-all hover:bg-red-400 active:scale-95 disabled:opacity-50"
+              >
+                {isPending ? "Eliminando..." : "Eliminar"}
+              </button>
+            </div>
+          </div>
         </div>
       )}
     </div>

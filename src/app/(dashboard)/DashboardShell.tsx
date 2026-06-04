@@ -136,7 +136,7 @@ function getBottomNavItems(role: UserRole): BottomNavItem[] {
   const coachAdminItems = [
     {
       href: "/coach",
-      label: "Alumnos",
+      label: "Estudiantes",
       icon: <Users className="h-5 w-5" />,
     },
     {

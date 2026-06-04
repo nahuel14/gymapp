@@ -1623,10 +1623,18 @@ function removeWeekFromTemplateLocal(
   sessions: TemplateSession[],
   weekNumber: number
 ): { sessions: TemplateSession[]; success: boolean; reason?: string } {
-  const weekNumbers = [...new Set(sessions.map((s) => s.week_number))];
+  const weekNumbers = [...new Set(sessions.map((s) => s.week_number))].sort((a, b) => a - b);
   if (weekNumbers.length <= 1) return { sessions, success: false, reason: 'min_weeks' };
   const filtered = sessions.filter((s) => s.week_number !== weekNumber);
-  return { sessions: filtered, success: true };
+
+  // Renumerar semanas restantes para que sean consecutivas (1, 2, 3, ...)
+  const remaining = weekNumbers.filter((wk) => wk !== weekNumber).sort((a, b) => a - b);
+  const renumbered = filtered.map((s) => {
+    const newWeek = remaining.indexOf(s.week_number) + 1;
+    return newWeek > 0 ? { ...s, week_number: newWeek } : s;
+  });
+
+  return { sessions: renumbered, success: true };
 }
 
 function buildInitialTemplate(weeks: number, daysPerWeek: number): TemplateSession[] {
@@ -1971,24 +1979,27 @@ describe('Plantillas', () => {
   describe('ESCENARIO 23: removeWeekFromTemplate', () => {
     it('elimina la semana indicada y sus sesiones', () => {
       const initial = buildInitialTemplate(3, 2);
+      const deletedIds = initial.filter((s) => s.week_number === 2).map((s) => s.id);
       const { sessions, success } = removeWeekFromTemplateLocal(initial, 2);
       expect(success).toBe(true);
-      expect(sessions.every((s) => s.week_number !== 2)).toBe(true);
+      expect(sessions.every((s) => !deletedIds.includes(s.id))).toBe(true);
     });
 
-    it('las sesiones de las otras semanas permanecen intactas', () => {
+    it('las sesiones de las otras semanas permanecen intactas (mismos IDs)', () => {
       const initial = buildInitialTemplate(3, 3);
-      const week1Before = initial.filter((s) => s.week_number === 1).map((s) => s.id);
-      const week3Before = initial.filter((s) => s.week_number === 3).map((s) => s.id);
+      const week1Ids = initial.filter((s) => s.week_number === 1).map((s) => s.id);
+      const week3Ids = initial.filter((s) => s.week_number === 3).map((s) => s.id);
       const { sessions } = removeWeekFromTemplateLocal(initial, 2);
-      expect(sessions.filter((s) => s.week_number === 1).map((s) => s.id)).toEqual(week1Before);
-      expect(sessions.filter((s) => s.week_number === 3).map((s) => s.id)).toEqual(week3Before);
+      // Los IDs de semana 1 permanecen (semana 1 no cambia)
+      expect(sessions.map((s) => s.id)).toEqual(expect.arrayContaining(week1Ids));
+      // Los IDs de semana 3 permanecen (renumerados a semana 2)
+      expect(sessions.map((s) => s.id)).toEqual(expect.arrayContaining(week3Ids));
     });
 
-    it('eliminar la primera semana deja las demás (semanas 2 y 3)', () => {
+    it('eliminar la primera semana renumera las restantes: quedan [1, 2]', () => {
       const initial = buildInitialTemplate(3, 2);
       const { sessions } = removeWeekFromTemplateLocal(initial, 1);
-      expect(remainingWeeks(sessions)).toEqual([2, 3]);
+      expect(remainingWeeks(sessions)).toEqual([1, 2]);
     });
 
     it('eliminar la última semana deja las anteriores (semanas 1 y 2)', () => {
@@ -1997,10 +2008,10 @@ describe('Plantillas', () => {
       expect(remainingWeeks(sessions)).toEqual([1, 2]);
     });
 
-    it('eliminar semana del medio deja primera y última (semanas 1 y 3)', () => {
+    it('eliminar semana del medio renumera: quedan [1, 2] (no hay gaps)', () => {
       const initial = buildInitialTemplate(3, 2);
       const { sessions } = removeWeekFromTemplateLocal(initial, 2);
-      expect(remainingWeeks(sessions)).toEqual([1, 3]);
+      expect(remainingWeeks(sessions)).toEqual([1, 2]);
     });
 
     it('no permite eliminar si solo queda 1 semana', () => {
@@ -2039,6 +2050,72 @@ describe('Plantillas', () => {
       const afterDeletion = weekNums.filter((wk) => wk !== selectedWeek);
       expect(afterDeletion).toHaveLength(1);
       expect(afterDeletion[0]).toBe(1);
+    });
+
+    // ── Renumeración de semanas tras la eliminación ──
+    it('eliminar Semana 1 de 3: la Semana 2 pasa a ser Semana 1 y la Semana 3 pasa a ser Semana 2', () => {
+      const initial = buildInitialTemplate(3, 2);
+      const { sessions } = removeWeekFromTemplateLocal(initial, 1);
+      const weeks = remainingWeeks(sessions);
+      expect(weeks).toEqual([1, 2]);
+    });
+
+    it('eliminar Semana 1 de 2: la Semana 2 pasa a ser Semana 1', () => {
+      const initial = buildInitialTemplate(2, 3);
+      const { sessions } = removeWeekFromTemplateLocal(initial, 1);
+      const weeks = remainingWeeks(sessions);
+      expect(weeks).toEqual([1]);
+    });
+
+    it('eliminar Semana 2 de 3: la Semana 3 pasa a ser Semana 2, la Semana 1 no cambia', () => {
+      const initial = buildInitialTemplate(3, 2);
+      const { sessions } = removeWeekFromTemplateLocal(initial, 2);
+      const weeks = remainingWeeks(sessions);
+      expect(weeks).toEqual([1, 2]);
+    });
+
+    it('eliminar la última semana no requiere renumeración', () => {
+      const initial = buildInitialTemplate(3, 2);
+      const { sessions } = removeWeekFromTemplateLocal(initial, 3);
+      const weeks = remainingWeeks(sessions);
+      expect(weeks).toEqual([1, 2]);
+    });
+
+    it('eliminar Semana 1 de 4: las semanas restantes son 1, 2, 3 consecutivas', () => {
+      const initial = buildInitialTemplate(4, 2);
+      const { sessions } = removeWeekFromTemplateLocal(initial, 1);
+      expect(remainingWeeks(sessions)).toEqual([1, 2, 3]);
+    });
+
+    it('las sesiones de cada semana renumerada conservan sus días', () => {
+      const initial = buildInitialTemplate(3, 3);
+      const w2DaysBefore = initial
+        .filter((s) => s.week_number === 2)
+        .map((s) => s.day_name)
+        .sort();
+      const { sessions } = removeWeekFromTemplateLocal(initial, 1);
+      // Lo que era semana 2 ahora es semana 1
+      const newW1Days = sessions
+        .filter((s) => s.week_number === 1)
+        .map((s) => s.day_name)
+        .sort();
+      expect(newW1Days).toEqual(w2DaysBefore);
+    });
+
+    it('no hay semanas con número 0 ni gaps tras la renumeración', () => {
+      const initial = buildInitialTemplate(4, 2);
+      const { sessions } = removeWeekFromTemplateLocal(initial, 2);
+      const weeks = remainingWeeks(sessions);
+      expect(weeks[0]).toBe(1);
+      for (let i = 1; i < weeks.length; i++) {
+        expect(weeks[i]).toBe(weeks[i - 1] + 1);
+      }
+    });
+
+    it('después de renumerar la plantilla sigue siendo uniforme', () => {
+      const initial = buildInitialTemplate(4, 3);
+      const { sessions } = removeWeekFromTemplateLocal(initial, 2);
+      expect(isTemplateUniform(sessions)).toBe(true);
     });
   });
 
@@ -2246,4 +2323,844 @@ describe('Plantillas', () => {
       });
     });
   });
+
+  // ════════════════════════════════════════════════════════════════
+  // ESCENARIO 25: Reordenar semanas (swapWeeksInTemplate)
+  // ════════════════════════════════════════════════════════════════
+
+  function swapWeeksLocal(sessions: TemplateSession[], weekA: number, weekB: number): TemplateSession[] {
+    return sessions.map(s => {
+      if (s.week_number === weekA) return { ...s, week_number: weekB };
+      if (s.week_number === weekB) return { ...s, week_number: weekA };
+      return { ...s };
+    });
+  }
+
+  describe('ESCENARIO 25: Reordenar semanas', () => {
+    it('intercambiar sem 1 y sem 2: todas las sesiones de sem 1 pasan a sem 2 y viceversa', () => {
+      const initial = buildInitialTemplate(3, 2);
+      const result = swapWeeksLocal(initial, 1, 2);
+      const oldWeek1Ids = initial.filter(s => s.week_number === 1).map(s => s.id);
+      expect(result.filter(s => s.week_number === 2).map(s => s.id)).toEqual(expect.arrayContaining(oldWeek1Ids));
+    });
+
+    it('después del swap las semanas intercambian week_number', () => {
+      const initial = buildInitialTemplate(2, 2);
+      const w1Before = initial.filter(s => s.week_number === 1).map(s => s.id).sort();
+      const w2Before = initial.filter(s => s.week_number === 2).map(s => s.id).sort();
+      const result = swapWeeksLocal(initial, 1, 2);
+      expect(result.filter(s => s.week_number === 2).map(s => s.id).sort()).toEqual(w1Before);
+      expect(result.filter(s => s.week_number === 1).map(s => s.id).sort()).toEqual(w2Before);
+    });
+
+    it('las sesiones de otras semanas no se ven afectadas', () => {
+      const initial = buildInitialTemplate(3, 2);
+      const w3Before = initial.filter(s => s.week_number === 3).map(s => s.id);
+      const result = swapWeeksLocal(initial, 1, 2);
+      expect(result.filter(s => s.week_number === 3).map(s => s.id)).toEqual(w3Before);
+    });
+
+    it('swap de sem 1 y sem 3 en plantilla de 3 semanas: sem 2 permanece intacta', () => {
+      const initial = buildInitialTemplate(3, 3);
+      const w2Before = initial.filter(s => s.week_number === 2).map(s => s.id);
+      const result = swapWeeksLocal(initial, 1, 3);
+      expect(result.filter(s => s.week_number === 2).map(s => s.id)).toEqual(w2Before);
+    });
+
+    it('después del swap el total de sesiones es el mismo', () => {
+      const initial = buildInitialTemplate(3, 2);
+      const result = swapWeeksLocal(initial, 1, 2);
+      expect(result).toHaveLength(initial.length);
+    });
+
+    it('después del swap la plantilla sigue siendo uniforme', () => {
+      const initial = buildInitialTemplate(4, 3);
+      const result = swapWeeksLocal(initial, 1, 3);
+      expect(isTemplateUniform(result)).toBe(true);
+    });
+
+    it('intercambiar la misma semana consigo misma no cambia nada', () => {
+      const initial = buildInitialTemplate(2, 2);
+      const result = swapWeeksLocal(initial, 1, 1);
+      expect(result.map(s => s.week_number)).toEqual(initial.map(s => s.week_number));
+    });
+
+    it('swap doble de las mismas semanas restaura el estado original', () => {
+      const initial = buildInitialTemplate(3, 2);
+      const step1 = swapWeeksLocal(initial, 1, 2);
+      const step2 = swapWeeksLocal(step1, 1, 2);
+      expect(step2.map(s => ({ id: s.id, week: s.week_number }))).toEqual(
+        initial.map(s => ({ id: s.id, week: s.week_number }))
+      );
+    });
+
+    it('swap de sem 2 y sem 3 en una plantilla de 2×4: todas las sesiones se mueven', () => {
+      const initial = buildInitialTemplate(3, 4);
+      const w2Ids = initial.filter(s => s.week_number === 2).map(s => s.id);
+      const result = swapWeeksLocal(initial, 2, 3);
+      expect(result.filter(s => s.week_number === 3).map(s => s.id)).toEqual(expect.arrayContaining(w2Ids));
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // ESCENARIO 26: Reordenar días (swapDaysInTemplate)
+  // ════════════════════════════════════════════════════════════════
+
+  function swapDaysLocal(sessions: TemplateSession[], dayIndexA: number, dayIndexB: number): TemplateSession[] {
+    const weekNumbers = [...new Set(sessions.map(s => s.week_number))].sort((a, b) => a - b);
+    const result = sessions.map(s => ({ ...s }));
+
+    for (const wk of weekNumbers) {
+      const wkSorted = result
+        .filter(s => s.week_number === wk)
+        .sort((a, b) => {
+          const nA = parseInt(String(a.day_name).replace(/\D/g, ''), 10) || 0;
+          const nB = parseInt(String(b.day_name).replace(/\D/g, ''), 10) || 0;
+          return nA - nB || a.id - b.id;
+        });
+
+      const sA = wkSorted[dayIndexA];
+      const sB = wkSorted[dayIndexB];
+      if (!sA || !sB) continue;
+
+      const idxA = result.findIndex(s => s.id === sA.id);
+      const idxB = result.findIndex(s => s.id === sB.id);
+
+      const tmpName = result[idxA].day_name;
+      const tmpOrder = result[idxA].order_index;
+      result[idxA].day_name = result[idxB].day_name;
+      result[idxA].order_index = result[idxB].order_index;
+      result[idxB].day_name = tmpName;
+      result[idxB].order_index = tmpOrder;
+    }
+    return result;
+  }
+
+  function sortByDayName(sessions: TemplateSession[]) {
+    return [...sessions].sort((a, b) => {
+      const nA = parseInt(a.day_name.replace(/\D/g, ''), 10) || 0;
+      const nB = parseInt(b.day_name.replace(/\D/g, ''), 10) || 0;
+      return nA - nB || a.id - b.id;
+    });
+  }
+
+  describe('ESCENARIO 26: Reordenar días', () => {
+    it('swap día 0↔1: la sesión que era posición 0 toma el nombre de posición 1 y viceversa', () => {
+      const initial = buildInitialTemplate(2, 2);
+      const w1Sorted = sortByDayName(initial.filter(s => s.week_number === 1));
+      const idPos0 = w1Sorted[0].id;
+      const idPos1 = w1Sorted[1].id;
+      const namePos0 = w1Sorted[0].day_name;
+      const namePos1 = w1Sorted[1].day_name;
+      const result = swapDaysLocal(initial, 0, 1);
+      expect(result.find(s => s.id === idPos0)!.day_name).toBe(namePos1);
+      expect(result.find(s => s.id === idPos1)!.day_name).toBe(namePos0);
+    });
+
+    it('el swap de días ocurre en TODAS las semanas, no solo en la seleccionada', () => {
+      const initial = buildInitialTemplate(3, 2);
+      const result = swapDaysLocal(initial, 0, 1);
+      for (const wk of [1, 2, 3]) {
+        const wkSorted = sortByDayName(initial.filter(s => s.week_number === wk));
+        const idPos0 = wkSorted[0].id;
+        const idPos1 = wkSorted[1].id;
+        expect(result.find(s => s.id === idPos0)!.day_name).toBe(wkSorted[1].day_name);
+        expect(result.find(s => s.id === idPos1)!.day_name).toBe(wkSorted[0].day_name);
+      }
+    });
+
+    it('después del swap el número total de sesiones no cambia', () => {
+      const initial = buildInitialTemplate(4, 3);
+      const result = swapDaysLocal(initial, 0, 2);
+      expect(result).toHaveLength(initial.length);
+    });
+
+    it('después del swap la plantilla sigue siendo uniforme', () => {
+      const initial = buildInitialTemplate(3, 4);
+      const result = swapDaysLocal(initial, 1, 3);
+      expect(isTemplateUniform(result)).toBe(true);
+    });
+
+    it('swap doble del mismo par de días restaura el estado original', () => {
+      const initial = buildInitialTemplate(2, 3);
+      const step1 = swapDaysLocal(initial, 0, 1);
+      const step2 = swapDaysLocal(step1, 0, 1);
+      const toComparable = (s: TemplateSession) => ({ id: s.id, day_name: s.day_name });
+      expect(step2.map(toComparable)).toEqual(initial.map(toComparable));
+    });
+
+    it('intercambiar el mismo índice consigo mismo no modifica los day_names', () => {
+      const initial = buildInitialTemplate(2, 2);
+      const result = swapDaysLocal(initial, 1, 1);
+      expect(result.map(s => s.day_name)).toEqual(initial.map(s => s.day_name));
+    });
+
+    it('swap día 0↔2 en plantilla de 1 semana: las sesiones extremas intercambian nombres', () => {
+      const initial = buildInitialTemplate(1, 3);
+      const sorted = sortByDayName(initial);
+      const idPos0 = sorted[0].id;
+      const idPos1 = sorted[1].id;
+      const idPos2 = sorted[2].id;
+      const result = swapDaysLocal(initial, 0, 2);
+      expect(result.find(s => s.id === idPos0)!.day_name).toBe(sorted[2].day_name);
+      expect(result.find(s => s.id === idPos2)!.day_name).toBe(sorted[0].day_name);
+      expect(result.find(s => s.id === idPos1)!.day_name).toBe(sorted[1].day_name);
+    });
+
+    it('los order_index de los días intercambiados también se intercambian', () => {
+      const initial = buildInitialTemplate(1, 2);
+      const s = initial.filter(s => s.week_number === 1).sort((a, b) => a.order_index - b.order_index);
+      const orderA = s[0].order_index;
+      const orderB = s[1].order_index;
+      const result = swapDaysLocal(initial, 0, 1);
+      const origIdA = s[0].id;
+      const origIdB = s[1].id;
+      expect(result.find(x => x.id === origIdA)!.order_index).toBe(orderB);
+      expect(result.find(x => x.id === origIdB)!.order_index).toBe(orderA);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // ESCENARIO 27: Actualizar nombre de plantilla
+  // ════════════════════════════════════════════════════════════════
+
+  function updateTemplateNameLocal(template: { name: string }, newName: string): { name: string } {
+    if (!newName || !newName.trim()) throw new Error('El nombre no puede estar vacío');
+    return { ...template, name: newName.trim() };
+  }
+
+  describe('ESCENARIO 27: Actualizar nombre de plantilla', () => {
+    it('actualizar con un nombre válido cambia el nombre', () => {
+      const result = updateTemplateNameLocal({ name: 'Viejo' }, 'Fuerza Avanzada');
+      expect(result.name).toBe('Fuerza Avanzada');
+    });
+
+    it('el nombre se guarda con espacios recortados', () => {
+      const result = updateTemplateNameLocal({ name: 'Viejo' }, '  Potencia  ');
+      expect(result.name).toBe('Potencia');
+    });
+
+    it('lanza error si el nombre está vacío', () => {
+      expect(() => updateTemplateNameLocal({ name: 'Viejo' }, '')).toThrow('El nombre no puede estar vacío');
+    });
+
+    it('lanza error si el nombre solo tiene espacios', () => {
+      expect(() => updateTemplateNameLocal({ name: 'Viejo' }, '   ')).toThrow('El nombre no puede estar vacío');
+    });
+
+    it('el objeto original no se muta', () => {
+      const template = { name: 'Original' };
+      updateTemplateNameLocal(template, 'Nuevo');
+      expect(template.name).toBe('Original');
+    });
+
+    it('se puede actualizar al mismo nombre (no hay restricción de unicidad local)', () => {
+      const result = updateTemplateNameLocal({ name: 'Fuerza' }, 'Fuerza');
+      expect(result.name).toBe('Fuerza');
+    });
+
+    it('se permite un nombre largo', () => {
+      const longName = 'A'.repeat(200);
+      const result = updateTemplateNameLocal({ name: 'Viejo' }, longName);
+      expect(result.name).toHaveLength(200);
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // ESCENARIO 28: Eliminar día seleccionado (removeSelectedDayFromTemplate)
+  // ════════════════════════════════════════════════════════════════
+
+  function removeSelectedDayLocal(
+    sessions: TemplateSession[],
+    sessionIds: number[]
+  ): { sessions: TemplateSession[]; success: boolean; reason?: string } {
+    const weekNumbers = [...new Set(sessions.map(s => s.week_number))];
+    const minDaysAfter = Math.min(
+      ...weekNumbers.map(wk => {
+        const total = sessions.filter(s => s.week_number === wk).length;
+        const removing = sessions.filter(s => s.week_number === wk && sessionIds.includes(s.id)).length;
+        return total - removing;
+      })
+    );
+    if (minDaysAfter < 1) return { sessions, success: false, reason: 'min_days' };
+    const filtered = sessions.filter(s => !sessionIds.includes(s.id));
+
+    // Renombrar días restantes para que sean consecutivos (Día 1, Día 2, ...)
+    const weekNums = [...new Set(filtered.map(s => s.week_number))];
+    const renumbered = filtered.map(s => ({ ...s }));
+    for (const wk of weekNums) {
+      const wkSessions = renumbered
+        .filter(s => s.week_number === wk)
+        .sort((a, b) => {
+          const nA = parseInt(a.day_name.replace(/\D/g, ''), 10) || 0;
+          const nB = parseInt(b.day_name.replace(/\D/g, ''), 10) || 0;
+          return nA - nB || a.id - b.id;
+        });
+      wkSessions.forEach((s, i) => { s.day_name = `Día ${i + 1}`; });
+    }
+
+    return { sessions: renumbered, success: true };
+  }
+
+  describe('ESCENARIO 28: Eliminar día seleccionado', () => {
+    it('elimina las sesiones con los IDs indicados', () => {
+      const initial = buildInitialTemplate(2, 3);
+      const toDelete = initial.filter(s => s.day_name === 'Día 2').map(s => s.id);
+      const { sessions, success } = removeSelectedDayLocal(initial, toDelete);
+      expect(success).toBe(true);
+      expect(sessions.some(s => toDelete.includes(s.id))).toBe(false);
+    });
+
+    it('elimina el día en TODAS las semanas y cada semana queda con el mismo conteo', () => {
+      const initial = buildInitialTemplate(3, 3);
+      const toDelete = initial.filter(s => s.day_name === 'Día 1').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, toDelete);
+      // Las sesiones eliminadas ya no están
+      expect(sessions.some(s => toDelete.includes(s.id))).toBe(false);
+      // Cada semana tiene 2 días (3 - 1 = 2), renumerados a Día 1 y Día 2
+      for (const wk of [1, 2, 3]) {
+        const wkSessions = sessions.filter(s => s.week_number === wk);
+        expect(wkSessions).toHaveLength(2);
+        const names = wkSessions.map(s => s.day_name).sort();
+        expect(names).toEqual(['Día 1', 'Día 2']);
+      }
+    });
+
+    it('no elimina si solo queda 1 día por semana', () => {
+      const initial = buildInitialTemplate(3, 1);
+      const toDelete = initial.filter(s => s.week_number === 1).map(s => s.id);
+      const { success, reason } = removeSelectedDayLocal(initial, toDelete);
+      expect(success).toBe(false);
+      expect(reason).toBe('min_days');
+    });
+
+    it('no elimina si quedarían 0 días en alguna semana', () => {
+      const initial = buildInitialTemplate(2, 2);
+      const toDelete = initial.map(s => s.id); // todos los IDs
+      const { success } = removeSelectedDayLocal(initial, toDelete);
+      expect(success).toBe(false);
+    });
+
+    it('las sesiones de los otros días permanecen intactas', () => {
+      const initial = buildInitialTemplate(2, 3);
+      const day3Ids = initial.filter(s => s.day_name === 'Día 3').map(s => s.id);
+      const otherIds = initial.filter(s => s.day_name !== 'Día 3').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, day3Ids);
+      expect(sessions.map(s => s.id)).toEqual(expect.arrayContaining(otherIds));
+    });
+
+    it('el total de sesiones se reduce en el número de IDs eliminados', () => {
+      const initial = buildInitialTemplate(3, 4);
+      const toDelete = initial.filter(s => s.day_name === 'Día 2').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, toDelete);
+      expect(sessions).toHaveLength(initial.length - toDelete.length);
+    });
+
+    it('eliminar el primer día renombra los restantes: Día 2→Día 1, Día 3→Día 2', () => {
+      const initial = buildInitialTemplate(1, 3);
+      const toDelete = initial.filter(s => s.day_name === 'Día 1').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, toDelete);
+      const names = sessions.map(s => s.day_name).sort();
+      expect(names).toEqual(['Día 1', 'Día 2']);
+      expect(sessions.every(s => s.day_name !== 'Día 3')).toBe(true);
+    });
+
+    it('eliminar el último día no requiere renumeración', () => {
+      const initial = buildInitialTemplate(2, 3);
+      const toDelete = initial.filter(s => s.day_name === 'Día 3').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, toDelete);
+      const weeks = [1, 2];
+      for (const wk of weeks) {
+        const names = sessions.filter(s => s.week_number === wk).map(s => s.day_name).sort();
+        expect(names).toEqual(['Día 1', 'Día 2']);
+      }
+    });
+
+    // ── Renumeración de días tras la eliminación ──
+    it('eliminar Día 1 de una plantilla 2×2: el Día 2 pasa a ser Día 1', () => {
+      const initial = buildInitialTemplate(2, 2);
+      const toDelete = initial.filter(s => s.day_name === 'Día 1').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, toDelete);
+      const allNames = sessions.map(s => s.day_name);
+      expect(allNames.every(n => n === 'Día 1')).toBe(true);
+    });
+
+    it('eliminar Día 2 de una plantilla 2×3: el Día 3 pasa a ser Día 2', () => {
+      const initial = buildInitialTemplate(2, 3);
+      const toDelete = initial.filter(s => s.day_name === 'Día 2').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, toDelete);
+      for (const wk of [1, 2]) {
+        const names = sessions.filter(s => s.week_number === wk).map(s => s.day_name).sort();
+        expect(names).toEqual(['Día 1', 'Día 2']);
+      }
+    });
+
+    it('los días renumerados no tienen gaps (siempre 1, 2, 3...)', () => {
+      const initial = buildInitialTemplate(3, 4);
+      const toDelete = initial.filter(s => s.day_name === 'Día 2').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, toDelete);
+      for (const wk of [1, 2, 3]) {
+        const nums = sessions
+          .filter(s => s.week_number === wk)
+          .map(s => parseInt(s.day_name.replace(/\D/g, ''), 10))
+          .sort((a, b) => a - b);
+        nums.forEach((n, i) => expect(n).toBe(i + 1));
+      }
+    });
+
+    it('la renumeración es consistente en todas las semanas', () => {
+      const initial = buildInitialTemplate(3, 3);
+      const toDelete = initial.filter(s => s.day_name === 'Día 1').map(s => s.id);
+      const { sessions } = removeSelectedDayLocal(initial, toDelete);
+      for (const wk of [1, 2, 3]) {
+        const names = sessions.filter(s => s.week_number === wk).map(s => s.day_name).sort();
+        expect(names).toEqual(['Día 1', 'Día 2']);
+      }
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // ESCENARIO 29: Normalización de day_name y fix de nombres no estándar
+  // ════════════════════════════════════════════════════════════════
+
+  function addDayFixed(sessions: TemplateSession[]): TemplateSession[] {
+    if (sessions.length === 0) {
+      return [{ id: 1, plan_id: 1, week_number: 1, day_name: 'Día 1', order_index: 1 }];
+    }
+    const weekNumbers = [...new Set(sessions.map(s => s.week_number))].sort((a, b) => a - b);
+    const parsedMax = Math.max(0, ...sessions.map(s => parseDayNumber(s.day_name)));
+    const daysInFirstWeek = sessions.filter(s => s.week_number === weekNumbers[0]).length;
+    const newDayNumber = Math.max(parsedMax, daysInFirstWeek) + 1;
+    const newDayName = `Día ${newDayNumber}`;
+    const maxOrderIndex = Math.max(0, ...sessions.map(s => s.order_index));
+    const nextId = Math.max(0, ...sessions.map(s => s.id)) + 1;
+    return [
+      ...sessions,
+      ...weekNumbers.map((wk, i) => ({
+        id: nextId + i,
+        plan_id: sessions[0].plan_id,
+        week_number: wk,
+        day_name: newDayName,
+        order_index: maxOrderIndex + i + 1,
+      })),
+    ];
+  }
+
+  function normalizeSessionDayNames(sessions: TemplateSession[]): TemplateSession[] {
+    const weekNumbers = [...new Set(sessions.map(s => s.week_number))].sort((a, b) => a - b);
+    const result: TemplateSession[] = [];
+    for (const wk of weekNumbers) {
+      const wkSessions = sessions
+        .filter(s => s.week_number === wk)
+        .sort((a, b) => {
+          const nA = parseInt(String(a.day_name).replace(/\D/g, ''), 10) || 0;
+          const nB = parseInt(String(b.day_name).replace(/\D/g, ''), 10) || 0;
+          return nA - nB || a.id - b.id;
+        });
+      wkSessions.forEach((s, i) => result.push({ ...s, day_name: `Día ${i + 1}` }));
+    }
+    return result;
+  }
+
+  describe('ESCENARIO 29: Normalización de day_name', () => {
+    it('parseDayNumber: "Día 1" devuelve 1', () => {
+      expect(parseDayNumber('Día 1')).toBe(1);
+    });
+
+    it('parseDayNumber: "Día 3" devuelve 3', () => {
+      expect(parseDayNumber('Día 3')).toBe(3);
+    });
+
+    it('parseDayNumber: "DAY" devuelve 0 (nombre no estándar)', () => {
+      expect(parseDayNumber('DAY')).toBe(0);
+    });
+
+    it('parseDayNumber: "Day 2" (inglés) devuelve 0', () => {
+      expect(parseDayNumber('Day 2')).toBe(0);
+    });
+
+    it('parseDayNumber: "dia 1" (sin acento) devuelve 1', () => {
+      expect(parseDayNumber('dia 1')).toBe(1);
+    });
+
+    it('addDayFixed: con "DAY","DAY" (count=2, parsedMax=0) el nuevo día es "Día 3"', () => {
+      const sessions: TemplateSession[] = [
+        { id: 1, plan_id: 1, week_number: 1, day_name: 'DAY', order_index: 1 },
+        { id: 2, plan_id: 1, week_number: 1, day_name: 'DAY', order_index: 2 },
+      ];
+      const result = addDayFixed(sessions);
+      const newSessions = result.filter(s => !sessions.map(x => x.id).includes(s.id));
+      expect(newSessions[0].day_name).toBe('Día 3');
+    });
+
+    it('addDayFixed: con "Día 1","Día 2" el nuevo día es "Día 3" (comportamiento normal)', () => {
+      const initial = buildInitialTemplate(1, 2);
+      const result = addDayFixed(initial);
+      const newSessions = result.filter(s => !initial.map(x => x.id).includes(s.id));
+      expect(newSessions[0].day_name).toBe('Día 3');
+    });
+
+    it('addDayFixed: con "Día 1" solo el nuevo día es "Día 2"', () => {
+      const initial = buildInitialTemplate(1, 1);
+      const result = addDayFixed(initial);
+      const newSessions = result.filter(s => !initial.map(x => x.id).includes(s.id));
+      expect(newSessions[0].day_name).toBe('Día 2');
+    });
+
+    it('addDayFixed: con 4 "DAY" en plantilla 1×4, el nuevo día es "Día 5"', () => {
+      const sessions: TemplateSession[] = [1, 2, 3, 4].map(i => ({
+        id: i, plan_id: 1, week_number: 1, day_name: 'DAY', order_index: i,
+      }));
+      const result = addDayFixed(sessions);
+      const newSessions = result.filter(s => !sessions.map(x => x.id).includes(s.id));
+      expect(newSessions[0].day_name).toBe('Día 5');
+    });
+
+    it('normalizeSessionDayNames: renombra "DAY","DAY" a "Día 1","Día 2"', () => {
+      const sessions: TemplateSession[] = [
+        { id: 1, plan_id: 1, week_number: 1, day_name: 'DAY', order_index: 1 },
+        { id: 2, plan_id: 1, week_number: 1, day_name: 'DAY', order_index: 2 },
+      ];
+      const result = normalizeSessionDayNames(sessions);
+      const names = result.filter(s => s.week_number === 1).sort((a, b) => a.id - b.id).map(s => s.day_name);
+      expect(names).toEqual(['Día 1', 'Día 2']);
+    });
+
+    it('normalizeSessionDayNames: renombra en todas las semanas consistentemente', () => {
+      const sessions: TemplateSession[] = [
+        { id: 1, plan_id: 1, week_number: 1, day_name: 'DAY', order_index: 1 },
+        { id: 2, plan_id: 1, week_number: 1, day_name: 'DAY', order_index: 2 },
+        { id: 3, plan_id: 1, week_number: 2, day_name: 'DAY', order_index: 3 },
+        { id: 4, plan_id: 1, week_number: 2, day_name: 'DAY', order_index: 4 },
+      ];
+      const result = normalizeSessionDayNames(sessions);
+      for (const wk of [1, 2]) {
+        const wkNames = result.filter(s => s.week_number === wk).map(s => s.day_name).sort();
+        expect(wkNames).toEqual(['Día 1', 'Día 2']);
+      }
+    });
+
+    it('normalizeSessionDayNames: nombres ya correctos no cambian', () => {
+      const initial = buildInitialTemplate(2, 3);
+      const result = normalizeSessionDayNames(initial);
+      expect(isTemplateUniform(result)).toBe(true);
+      result.forEach(s => {
+        expect(parseDayNumber(s.day_name)).toBeGreaterThan(0);
+      });
+    });
+  });
+
+  // ════════════════════════════════════════════════════════════════
+  // ESCENARIO 30: Ejercicios en plantillas (Vista: agregar, modificar, eliminar)
+  // ════════════════════════════════════════════════════════════════
+
+  type TemplateExercise = {
+    id: number;
+    session_id: number;
+    exercise_id: number;
+    target_sets: number;
+    target_reps: number[];
+    target_weight: (number | null)[];
+    target_rpe: number;
+    rest_seconds: number;
+    coach_notes: string;
+    order_index: number;
+    superset_group: number | null;
+  };
+
+  function addExerciseToSessionLocal(
+    exercises: TemplateExercise[],
+    sessionId: number,
+    exerciseId: number,
+    sets: number,
+    reps: number[],
+    weight: (number | null)[],
+    rpe: number,
+    rest: number,
+    notes: string
+  ): TemplateExercise[] {
+    const maxOrder = exercises.length > 0 ? Math.max(...exercises.map(e => e.order_index)) : 0;
+    const newId = exercises.length > 0 ? Math.max(...exercises.map(e => e.id)) + 1 : 1;
+    return [...exercises, {
+      id: newId,
+      session_id: sessionId,
+      exercise_id: exerciseId,
+      target_sets: sets,
+      target_reps: reps,
+      target_weight: weight,
+      target_rpe: rpe,
+      rest_seconds: rest,
+      coach_notes: notes,
+      order_index: maxOrder + 1,
+      superset_group: null,
+    }];
+  }
+
+  function updateExerciseLocal(
+    exercises: TemplateExercise[],
+    id: number,
+    data: Partial<Pick<TemplateExercise, 'target_sets' | 'target_reps' | 'target_weight' | 'target_rpe' | 'rest_seconds' | 'coach_notes'>>
+  ): TemplateExercise[] {
+    return exercises.map(e => e.id === id ? { ...e, ...data } : { ...e });
+  }
+
+  function deleteExerciseLocal(exercises: TemplateExercise[], id: number): TemplateExercise[] {
+    return exercises.filter(e => e.id !== id);
+  }
+
+  const BASE_EX: Omit<TemplateExercise, 'id' | 'order_index'> = {
+    session_id: 10,
+    exercise_id: 5,
+    target_sets: 3,
+    target_reps: [10, 10, 10],
+    target_weight: [null, null, null],
+    target_rpe: 8,
+    rest_seconds: 60,
+    coach_notes: '',
+    superset_group: null,
+  };
+
+  describe('ESCENARIO 30: Ejercicios en plantillas (Vista)', () => {
+    describe('Agregar ejercicio', () => {
+      it('agregar a una sesión vacía crea el ejercicio con order_index 1', () => {
+        const result = addExerciseToSessionLocal([], 10, 5, 3, [10, 10, 10], [null, null, null], 8, 60, '');
+        expect(result).toHaveLength(1);
+        expect(result[0].order_index).toBe(1);
+      });
+
+      it('agregar a una sesión con ejercicios usa el siguiente order_index', () => {
+        const existing: TemplateExercise[] = [
+          { ...BASE_EX, id: 1, order_index: 1 },
+          { ...BASE_EX, id: 2, order_index: 2 },
+        ];
+        const result = addExerciseToSessionLocal(existing, 10, 7, 4, [8, 8, 8, 8], [60, 60, 60, 60], 9, 90, '');
+        expect(result[2].order_index).toBe(3);
+      });
+
+      it('el nuevo ejercicio pertenece a la sesión indicada', () => {
+        const result = addExerciseToSessionLocal([], 42, 5, 3, [10, 10, 10], [null, null, null], 8, 60, '');
+        expect(result[0].session_id).toBe(42);
+      });
+
+      it('los parámetros del ejercicio se guardan correctamente', () => {
+        const result = addExerciseToSessionLocal([], 10, 7, 4, [8, 6, 5, 5], [100, 105, 110, 110], 9, 120, 'Foco técnico');
+        expect(result[0].target_sets).toBe(4);
+        expect(result[0].target_reps).toEqual([8, 6, 5, 5]);
+        expect(result[0].target_weight).toEqual([100, 105, 110, 110]);
+        expect(result[0].target_rpe).toBe(9);
+        expect(result[0].rest_seconds).toBe(120);
+        expect(result[0].coach_notes).toBe('Foco técnico');
+      });
+
+      it('el ejercicio se agrega sin superset_group (null por defecto)', () => {
+        const result = addExerciseToSessionLocal([], 10, 5, 3, [10, 10, 10], [null, null, null], 8, 60, '');
+        expect(result[0].superset_group).toBeNull();
+      });
+
+      it('los ejercicios existentes no se modifican al agregar uno nuevo', () => {
+        const existing: TemplateExercise[] = [{ ...BASE_EX, id: 1, order_index: 1, target_sets: 3 }];
+        const result = addExerciseToSessionLocal(existing, 10, 9, 5, [5, 5, 5, 5, 5], [null, null, null, null, null], 7, 90, '');
+        expect(result[0].target_sets).toBe(3);
+      });
+
+      it('los ejercicios de plantilla NO tienen campos actual_* (datos del alumno)', () => {
+        const result = addExerciseToSessionLocal([], 10, 5, 3, [10, 10, 10], [null, null, null], 8, 60, '');
+        expect('actual_sets' in result[0]).toBe(false);
+        expect('actual_reps' in result[0]).toBe(false);
+        expect('actual_weight' in result[0]).toBe(false);
+        expect('actual_rpe' in result[0]).toBe(false);
+      });
+    });
+
+    describe('Modificar ejercicio', () => {
+      it('actualizar target_sets cambia solo ese campo', () => {
+        const exercises: TemplateExercise[] = [{ ...BASE_EX, id: 1, order_index: 1 }];
+        const result = updateExerciseLocal(exercises, 1, { target_sets: 5 });
+        expect(result[0].target_sets).toBe(5);
+        expect(result[0].target_reps).toEqual([10, 10, 10]);
+      });
+
+      it('actualizar target_reps actualiza las repeticiones', () => {
+        const exercises: TemplateExercise[] = [{ ...BASE_EX, id: 1, order_index: 1 }];
+        const result = updateExerciseLocal(exercises, 1, { target_reps: [8, 6, 5] });
+        expect(result[0].target_reps).toEqual([8, 6, 5]);
+      });
+
+      it('actualizar coach_notes guarda la nota', () => {
+        const exercises: TemplateExercise[] = [{ ...BASE_EX, id: 1, order_index: 1 }];
+        const result = updateExerciseLocal(exercises, 1, { coach_notes: 'Reducir peso si falla' });
+        expect(result[0].coach_notes).toBe('Reducir peso si falla');
+      });
+
+      it('actualizar un ejercicio no modifica los demás', () => {
+        const exercises: TemplateExercise[] = [
+          { ...BASE_EX, id: 1, order_index: 1, target_sets: 3 },
+          { ...BASE_EX, id: 2, order_index: 2, target_sets: 4 },
+        ];
+        const result = updateExerciseLocal(exercises, 1, { target_sets: 5 });
+        expect(result.find(e => e.id === 2)!.target_sets).toBe(4);
+      });
+
+      it('actualizar target_weight con valores nulos se guarda correctamente', () => {
+        const exercises: TemplateExercise[] = [{ ...BASE_EX, id: 1, order_index: 1 }];
+        const result = updateExerciseLocal(exercises, 1, { target_weight: [null, null, null] });
+        expect(result[0].target_weight).toEqual([null, null, null]);
+      });
+
+      it('la edición no crea campos actual_* en el ejercicio de plantilla', () => {
+        const exercises: TemplateExercise[] = [{ ...BASE_EX, id: 1, order_index: 1 }];
+        const result = updateExerciseLocal(exercises, 1, { target_sets: 4, coach_notes: 'Nota' });
+        expect('actual_sets' in result[0]).toBe(false);
+        expect('actual_reps' in result[0]).toBe(false);
+      });
+    });
+
+    describe('Eliminar ejercicio', () => {
+      it('eliminar un ejercicio lo remueve de la lista', () => {
+        const exercises: TemplateExercise[] = [
+          { ...BASE_EX, id: 1, order_index: 1 },
+          { ...BASE_EX, id: 2, order_index: 2 },
+        ];
+        const result = deleteExerciseLocal(exercises, 1);
+        expect(result).toHaveLength(1);
+        expect(result.find(e => e.id === 1)).toBeUndefined();
+      });
+
+      it('los ejercicios restantes no se modifican al eliminar uno', () => {
+        const exercises: TemplateExercise[] = [
+          { ...BASE_EX, id: 1, order_index: 1, target_sets: 3 },
+          { ...BASE_EX, id: 2, order_index: 2, target_sets: 4 },
+        ];
+        const result = deleteExerciseLocal(exercises, 1);
+        expect(result[0].id).toBe(2);
+        expect(result[0].target_sets).toBe(4);
+      });
+
+      it('eliminar el único ejercicio deja la sesión vacía', () => {
+        const exercises: TemplateExercise[] = [{ ...BASE_EX, id: 1, order_index: 1 }];
+        const result = deleteExerciseLocal(exercises, 1);
+        expect(result).toHaveLength(0);
+      });
+
+      it('intentar eliminar un ID inexistente no modifica la lista', () => {
+        const exercises: TemplateExercise[] = [{ ...BASE_EX, id: 1, order_index: 1 }];
+        const result = deleteExerciseLocal(exercises, 99);
+        expect(result).toHaveLength(1);
+      });
+    });
+
+    describe('Reordenar y encadenar en contexto de plantilla', () => {
+      // Tipos y helpers locales (la misma lógica que en Escenarios 18/19,
+      // redefinidos aquí porque están fuera del scope de describe('Estudiantes'))
+      type TEx = { id: number; order_index: number; superset_group: number | null };
+
+      function reorderTItem(
+        exercises: TEx[],
+        key: { type: 'standalone'; exerciseId: number } | { type: 'superset'; group: number },
+        dir: 'up' | 'down'
+      ): TEx[] {
+        const sorted = [...exercises].sort((a, b) => a.order_index - b.order_index);
+        type Block = { type: 'standalone'; ex: TEx } | { type: 'superset'; group: number; exs: TEx[] };
+        const blocks: Block[] = [];
+        const seen = new Set<number>();
+        for (const ex of sorted) {
+          const g = ex.superset_group;
+          if (g === null) blocks.push({ type: 'standalone', ex });
+          else if (!seen.has(g)) { seen.add(g); blocks.push({ type: 'superset', group: g, exs: sorted.filter(e => e.superset_group === g) }); }
+        }
+        const bi = key.type === 'standalone'
+          ? blocks.findIndex(b => b.type === 'standalone' && (b as any).ex.id === key.exerciseId)
+          : blocks.findIndex(b => b.type === 'superset' && (b as any).group === key.group);
+        if (bi === -1) return sorted;
+        const ti = dir === 'up' ? bi - 1 : bi + 1;
+        if (ti < 0 || ti >= blocks.length) return sorted;
+        const nb = [...blocks];
+        [nb[bi], nb[ti]] = [nb[ti], nb[bi]];
+        let idx = 1;
+        const res: TEx[] = [];
+        for (const b of nb) {
+          if (b.type === 'standalone') res.push({ ...(b as any).ex, order_index: idx++ });
+          else for (const ex of (b as any).exs) res.push({ ...ex, order_index: idx++ });
+        }
+        return res.sort((a, b) => a.order_index - b.order_index);
+      }
+
+      function resolveSupersetT(
+        exercises: { id: number; superset_group: number | null }[],
+        sourceId: number, targetId: number
+      ): { id: number; superset_group: number | null }[] {
+        const ex1 = exercises.find(e => e.id === sourceId);
+        const ex2 = exercises.find(e => e.id === targetId);
+        if (!ex1 || !ex2) return exercises.map(e => ({ ...e }));
+        let groupNumber: number;
+        if (ex1.superset_group !== null) groupNumber = ex1.superset_group;
+        else if (ex2.superset_group !== null) groupNumber = ex2.superset_group;
+        else groupNumber = Math.max(0, ...exercises.map(e => e.superset_group ?? 0)) + 1;
+        const groupsToMerge = [ex1.superset_group, ex2.superset_group]
+          .filter((g): g is number => g !== null && g !== groupNumber);
+        return exercises.map(e => {
+          if (e.id === sourceId || e.id === targetId) return { ...e, superset_group: groupNumber };
+          if (groupsToMerge.includes(e.superset_group as number)) return { ...e, superset_group: groupNumber };
+          return { ...e };
+        });
+      }
+
+      function removeSupersetT(
+        exercises: { id: number; superset_group: number | null }[],
+        exerciseId: number
+      ): { id: number; superset_group: number | null }[] {
+        return exercises.map(e => e.id === exerciseId ? { ...e, superset_group: null } : { ...e });
+      }
+
+      it('reordenar ejercicio arriba: intercambia posición con el anterior', () => {
+        const exs: TEx[] = [
+          { id: 1, order_index: 1, superset_group: null },
+          { id: 2, order_index: 2, superset_group: null },
+          { id: 3, order_index: 3, superset_group: null },
+        ];
+        const result = reorderTItem(exs, { type: 'standalone', exerciseId: 2 }, 'up');
+        expect(result[0].id).toBe(2);
+        expect(result[1].id).toBe(1);
+      });
+
+      it('encadenar dos ejercicios de plantilla les asigna el mismo grupo', () => {
+        const exs = [{ id: 1, superset_group: null }, { id: 2, superset_group: null }];
+        const result = resolveSupersetT(exs, 1, 2);
+        expect(result.find(e => e.id === 1)!.superset_group).not.toBeNull();
+        expect(result.find(e => e.id === 2)!.superset_group).toBe(result.find(e => e.id === 1)!.superset_group);
+      });
+
+      it('desencadenar un ejercicio de plantilla lo deja con superset_group null', () => {
+        const exs = [{ id: 1, superset_group: 1 }, { id: 2, superset_group: 1 }];
+        const result = removeSupersetT(exs, 1);
+        expect(result.find(e => e.id === 1)!.superset_group).toBeNull();
+        expect(result.find(e => e.id === 2)!.superset_group).toBe(1);
+      });
+
+      it('mover superset completo hacia arriba: el bloque sube como unidad', () => {
+        const exs: TEx[] = [
+          { id: 1, order_index: 1, superset_group: null },
+          { id: 2, order_index: 2, superset_group: 1 },
+          { id: 3, order_index: 3, superset_group: 1 },
+        ];
+        const result = reorderTItem(exs, { type: 'superset', group: 1 }, 'up');
+        expect(result[0].id).toBe(2);
+        expect(result[1].id).toBe(3);
+        expect(result[2].id).toBe(1);
+      });
+
+      it('los ejercicios de plantilla instanciados preservan superset_group', () => {
+        const templateExercises = [
+          { exercise_id: 1, target_sets: 3, superset_group: 1 },
+          { exercise_id: 2, target_sets: 3, superset_group: 1 },
+          { exercise_id: 3, target_sets: 4, superset_group: null },
+        ];
+        const copied = templateExercises.map(ex => ({ ...ex }));
+        expect(copied[0].superset_group).toBe(1);
+        expect(copied[1].superset_group).toBe(1);
+        expect(copied[2].superset_group).toBeNull();
+      });
+    });
+  });
 });
+

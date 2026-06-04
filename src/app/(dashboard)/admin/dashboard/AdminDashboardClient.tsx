@@ -142,11 +142,11 @@ export function AdminDashboardClient({
   };
 
   return (
-    <div className="flex flex-col gap-8 p-6 max-w-7xl mx-auto">
+    <div className="flex flex-col gap-6 px-4 py-6 max-w-4xl mx-auto md:px-6 md:py-8">
       <header className="flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div>
-          <h1 className="text-3xl font-black text-foreground tracking-tight">Panel de Control</h1>
-          <p className="text-muted-foreground text-sm font-medium">Gestiona usuarios, roles y asignaciones de Gymapp.</p>
+        <div className="flex flex-col gap-1">
+          <h1 className="text-xl font-black tracking-tight text-foreground">Panel de Control</h1>
+          <p className="text-xs text-muted-foreground">Gestiona usuarios, roles y asignaciones de Gymapp.</p>
         </div>
         <button 
           onClick={() => setIsInviteModalOpen(true)}

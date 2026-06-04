@@ -40,6 +40,7 @@ export async function GET(
           week_number,
           session_exercises (
             id,
+            session_id,
             exercise_id,
             target_sets,
             target_reps,
@@ -76,7 +77,6 @@ export async function GET(
       return NextResponse.json({ error: "Plantilla no encontrada" }, { status: 404 });
     }
 
-    console.log("Template fetched successfully:", template);
     return NextResponse.json(template);
     
   } catch (error) {

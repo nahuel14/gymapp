@@ -1217,11 +1217,12 @@ export async function setSuperset(sourceId: number, targetId: number, sessionId:
 
 export async function removeFromSuperset(exerciseId: number) {
   const supabase = await createSupabaseServerClient();
+  const adminClient = createSupabaseAdminClient();
 
   const { data: { user } } = await supabase.auth.getUser();
   if (!user) throw new Error("No autenticado");
 
-  await supabase
+  await adminClient
     .from("session_exercises")
     .update({ superset_group: null } as any)
     .eq("id", exerciseId);
@@ -1370,8 +1371,10 @@ export async function addDayToAllWeeks(planId: number) {
   }
 
   const weekNumbers = [...new Set(allSessions.map((s) => s.week_number as number))].sort((a, b) => a - b);
-  const maxDay = Math.max(0, ...allSessions.map((s) => parseDayNumber(s.day_name)));
-  const newDayName = `Día ${maxDay + 1}`;
+  // Use the higher of parsed day number OR day count per week, so non-standard names like "DAY" don't reset to 1
+  const parsedMax = Math.max(0, ...allSessions.map((s) => parseDayNumber(s.day_name)));
+  const daysInFirstWeek = allSessions.filter((s) => s.week_number === weekNumbers[0]).length;
+  const newDayName = `Día ${Math.max(parsedMax, daysInFirstWeek) + 1}`;
   const maxOrderIndex = Math.max(0, ...allSessions.map((s) => s.order_index ?? 0));
 
   const toInsert = weekNumbers.map((wk, i) => ({
@@ -1431,6 +1434,142 @@ export async function removeDayFromAllWeeks(planId: number) {
   return { success: true };
 }
 
+export async function removeSelectedDayFromTemplate(planId: number, sessionIds: number[]) {
+  "use server";
+  if (sessionIds.length === 0) return { success: false, reason: "no_ids" as const };
+
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: allSessions, error } = await adminClient
+    .from("sessions")
+    .select("id, week_number")
+    .eq("plan_id", planId as any);
+
+  if (error) throw error;
+
+  const sessions = (allSessions ?? []) as any[];
+  const weekNumbers = [...new Set(sessions.map((s) => s.week_number as number))];
+  const sessionsPerWeek = weekNumbers.map(
+    (wk) => sessions.filter((s) => s.week_number === wk).length
+  );
+  const minDaysAfter = Math.min(...sessionsPerWeek.map((count) => count - 1));
+
+  if (minDaysAfter < 1) {
+    return { success: false, reason: "min_days" as const };
+  }
+
+  const { error: delExError } = await adminClient
+    .from("session_exercises")
+    .delete()
+    .in("session_id", sessionIds as any);
+  if (delExError) throw delExError;
+
+  const { error: delSesError } = await adminClient
+    .from("sessions")
+    .delete()
+    .in("id", sessionIds as any);
+  if (delSesError) throw delSesError;
+
+  // Renombrar los días restantes para que sean consecutivos (Día 1, Día 2, ...)
+  const { data: remaining } = await adminClient
+    .from("sessions")
+    .select("id, week_number, day_name, order_index")
+    .eq("plan_id", planId as any);
+
+  const remainingSessions = (remaining ?? []) as any[];
+  const remainingWeeks = [...new Set(remainingSessions.map((s) => s.week_number as number))];
+
+  for (const wk of remainingWeeks) {
+    const wkSessions = remainingSessions
+      .filter((s) => s.week_number === wk)
+      .sort((a, b) => {
+        const nA = parseInt(String(a.day_name).replace(/\D/g, ""), 10) || 0;
+        const nB = parseInt(String(b.day_name).replace(/\D/g, ""), 10) || 0;
+        return nA - nB || a.id - b.id;
+      });
+
+    for (let i = 0; i < wkSessions.length; i++) {
+      const expectedName = `Día ${i + 1}`;
+      if (wkSessions[i].day_name !== expectedName) {
+        await adminClient
+          .from("sessions")
+          .update({ day_name: expectedName } as any)
+          .eq("id", wkSessions[i].id as any);
+      }
+    }
+  }
+
+  revalidatePath("/coach/templates");
+  revalidatePath(`/coach/templates/${planId}/edit`);
+  return { success: true };
+}
+
+export async function swapWeeksInTemplate(planId: number, weekA: number, weekB: number) {
+  "use server";
+  const adminClient = createSupabaseAdminClient();
+  const TEMP = 999999;
+
+  const step = async (from: number, to: number) =>
+    adminClient.from("sessions").update({ week_number: to } as any).eq("plan_id", planId as any).eq("week_number", from as any);
+
+  const { error: e1 } = await step(weekA, TEMP);
+  if (e1) throw e1;
+  const { error: e2 } = await step(weekB, weekA);
+  if (e2) throw e2;
+  const { error: e3 } = await step(TEMP, weekB);
+  if (e3) throw e3;
+
+  revalidatePath("/coach/templates");
+  revalidatePath(`/coach/templates/${planId}/edit`);
+  return { success: true };
+}
+
+export async function swapDaysInTemplate(planId: number, dayIndexA: number, dayIndexB: number) {
+  "use server";
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: allSessions, error } = await adminClient
+    .from("sessions")
+    .select("id, week_number, day_name, order_index")
+    .eq("plan_id", planId as any);
+
+  if (error) throw error;
+
+  const sessions = (allSessions ?? []) as any[];
+  const weekNumbers = [...new Set(sessions.map((s) => s.week_number as number))].sort((a, b) => a - b);
+
+  const updates: Array<{ id: number; day_name: string; order_index: number }> = [];
+
+  for (const wk of weekNumbers) {
+    const wkSessions = sessions
+      .filter((s) => s.week_number === wk)
+      .sort((a, b) => {
+        const nA = parseInt(String(a.day_name).replace(/\D/g, ""), 10) || 0;
+        const nB = parseInt(String(b.day_name).replace(/\D/g, ""), 10) || 0;
+        return nA - nB || a.id - b.id;
+      });
+
+    const sA = wkSessions[dayIndexA];
+    const sB = wkSessions[dayIndexB];
+    if (!sA || !sB) continue;
+
+    updates.push({ id: sA.id, day_name: sB.day_name, order_index: sB.order_index });
+    updates.push({ id: sB.id, day_name: sA.day_name, order_index: sA.order_index });
+  }
+
+  for (const u of updates) {
+    const { error: ue } = await adminClient
+      .from("sessions")
+      .update({ day_name: u.day_name, order_index: u.order_index } as any)
+      .eq("id", u.id as any);
+    if (ue) throw ue;
+  }
+
+  revalidatePath("/coach/templates");
+  revalidatePath(`/coach/templates/${planId}/edit`);
+  return { success: true };
+}
+
 export async function removeWeekFromTemplate(planId: number, weekNumber: number) {
   const adminClient = createSupabaseAdminClient();
 
@@ -1463,6 +1602,22 @@ export async function removeWeekFromTemplate(planId: number, weekNumber: number)
       .delete()
       .in("id", idsToDelete as any);
     if (delSesError) throw delSesError;
+  }
+
+  // Renumerar semanas restantes para que sean consecutivas (1, 2, 3, ...)
+  const remainingWeeks = weekNumbers
+    .filter((wk) => wk !== weekNumber)
+    .sort((a, b) => a - b);
+
+  for (let i = 0; i < remainingWeeks.length; i++) {
+    const expectedNum = i + 1;
+    if (remainingWeeks[i] !== expectedNum) {
+      await adminClient
+        .from("sessions")
+        .update({ week_number: expectedNum } as any)
+        .eq("plan_id", planId as any)
+        .eq("week_number", remainingWeeks[i] as any);
+    }
   }
 
   revalidatePath("/coach/templates");
