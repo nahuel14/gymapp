@@ -22,6 +22,9 @@ const eslintConfig = defineConfig([
       // React Compiler: falsos positivos en patrones de sincronización de estado válidos
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/preserve-manual-memoization": "off",
+      // Accesibilidad: inputs deben tener autocomplete válido y estar asociados a un label
+      "jsx-a11y/autocomplete-valid": "error",
+      "jsx-a11y/no-autofocus": "warn",
     },
   },
 ]);

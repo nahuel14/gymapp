@@ -259,6 +259,7 @@ export default async function AuthPage({
                 name="email"
                 type="email"
                 required
+                autoComplete="email"
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 transition focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
@@ -267,6 +268,7 @@ export default async function AuthPage({
               id="password"
               name="password"
               label="Contraseña"
+              autoComplete="current-password"
             />
 
             <div className="flex justify-end">
@@ -300,6 +302,7 @@ export default async function AuthPage({
                   name="first_name"
                   type="text"
                   required
+                  autoComplete="given-name"
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 transition focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
@@ -315,6 +318,7 @@ export default async function AuthPage({
                   name="last_name"
                   type="text"
                   required
+                  autoComplete="family-name"
                   className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 transition focus:border-primary focus:ring-1 focus:ring-primary"
                 />
               </div>
@@ -332,6 +336,7 @@ export default async function AuthPage({
                 name="email"
                 type="email"
                 required
+                autoComplete="email"
                 className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 text-sm outline-none ring-0 transition focus:border-primary focus:ring-1 focus:ring-primary"
               />
             </div>
@@ -340,12 +345,14 @@ export default async function AuthPage({
               id="signup_password"
               name="password"
               label="Contraseña"
+              autoComplete="new-password"
             />
 
             <AuthPasswordField
               id="signup_confirm_password"
               name="confirm_password"
               label="Confirmar contraseña"
+              autoComplete="new-password"
             />
 
             <p className="text-xs text-muted-foreground">

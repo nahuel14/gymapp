@@ -6,9 +6,10 @@ type AuthPasswordFieldProps = {
   id: string;
   name: string;
   label: string;
+  autoComplete?: string;
 };
 
-export function AuthPasswordField({ id, name, label }: AuthPasswordFieldProps) {
+export function AuthPasswordField({ id, name, label, autoComplete }: AuthPasswordFieldProps) {
   const [visible, setVisible] = useState(false);
 
   return (
@@ -25,6 +26,7 @@ export function AuthPasswordField({ id, name, label }: AuthPasswordFieldProps) {
           name={name}
           type={visible ? "text" : "password"}
           required
+          autoComplete={autoComplete}
           className="mt-1 w-full rounded-md border border-input bg-background px-3 py-2 pr-10 text-sm outline-none focus:border-primary focus:ring-1 focus:ring-primary"
         />
         <button

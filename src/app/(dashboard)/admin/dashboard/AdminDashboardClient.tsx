@@ -160,9 +160,12 @@ export function AdminDashboardClient({
       {/* Search and Filters */}
       <div className="relative group">
         <Search className="absolute left-4 top-1/2 -translate-y-1/2 h-5 w-5 text-muted-foreground group-focus-within:text-primary transition-colors" />
-        <input 
-          type="text" 
-          placeholder="Buscar por nombre o email..." 
+        <input
+          id="admin-search"
+          name="admin-search"
+          type="text"
+          autoComplete="off"
+          placeholder="Buscar por nombre o email..."
           className="w-full bg-card border-2 border-border rounded-2xl py-4 pl-12 pr-4 outline-none focus:border-primary transition-all font-medium text-sm"
           value={searchTerm}
           onChange={(e) => setSearchTerm(e.target.value)}

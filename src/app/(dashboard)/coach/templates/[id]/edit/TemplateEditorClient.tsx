@@ -84,12 +84,6 @@ export function TemplateEditorClient({ templateId }: Props) {
     });
   }, [weekSessions]);
 
-  // Keep a deduplicated list only for the non-uniform check (structural, not visual)
-  const dayNames = useMemo(() => {
-    const names = [...new Set(weekSessions.map((s: any) => s.day_name as string))];
-    return names;
-  }, [weekSessions]);
-
   const isUniform = useMemo(() => {
     if (weekNumbers.length <= 1) return true;
     const weekMap = new Map<number, Set<string>>();
