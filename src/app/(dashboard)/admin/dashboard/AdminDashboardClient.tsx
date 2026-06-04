@@ -153,7 +153,7 @@ export function AdminDashboardClient({
           className="flex items-center justify-center gap-2 bg-primary text-primary-foreground px-6 py-3 rounded-2xl font-black text-sm shadow-lg shadow-primary/20 hover:scale-[1.02] active:scale-[0.98] transition"
         >
           <UserPlus className="h-5 w-5" />
-          INVITAR USUARIO
+          <span className="hidden sm:inline">INVITAR USUARIO</span>
         </button>
       </header>
 

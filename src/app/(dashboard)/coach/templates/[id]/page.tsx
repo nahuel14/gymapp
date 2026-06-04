@@ -2,7 +2,7 @@
 
 import { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Dumbbell, Edit, Trash2, X, Plus } from "lucide-react";
+import { ArrowLeft, Dumbbell, Edit, Trash2, X, Plus, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { useTemplate } from "@/hooks/useTemplates";
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "@/app/(dashboard)/coach/student/ExerciseExcelGrid";
@@ -30,6 +30,7 @@ export default function TemplateViewPage() {
   const [isPending, startTransition] = useTransition();
 
   const [confirmDeleteTemplate, setConfirmDeleteTemplate] = useState(false);
+  const [allExpanded, setAllExpanded] = useState(false);
   // sessionId de la sesión donde se va a agregar ejercicio
   const [addingToSession, setAddingToSession] = useState<number | null>(null);
   const [exForm, setExForm] = useState(DEFAULT_FORM);
@@ -100,18 +101,27 @@ export default function TemplateViewPage() {
 
           <div className="flex gap-1.5">
             <button
+              onClick={() => setAllExpanded(v => !v)}
+              className="flex items-center gap-1.5 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs font-black text-zinc-400 transition hover:text-zinc-100 hover:border-zinc-600"
+              title={allExpanded ? "Colapsar todo" : "Expandir todo"}
+            >
+              {allExpanded
+                ? <ChevronsDownUp className="h-3.5 w-3.5" />
+                : <ChevronsUpDown className="h-3.5 w-3.5" />}
+            </button>
+            <button
               onClick={() => router.push(`/coach/templates/${templateId}/edit`)}
               className="flex items-center gap-1.5 rounded-xl bg-zinc-900 border border-zinc-800 px-3 py-1.5 text-xs font-black text-zinc-300 transition hover:border-yellow-400 hover:text-yellow-400"
             >
               <Edit className="h-3.5 w-3.5" />
-              Editar
+              <span className="hidden sm:inline">Editar</span>
             </button>
             <button
               onClick={() => setConfirmDeleteTemplate(true)}
               className="flex items-center gap-1.5 rounded-xl bg-red-500/10 border border-red-500/20 px-3 py-1.5 text-xs font-black text-red-400 transition hover:bg-red-500/20 hover:border-red-400"
             >
               <Trash2 className="h-3.5 w-3.5" />
-              Eliminar
+              <span className="hidden sm:inline">Eliminar</span>
             </button>
           </div>
         </div>
@@ -176,6 +186,7 @@ export default function TemplateViewPage() {
                             exercises={session.session_exercises}
                             role="COACH"
                             isTemplate={true}
+                            allExpanded={allExpanded}
                             onMutated={invalidateTemplate}
                           />
                         ) : (

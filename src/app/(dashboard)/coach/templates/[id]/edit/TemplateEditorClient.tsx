@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Plus, Trash2, Dumbbell, AlertTriangle, X, ChevronLeft, ChevronRight } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, Dumbbell, AlertTriangle, X, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { useTemplate } from "@/hooks/useTemplates";
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "@/app/(dashboard)/coach/student/ExerciseExcelGrid";
@@ -46,6 +46,9 @@ export function TemplateEditorClient({ templateId }: Props) {
   const [confirmRemoveDay, setConfirmRemoveDay] = useState(false);
   const [confirmRemoveWeek, setConfirmRemoveWeek] = useState(false);
   const [statusMsg, setStatusMsg] = useState<string | null>(null);
+  const [allExpanded, setAllExpanded] = useState(false);
+  const [reorderingWeeks, setReorderingWeeks] = useState(false);
+  const [reorderingDays, setReorderingDays] = useState(false);
 
   const displayName = templateName ?? template?.name ?? "";
 
@@ -304,17 +307,17 @@ export function TemplateEditorClient({ templateId }: Props) {
             const isActive = selectedWeek === wk;
             return (
               <div key={wk} className="flex shrink-0 items-center gap-0.5">
-                {isActive && i > 0 && (
+                {reorderingWeeks && isActive && i > 0 && (
                   <button
                     onClick={() => handleSwapWeek('left')}
                     disabled={isPending}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition disabled:opacity-40"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-800 text-yellow-400 hover:bg-zinc-700 transition disabled:opacity-40"
                   >
-                    <ChevronLeft className="h-3.5 w-3.5" />
+                    <ChevronLeft className="h-4 w-4" />
                   </button>
                 )}
                 <button
-                  onClick={() => { setSelectedWeek(wk); setSelectedDay(1); }}
+                  onClick={() => { setSelectedWeek(wk); setSelectedDay(1); setAllExpanded(false); }}
                   className={`rounded-xl px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
                     isActive
                       ? "bg-yellow-400 text-black"
@@ -323,13 +326,13 @@ export function TemplateEditorClient({ templateId }: Props) {
                 >
                   Sem {i + 1}
                 </button>
-                {isActive && i < weekNumbers.length - 1 && (
+                {reorderingWeeks && isActive && i < weekNumbers.length - 1 && (
                   <button
                     onClick={() => handleSwapWeek('right')}
                     disabled={isPending}
-                    className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition disabled:opacity-40"
+                    className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-800 text-yellow-400 hover:bg-zinc-700 transition disabled:opacity-40"
                   >
-                    <ChevronRight className="h-3.5 w-3.5" />
+                    <ChevronRight className="h-4 w-4" />
                   </button>
                 )}
               </div>
@@ -339,23 +342,47 @@ export function TemplateEditorClient({ templateId }: Props) {
 
         {/* Acciones de semana */}
         <div className="mt-1.5 flex items-center gap-1.5">
-          <button
-            onClick={handleAddWeek}
-            disabled={isPending}
-            className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-40"
-          >
-            <Plus className="h-3 w-3" />
-            Agregar
-          </button>
-          {weekNumbers.length > 1 && (
-            <button
-              onClick={() => setConfirmRemoveWeek(true)}
-              disabled={isPending}
-              className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
-            >
-              <Trash2 className="h-3 w-3" />
-              Eliminar
-            </button>
+          {!reorderingDays && (
+            !reorderingWeeks ? (
+              <>
+                <button
+                  onClick={handleAddWeek}
+                  disabled={isPending}
+                  className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-40"
+                >
+                  <Plus className="h-3 w-3" />
+                  Agregar
+                </button>
+                {weekNumbers.length > 1 && (
+                  <>
+                    <button
+                      onClick={() => setConfirmRemoveWeek(true)}
+                      disabled={isPending}
+                      className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
+                    >
+                      <Trash2 className="h-3 w-3" />
+                      Eliminar
+                    </button>
+                    <button
+                      onClick={() => setReorderingWeeks(true)}
+                      disabled={isPending}
+                      className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-zinc-400 hover:text-zinc-300 disabled:opacity-40"
+                    >
+                      <ChevronLeft className="h-3 w-3" />
+                      <ChevronRight className="h-3 w-3 -ml-1.5" />
+                      Reordenar
+                    </button>
+                  </>
+                )}
+              </>
+            ) : (
+              <button
+                onClick={() => setReorderingWeeks(false)}
+                className="flex items-center gap-1 rounded-lg bg-yellow-400/10 border border-yellow-400/30 px-2.5 py-1.5 text-[11px] font-black text-yellow-400 transition hover:bg-yellow-400/20"
+              >
+                Listo
+              </button>
+            )
           )}
         </div>
       </div>
@@ -371,17 +398,17 @@ export function TemplateEditorClient({ templateId }: Props) {
               const isActive = selectedDay === i + 1;
               return (
                 <div key={weekSessions[i]?.id ?? i} className="flex shrink-0 items-center gap-0.5">
-                  {isActive && i > 0 && (
+                  {reorderingDays && isActive && i > 0 && (
                     <button
                       onClick={() => handleSwapDay('left')}
                       disabled={isPending}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition disabled:opacity-40"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-800 text-zinc-100 hover:bg-zinc-700 transition disabled:opacity-40"
                     >
-                      <ChevronLeft className="h-3.5 w-3.5" />
+                      <ChevronLeft className="h-4 w-4" />
                     </button>
                   )}
                   <button
-                    onClick={() => setSelectedDay(i + 1)}
+                    onClick={() => { setSelectedDay(i + 1); setAllExpanded(false); }}
                     className={`rounded-lg px-4 py-2 text-xs font-black uppercase tracking-widest transition ${
                       isActive
                         ? "bg-zinc-100 text-zinc-900"
@@ -390,13 +417,13 @@ export function TemplateEditorClient({ templateId }: Props) {
                   >
                     {label}
                   </button>
-                  {isActive && i < dayTabLabels.length - 1 && (
+                  {reorderingDays && isActive && i < dayTabLabels.length - 1 && (
                     <button
                       onClick={() => handleSwapDay('right')}
                       disabled={isPending}
-                      className="flex h-6 w-6 items-center justify-center rounded-md text-zinc-500 hover:bg-zinc-800 hover:text-zinc-200 transition disabled:opacity-40"
+                      className="flex h-7 w-7 items-center justify-center rounded-lg bg-zinc-800 text-zinc-100 hover:bg-zinc-700 transition disabled:opacity-40"
                     >
-                      <ChevronRight className="h-3.5 w-3.5" />
+                      <ChevronRight className="h-4 w-4" />
                     </button>
                   )}
                 </div>
@@ -406,23 +433,47 @@ export function TemplateEditorClient({ templateId }: Props) {
 
           {/* Acciones de día */}
           <div className="mt-1.5 flex items-center gap-1.5">
-            <button
-              onClick={handleAddDay}
-              disabled={isPending}
-              className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-40"
-            >
-              <Plus className="h-3 w-3" />
-              Agregar
-            </button>
-            {weekSessions.length > 1 && (
-              <button
-                onClick={() => setConfirmRemoveDay(true)}
-                disabled={isPending}
-                className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
-              >
-                <Trash2 className="h-3 w-3" />
-                Eliminar
-              </button>
+            {!reorderingWeeks && (
+              !reorderingDays ? (
+                <>
+                  <button
+                    onClick={handleAddDay}
+                    disabled={isPending}
+                    className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-yellow-400 hover:text-yellow-400 disabled:opacity-40"
+                  >
+                    <Plus className="h-3 w-3" />
+                    Agregar
+                  </button>
+                  {weekSessions.length > 1 && (
+                    <>
+                      <button
+                        onClick={() => setConfirmRemoveDay(true)}
+                        disabled={isPending}
+                        className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-red-500/50 hover:text-red-400 disabled:opacity-40"
+                      >
+                        <Trash2 className="h-3 w-3" />
+                        Eliminar
+                      </button>
+                      <button
+                        onClick={() => setReorderingDays(true)}
+                        disabled={isPending}
+                        className="flex items-center gap-1 rounded-lg border border-dashed border-zinc-700 px-2.5 py-1.5 text-[11px] font-black text-zinc-500 transition hover:border-zinc-400 hover:text-zinc-300 disabled:opacity-40"
+                      >
+                        <ChevronLeft className="h-3 w-3" />
+                        <ChevronRight className="h-3 w-3 -ml-1.5" />
+                        Reordenar
+                      </button>
+                    </>
+                  )}
+                </>
+              ) : (
+                <button
+                  onClick={() => setReorderingDays(false)}
+                  className="flex items-center gap-1 rounded-lg bg-zinc-100/10 border border-zinc-100/20 px-2.5 py-1.5 text-[11px] font-black text-zinc-200 transition hover:bg-zinc-100/20"
+                >
+                  Listo
+                </button>
+              )
             )}
           </div>
         </div>
@@ -454,14 +505,25 @@ export function TemplateEditorClient({ templateId }: Props) {
                 {activeSession.session_exercises?.length ?? 0} ejercicios
               </p>
             </div>
-            <button
-              onClick={() => setIsExModalOpen(true)}
-              className="flex items-center gap-1.5 rounded-xl bg-yellow-400 px-4 py-2 text-xs font-black text-black transition hover:scale-105 active:scale-95"
-            >
-              <Plus className="h-3.5 w-3.5" />
-              <span className="hidden sm:inline">Agregar ejercicio</span>
-              <span className="sm:hidden">Agregar</span>
-            </button>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={() => setAllExpanded(v => !v)}
+                className="flex items-center justify-center h-8 w-8 rounded-lg border border-zinc-700 bg-zinc-800 text-zinc-400 transition hover:text-zinc-100 hover:border-zinc-600"
+                title={allExpanded ? "Colapsar todo" : "Expandir todo"}
+              >
+                {allExpanded
+                  ? <ChevronsDownUp className="h-3.5 w-3.5" />
+                  : <ChevronsUpDown className="h-3.5 w-3.5" />}
+              </button>
+              <button
+                onClick={() => setIsExModalOpen(true)}
+                className="flex items-center gap-1.5 rounded-xl bg-yellow-400 px-4 py-2 text-xs font-black text-black transition hover:scale-105 active:scale-95"
+              >
+                <Plus className="h-3.5 w-3.5" />
+                <span className="hidden sm:inline">Agregar ejercicio</span>
+                <span className="sm:hidden">Agregar</span>
+              </button>
+            </div>
           </div>
 
           <ExerciseFormModal
@@ -479,6 +541,7 @@ export function TemplateEditorClient({ templateId }: Props) {
               exercises={activeSession.session_exercises}
               role="COACH"
               isTemplate={true}
+              allExpanded={allExpanded}
               onMutated={invalidateTemplate}
             />
           ) : (

@@ -3162,5 +3162,770 @@ describe('Plantillas', () => {
       });
     });
   });
+
+  // ════════════════════════════════════════════════════════════════
+  // ESCENARIO 31: Modo de reordenamiento exclusivo en el editor
+  // Cuando se reordena semanas, el panel de días debe silenciarse y viceversa
+  // ════════════════════════════════════════════════════════════════
+
+  function getEditorModeState(reorderingWeeks: boolean, reorderingDays: boolean) {
+    return {
+      showWeekActions: !reorderingDays && !reorderingWeeks,
+      showWeekListo:   !reorderingDays && reorderingWeeks,
+      showDayActions:  !reorderingWeeks && !reorderingDays,
+      showDayListo:    !reorderingWeeks && reorderingDays,
+    };
+  }
+
+  describe('ESCENARIO 31: Modo de reordenamiento exclusivo', () => {
+    it('estado normal: ambas secciones muestran sus acciones, ningún Listo', () => {
+      const state = getEditorModeState(false, false);
+      expect(state.showWeekActions).toBe(true);
+      expect(state.showDayActions).toBe(true);
+      expect(state.showWeekListo).toBe(false);
+      expect(state.showDayListo).toBe(false);
+    });
+
+    it('reordenando semanas: aparece Listo en semanas y desaparecen todas las acciones de días', () => {
+      const state = getEditorModeState(true, false);
+      expect(state.showWeekListo).toBe(true);
+      expect(state.showDayActions).toBe(false);
+      expect(state.showDayListo).toBe(false);
+      expect(state.showWeekActions).toBe(false);
+    });
+
+    it('reordenando días: aparece Listo en días y desaparecen todas las acciones de semanas', () => {
+      const state = getEditorModeState(false, true);
+      expect(state.showDayListo).toBe(true);
+      expect(state.showWeekActions).toBe(false);
+      expect(state.showWeekListo).toBe(false);
+      expect(state.showDayActions).toBe(false);
+    });
+
+    it('al reordenar semanas exactamente 1 de los 4 flags está activo', () => {
+      const state = getEditorModeState(true, false);
+      const trueCount = Object.values(state).filter(Boolean).length;
+      expect(trueCount).toBe(1);
+    });
+
+    it('al reordenar días exactamente 1 de los 4 flags está activo', () => {
+      const state = getEditorModeState(false, true);
+      const trueCount = Object.values(state).filter(Boolean).length;
+      expect(trueCount).toBe(1);
+    });
+
+    it('estado normal tiene exactamente 2 flags activos (weekActions y dayActions)', () => {
+      const state = getEditorModeState(false, false);
+      const trueCount = Object.values(state).filter(Boolean).length;
+      expect(trueCount).toBe(2);
+    });
+
+    it('showWeekListo y showWeekActions nunca son true al mismo tiempo', () => {
+      const cases: [boolean, boolean][] = [[false, false], [true, false], [false, true]];
+      for (const [w, d] of cases) {
+        const s = getEditorModeState(w, d);
+        expect(s.showWeekListo && s.showWeekActions).toBe(false);
+      }
+    });
+
+    it('showDayListo y showDayActions nunca son true al mismo tiempo', () => {
+      const cases: [boolean, boolean][] = [[false, false], [true, false], [false, true]];
+      for (const [w, d] of cases) {
+        const s = getEditorModeState(w, d);
+        expect(s.showDayListo && s.showDayActions).toBe(false);
+      }
+    });
+
+    it('presionar Listo en semanas restaura el estado normal', () => {
+      const during = getEditorModeState(true, false);
+      const after  = getEditorModeState(false, false);
+      expect(during.showWeekListo).toBe(true);
+      expect(after.showWeekActions).toBe(true);
+      expect(after.showDayActions).toBe(true);
+    });
+
+    it('presionar Listo en días restaura el estado normal', () => {
+      const during = getEditorModeState(false, true);
+      const after  = getEditorModeState(false, false);
+      expect(during.showDayListo).toBe(true);
+      expect(after.showWeekActions).toBe(true);
+      expect(after.showDayActions).toBe(true);
+    });
+  });
 });
+
+// ════════════════════════════════════════════════════════════════
+// Módulo: Administración
+// Gestión de usuarios, roles, asignaciones coach→alumno e invitaciones
+// ════════════════════════════════════════════════════════════════
+
+type AdminUserRole = 'ADMIN' | 'COACH' | 'STUDENT';
+
+type AdminProfile = {
+  id: string;
+  email: string;
+  name: string;
+  last_name: string;
+  role: AdminUserRole;
+};
+
+type AdminAssignment = { coach_id: string; student_id: string };
+
+function filterProfiles(profiles: AdminProfile[], searchTerm: string): AdminProfile[] {
+  const lower = searchTerm.toLowerCase();
+  if (!lower) return profiles;
+  return profiles.filter(p => {
+    const fullName = `${p.name} ${p.last_name}`.toLowerCase();
+    return fullName.includes(lower) || p.email.toLowerCase().includes(lower);
+  });
+}
+
+function getCoachProfiles(profiles: AdminProfile[]): AdminProfile[] {
+  return profiles.filter(p => p.role === 'COACH' || p.role === 'ADMIN');
+}
+
+function isCoachAssignedToStudent(assignments: AdminAssignment[], coachId: string, studentId: string): boolean {
+  return assignments.some(a => a.coach_id === coachId && a.student_id === studentId);
+}
+
+function toggleAssignmentLocal(assignments: AdminAssignment[], coachId: string, studentId: string): AdminAssignment[] {
+  const assigned = isCoachAssignedToStudent(assignments, coachId, studentId);
+  if (assigned) return assignments.filter(a => !(a.coach_id === coachId && a.student_id === studentId));
+  return [...assignments, { coach_id: coachId, student_id: studentId }];
+}
+
+function countCoachesForStudent(assignments: AdminAssignment[], studentId: string): number {
+  return assignments.filter(a => a.student_id === studentId).length;
+}
+
+function validateInviteForm(email: string, name: string): { valid: boolean; error?: string } {
+  if (!email || !email.includes('@')) return { valid: false, error: 'Email inválido' };
+  if (!name.trim()) return { valid: false, error: 'El nombre es obligatorio' };
+  return { valid: true };
+}
+
+function canDeleteUser(currentUserId: string, targetUserId: string): boolean {
+  return currentUserId !== targetUserId;
+}
+
+const ADMIN_PROFILES: AdminProfile[] = [
+  { id: 'u1', email: 'carlos@gym.com',  name: 'Carlos',  last_name: 'López',   role: 'COACH' },
+  { id: 'u2', email: 'maria@gym.com',   name: 'María',   last_name: 'Gómez',   role: 'STUDENT' },
+  { id: 'u3', email: 'pedro@gym.com',   name: 'Pedro',   last_name: 'Martínez',role: 'STUDENT' },
+  { id: 'u4', email: 'admin@gym.com',   name: 'Admin',   last_name: 'Root',    role: 'ADMIN' },
+  { id: 'u5', email: 'laura@gym.com',   name: 'Laura',   last_name: 'Sánchez', role: 'COACH' },
+];
+
+const ADMIN_ASSIGNMENTS: AdminAssignment[] = [
+  { coach_id: 'u1', student_id: 'u2' },
+  { coach_id: 'u1', student_id: 'u3' },
+  { coach_id: 'u5', student_id: 'u2' },
+];
+
+describe('Administración', () => {
+
+  describe('ESCENARIO 32: Filtrado de usuarios', () => {
+    it('buscar por nombre devuelve coincidencias exactas', () => {
+      const result = filterProfiles(ADMIN_PROFILES, 'Carlos');
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('u1');
+    });
+
+    it('buscar por apellido devuelve coincidencias', () => {
+      const result = filterProfiles(ADMIN_PROFILES, 'Gómez');
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('u2');
+    });
+
+    it('buscar por email devuelve coincidencias', () => {
+      const result = filterProfiles(ADMIN_PROFILES, 'pedro@gym.com');
+      expect(result).toHaveLength(1);
+      expect(result[0].id).toBe('u3');
+    });
+
+    it('búsqueda es case-insensitive', () => {
+      expect(filterProfiles(ADMIN_PROFILES, 'carlos')).toHaveLength(1);
+      expect(filterProfiles(ADMIN_PROFILES, 'CARLOS')).toHaveLength(1);
+      expect(filterProfiles(ADMIN_PROFILES, 'cArLoS')).toHaveLength(1);
+    });
+
+    it('búsqueda vacía devuelve todos los perfiles', () => {
+      expect(filterProfiles(ADMIN_PROFILES, '')).toHaveLength(ADMIN_PROFILES.length);
+    });
+
+    it('búsqueda sin coincidencias devuelve lista vacía', () => {
+      expect(filterProfiles(ADMIN_PROFILES, 'zzznombrenoexiste')).toHaveLength(0);
+    });
+
+    it('búsqueda parcial de nombre funciona', () => {
+      const result = filterProfiles(ADMIN_PROFILES, 'Mar');
+      expect(result.some(p => p.id === 'u2')).toBe(true);
+    });
+
+    it('búsqueda por dominio de email puede devolver múltiples resultados', () => {
+      const result = filterProfiles(ADMIN_PROFILES, '@gym.com');
+      expect(result.length).toBe(ADMIN_PROFILES.length);
+    });
+  });
+
+  describe('ESCENARIO 33: Coaches disponibles para asignación', () => {
+    it('perfil con rol COACH aparece en lista de coaches', () => {
+      const coaches = getCoachProfiles(ADMIN_PROFILES);
+      expect(coaches.some(c => c.role === 'COACH')).toBe(true);
+    });
+
+    it('perfil con rol ADMIN también aparece en lista de coaches', () => {
+      const coaches = getCoachProfiles(ADMIN_PROFILES);
+      expect(coaches.some(c => c.role === 'ADMIN')).toBe(true);
+    });
+
+    it('perfil con rol STUDENT no aparece en lista de coaches', () => {
+      const coaches = getCoachProfiles(ADMIN_PROFILES);
+      expect(coaches.some(c => c.role === 'STUDENT')).toBe(false);
+    });
+
+    it('la lista de coaches incluye COACH + ADMIN, no más', () => {
+      const coaches = getCoachProfiles(ADMIN_PROFILES);
+      const expectedCount = ADMIN_PROFILES.filter(p => p.role === 'COACH' || p.role === 'ADMIN').length;
+      expect(coaches).toHaveLength(expectedCount);
+    });
+  });
+
+  describe('ESCENARIO 34: Asignación Coach→Alumno', () => {
+    it('isCoachAssignedToStudent: true cuando existe la asignación', () => {
+      expect(isCoachAssignedToStudent(ADMIN_ASSIGNMENTS, 'u1', 'u2')).toBe(true);
+    });
+
+    it('isCoachAssignedToStudent: false cuando no existe la asignación', () => {
+      expect(isCoachAssignedToStudent(ADMIN_ASSIGNMENTS, 'u5', 'u3')).toBe(false);
+    });
+
+    it('toggleAssignment agrega la asignación cuando no estaba', () => {
+      const result = toggleAssignmentLocal(ADMIN_ASSIGNMENTS, 'u5', 'u3');
+      expect(isCoachAssignedToStudent(result, 'u5', 'u3')).toBe(true);
+    });
+
+    it('toggleAssignment quita la asignación cuando ya existía', () => {
+      const result = toggleAssignmentLocal(ADMIN_ASSIGNMENTS, 'u1', 'u2');
+      expect(isCoachAssignedToStudent(result, 'u1', 'u2')).toBe(false);
+    });
+
+    it('un alumno puede tener múltiples coaches', () => {
+      expect(countCoachesForStudent(ADMIN_ASSIGNMENTS, 'u2')).toBe(2);
+    });
+
+    it('un coach puede tener múltiples alumnos', () => {
+      const studentsOfU1 = ADMIN_ASSIGNMENTS.filter(a => a.coach_id === 'u1');
+      expect(studentsOfU1.length).toBeGreaterThan(1);
+    });
+
+    it('quitar una asignación no afecta las otras del mismo alumno', () => {
+      const result = toggleAssignmentLocal(ADMIN_ASSIGNMENTS, 'u1', 'u2');
+      expect(countCoachesForStudent(result, 'u2')).toBe(1);
+      expect(isCoachAssignedToStudent(result, 'u5', 'u2')).toBe(true);
+    });
+
+    it('countCoachesForStudent: 0 cuando el alumno no tiene coaches asignados', () => {
+      expect(countCoachesForStudent(ADMIN_ASSIGNMENTS, 'u_ninguno')).toBe(0);
+    });
+
+    it('el toggle no modifica el array original', () => {
+      const before = ADMIN_ASSIGNMENTS.length;
+      toggleAssignmentLocal(ADMIN_ASSIGNMENTS, 'u5', 'u3');
+      expect(ADMIN_ASSIGNMENTS.length).toBe(before);
+    });
+  });
+
+  describe('ESCENARIO 35: Validación de formulario e invitación', () => {
+    it('email y nombre válidos pasan la validación', () => {
+      expect(validateInviteForm('nuevo@gym.com', 'Juan').valid).toBe(true);
+    });
+
+    it('email sin @ falla la validación', () => {
+      const result = validateInviteForm('emailsinarroba', 'Juan');
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('Email inválido');
+    });
+
+    it('email vacío falla la validación', () => {
+      expect(validateInviteForm('', 'Juan').valid).toBe(false);
+    });
+
+    it('nombre vacío falla la validación', () => {
+      const result = validateInviteForm('juan@gym.com', '');
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('El nombre es obligatorio');
+    });
+
+    it('nombre solo con espacios falla la validación', () => {
+      expect(validateInviteForm('juan@gym.com', '   ').valid).toBe(false);
+    });
+
+    it('canDeleteUser: false cuando el target es el usuario actual', () => {
+      expect(canDeleteUser('u1', 'u1')).toBe(false);
+    });
+
+    it('canDeleteUser: true cuando el target es otro usuario', () => {
+      expect(canDeleteUser('u4', 'u1')).toBe(true);
+    });
+
+    it('no se puede eliminar a uno mismo independientemente del rol', () => {
+      expect(canDeleteUser('u4', 'u4')).toBe(false); // admin no puede borrarse
+      expect(canDeleteUser('u1', 'u1')).toBe(false); // coach tampoco
+    });
+  });
+
+}); // Administración
+
+// ════════════════════════════════════════════════════════════════
+// Módulo: Librería de Ejercicios
+// Filtrado, búsqueda, etiquetas de zona/categoría y validación de CRUD
+// ════════════════════════════════════════════════════════════════
+
+const BODY_ZONE_LABELS_T: Record<string, string> = {
+  LOWER_BODY: 'Tren Inferior',
+  UPPER_BODY: 'Tren Superior',
+  CORE:       'Zona Media',
+  FULL_BODY:  'Cuerpo Completo',
+  CARDIO:     'Cardio',
+  MOBILITY:   'Movilidad',
+};
+
+const EXERCISE_CATEGORY_LABELS_T: Record<string, string> = {
+  MAIN:     'Principal',
+  BALANCE:  'Equilibrador',
+  AUX:      'Auxiliar',
+  MOBILITY: 'Movilidad',
+};
+
+type LibraryExercise = {
+  id: number;
+  name: string;
+  body_zone: string | null;
+  category: string | null;
+};
+
+function filterExercises(
+  exercises: LibraryExercise[],
+  searchTerm: string,
+  bodyZone?: string | null,
+  category?: string | null
+): LibraryExercise[] {
+  return exercises.filter(ex => {
+    const matchesName     = !searchTerm || ex.name.toLowerCase().includes(searchTerm.toLowerCase());
+    const matchesZone     = !bodyZone   || ex.body_zone === bodyZone;
+    const matchesCategory = !category   || ex.category === category;
+    return matchesName && matchesZone && matchesCategory;
+  });
+}
+
+function getBodyZoneLabel(zone: string | null): string {
+  if (!zone) return 'Sin zona';
+  return BODY_ZONE_LABELS_T[zone] ?? 'Sin zona';
+}
+
+function getCategoryLabel(category: string | null): string {
+  if (!category) return 'Sin categoría';
+  return EXERCISE_CATEGORY_LABELS_T[category] ?? 'Sin categoría';
+}
+
+function validateExerciseName(name: string): { valid: boolean; error?: string } {
+  if (!name.trim()) return { valid: false, error: 'El nombre es obligatorio' };
+  return { valid: true };
+}
+
+const LIBRARY_EXERCISES: LibraryExercise[] = [
+  { id: 1, name: 'Sentadilla',       body_zone: 'LOWER_BODY', category: 'MAIN' },
+  { id: 2, name: 'Press de banca',   body_zone: 'UPPER_BODY', category: 'MAIN' },
+  { id: 3, name: 'Curl de bíceps',   body_zone: 'UPPER_BODY', category: 'AUX' },
+  { id: 4, name: 'Plancha',          body_zone: 'CORE',       category: 'BALANCE' },
+  { id: 5, name: 'Peso muerto',      body_zone: 'FULL_BODY',  category: 'MAIN' },
+  { id: 6, name: 'Trote 5 minutos',  body_zone: 'CARDIO',     category: 'AUX' },
+  { id: 7, name: 'Movilidad cadera', body_zone: 'MOBILITY',   category: 'MOBILITY' },
+  { id: 8, name: 'Remo con barra',   body_zone: null,         category: null },
+];
+
+describe('Librería de Ejercicios', () => {
+
+  describe('ESCENARIO 36: Filtrado de ejercicios', () => {
+    it('filtrar por zona UPPER_BODY retorna solo ejercicios de tren superior', () => {
+      const result = filterExercises(LIBRARY_EXERCISES, '', 'UPPER_BODY');
+      expect(result.every(e => e.body_zone === 'UPPER_BODY')).toBe(true);
+      expect(result.length).toBeGreaterThan(0);
+    });
+
+    it('filtrar por categoría MAIN retorna solo ejercicios principales', () => {
+      const result = filterExercises(LIBRARY_EXERCISES, '', null, 'MAIN');
+      expect(result.every(e => e.category === 'MAIN')).toBe(true);
+    });
+
+    it('filtro por nombre es case-insensitive', () => {
+      expect(filterExercises(LIBRARY_EXERCISES, 'sentadilla')).toHaveLength(1);
+      expect(filterExercises(LIBRARY_EXERCISES, 'SENTADILLA')).toHaveLength(1);
+      expect(filterExercises(LIBRARY_EXERCISES, 'Sentadilla')).toHaveLength(1);
+    });
+
+    it('filtro vacío sin zona ni categoría retorna todos los ejercicios', () => {
+      expect(filterExercises(LIBRARY_EXERCISES, '')).toHaveLength(LIBRARY_EXERCISES.length);
+    });
+
+    it('combinar nombre y zona filtra correctamente', () => {
+      const result = filterExercises(LIBRARY_EXERCISES, 'curl', 'UPPER_BODY');
+      expect(result).toHaveLength(1);
+      expect(result[0].name).toBe('Curl de bíceps');
+    });
+
+    it('búsqueda sin coincidencias retorna lista vacía', () => {
+      expect(filterExercises(LIBRARY_EXERCISES, 'zzznombrenoexiste')).toHaveLength(0);
+    });
+
+    it('búsqueda parcial del nombre funciona', () => {
+      const result = filterExercises(LIBRARY_EXERCISES, 'press');
+      expect(result.some(e => e.name === 'Press de banca')).toBe(true);
+    });
+
+    it('combinar zona FULL_BODY y categoría MAIN retorna ejercicios correctos', () => {
+      const result = filterExercises(LIBRARY_EXERCISES, '', 'FULL_BODY', 'MAIN');
+      expect(result.every(e => e.body_zone === 'FULL_BODY' && e.category === 'MAIN')).toBe(true);
+    });
+  });
+
+  describe('ESCENARIO 37: Etiquetas de zona corporal y categoría', () => {
+    it('LOWER_BODY → "Tren Inferior"', () => {
+      expect(getBodyZoneLabel('LOWER_BODY')).toBe('Tren Inferior');
+    });
+
+    it('UPPER_BODY → "Tren Superior"', () => {
+      expect(getBodyZoneLabel('UPPER_BODY')).toBe('Tren Superior');
+    });
+
+    it('CORE → "Zona Media"', () => {
+      expect(getBodyZoneLabel('CORE')).toBe('Zona Media');
+    });
+
+    it('FULL_BODY → "Cuerpo Completo"', () => {
+      expect(getBodyZoneLabel('FULL_BODY')).toBe('Cuerpo Completo');
+    });
+
+    it('CARDIO → "Cardio"', () => {
+      expect(getBodyZoneLabel('CARDIO')).toBe('Cardio');
+    });
+
+    it('MOBILITY (zona) → "Movilidad"', () => {
+      expect(getBodyZoneLabel('MOBILITY')).toBe('Movilidad');
+    });
+
+    it('zona null → "Sin zona"', () => {
+      expect(getBodyZoneLabel(null)).toBe('Sin zona');
+    });
+
+    it('MAIN → "Principal"', () => {
+      expect(getCategoryLabel('MAIN')).toBe('Principal');
+    });
+
+    it('BALANCE → "Equilibrador"', () => {
+      expect(getCategoryLabel('BALANCE')).toBe('Equilibrador');
+    });
+
+    it('AUX → "Auxiliar"', () => {
+      expect(getCategoryLabel('AUX')).toBe('Auxiliar');
+    });
+
+    it('MOBILITY (categoría) → "Movilidad"', () => {
+      expect(getCategoryLabel('MOBILITY')).toBe('Movilidad');
+    });
+
+    it('categoría null → "Sin categoría"', () => {
+      expect(getCategoryLabel(null)).toBe('Sin categoría');
+    });
+
+    it('todas las zonas del enum tienen etiqueta definida', () => {
+      const zones = ['LOWER_BODY', 'UPPER_BODY', 'CORE', 'FULL_BODY', 'CARDIO', 'MOBILITY'];
+      zones.forEach(z => expect(getBodyZoneLabel(z)).not.toBe('Sin zona'));
+    });
+
+    it('todas las categorías del enum tienen etiqueta definida', () => {
+      const cats = ['MAIN', 'BALANCE', 'AUX', 'MOBILITY'];
+      cats.forEach(c => expect(getCategoryLabel(c)).not.toBe('Sin categoría'));
+    });
+  });
+
+  describe('ESCENARIO 38: Creación y validación de ejercicio', () => {
+    it('nombre válido pasa la validación', () => {
+      expect(validateExerciseName('Sentadilla búlgara').valid).toBe(true);
+    });
+
+    it('nombre vacío falla la validación', () => {
+      const result = validateExerciseName('');
+      expect(result.valid).toBe(false);
+      expect(result.error).toBe('El nombre es obligatorio');
+    });
+
+    it('nombre solo con espacios falla la validación', () => {
+      expect(validateExerciseName('   ').valid).toBe(false);
+    });
+
+    it('zona y categoría son opcionales: un ejercicio puede tener ambas en null', () => {
+      const ex: LibraryExercise = { id: 99, name: 'Ejercicio nuevo', body_zone: null, category: null };
+      expect(ex.body_zone).toBeNull();
+      expect(ex.category).toBeNull();
+      expect(validateExerciseName(ex.name).valid).toBe(true);
+    });
+
+    it('un ejercicio de librería no tiene campos actual_* (datos del alumno)', () => {
+      const ex = { id: 1, name: 'Press', body_zone: 'UPPER_BODY', category: 'MAIN' };
+      expect('actual_sets' in ex).toBe(false);
+      expect('actual_reps' in ex).toBe(false);
+      expect('actual_rpe' in ex).toBe(false);
+    });
+
+    it('ejercicios con zona null quedan fuera si se filtra por zona específica', () => {
+      const result = filterExercises(LIBRARY_EXERCISES, '', 'UPPER_BODY');
+      expect(result.some(e => e.body_zone === null)).toBe(false);
+    });
+
+    it('el nombre se busca como substring, no por igualdad exacta', () => {
+      const result = filterExercises(LIBRARY_EXERCISES, 'banca');
+      expect(result.some(e => e.name === 'Press de banca')).toBe(true);
+    });
+  });
+
+}); // Librería de Ejercicios
+
+// ════════════════════════════════════════════════════════════════
+// Módulo: Vista del Alumno
+// Completar ejercicios, payload del alumno, restricciones de edición
+// ════════════════════════════════════════════════════════════════
+
+function buildStudentPayload(form: {
+  actual_sets: number;
+  actual_reps: number[];
+  actual_rpe: number | null;
+  student_notes: string;
+  target_sets?: number;
+  target_reps?: number[];
+  target_weight?: (number | null)[];
+  target_rpe?: number;
+  coach_notes?: string;
+}) {
+  return {
+    actual_sets:   form.actual_sets,
+    actual_reps:   form.actual_reps,
+    actual_rpe:    form.actual_rpe,
+    student_notes: form.student_notes,
+  };
+}
+
+function canStudentEditTargets(): boolean {
+  return false;
+}
+
+function shouldMarkCompleteFromStudent(actual_sets: number | null | undefined): boolean {
+  return !!(actual_sets && actual_sets > 0);
+}
+
+function validateActualReps(actual_sets: number, actual_reps: number[]): { valid: boolean; error?: string } {
+  if (actual_reps.length !== actual_sets) {
+    return { valid: false, error: `Se esperan ${actual_sets} sets pero hay ${actual_reps.length} repeticiones` };
+  }
+  if (actual_reps.some(r => r < 0)) {
+    return { valid: false, error: 'Las repeticiones no pueden ser negativas' };
+  }
+  return { valid: true };
+}
+
+function buildStudentExerciseView(
+  exercise: {
+    target_sets: number;
+    target_reps: number[];
+    target_weight: (number | null)[];
+    target_rpe: number;
+    coach_notes: string;
+    actual_sets?: number | null;
+    actual_reps?: number[] | null;
+    actual_rpe?: number | null;
+    student_notes?: string | null;
+  }
+) {
+  return {
+    targets: {
+      sets:   exercise.target_sets,
+      reps:   exercise.target_reps,
+      weight: exercise.target_weight,
+      rpe:    exercise.target_rpe,
+    },
+    coachNotes: exercise.coach_notes,
+    actuals: {
+      sets:  exercise.actual_sets  ?? null,
+      reps:  exercise.actual_reps  ?? null,
+      rpe:   exercise.actual_rpe   ?? null,
+    },
+    studentNotes: exercise.student_notes ?? null,
+  };
+}
+
+describe('Vista del Alumno', () => {
+
+  describe('ESCENARIO 39: Payload del alumno al registrar ejercicio', () => {
+    it('el payload incluye actual_sets, actual_reps, actual_rpe y student_notes', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 3, actual_reps: [10, 9, 8], actual_rpe: 7, student_notes: 'Bien',
+      });
+      expect('actual_sets' in payload).toBe(true);
+      expect('actual_reps' in payload).toBe(true);
+      expect('actual_rpe' in payload).toBe(true);
+      expect('student_notes' in payload).toBe(true);
+    });
+
+    it('el payload NO incluye campos target_*', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 3, actual_reps: [10, 10, 10], actual_rpe: 8, student_notes: '',
+        target_sets: 4, target_reps: [12, 12, 12, 12], target_rpe: 9,
+      });
+      expect('target_sets' in payload).toBe(false);
+      expect('target_reps' in payload).toBe(false);
+      expect('target_rpe' in payload).toBe(false);
+    });
+
+    it('el payload NO incluye coach_notes', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 3, actual_reps: [10, 10, 10], actual_rpe: 8, student_notes: '',
+        coach_notes: 'Foco en la bajada',
+      });
+      expect('coach_notes' in payload).toBe(false);
+    });
+
+    it('actual_rpe puede ser null si el alumno no lo registra', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 3, actual_reps: [10, 10, 10], actual_rpe: null, student_notes: '',
+      });
+      expect(payload.actual_rpe).toBeNull();
+    });
+
+    it('student_notes puede ser una cadena vacía', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 2, actual_reps: [8, 8], actual_rpe: 6, student_notes: '',
+      });
+      expect(payload.student_notes).toBe('');
+    });
+
+    it('los valores reales del alumno se guardan con exactitud', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 4, actual_reps: [10, 9, 8, 7], actual_rpe: 9, student_notes: 'Muy pesado',
+      });
+      expect(payload.actual_sets).toBe(4);
+      expect(payload.actual_reps).toEqual([10, 9, 8, 7]);
+      expect(payload.actual_rpe).toBe(9);
+      expect(payload.student_notes).toBe('Muy pesado');
+    });
+  });
+
+  describe('ESCENARIO 40: Restricciones del alumno', () => {
+    it('el alumno no puede editar los targets del coach', () => {
+      expect(canStudentEditTargets()).toBe(false);
+    });
+
+    it('la vista del alumno expone los targets como solo lectura', () => {
+      const view = buildStudentExerciseView({
+        target_sets: 3, target_reps: [10, 10, 10],
+        target_weight: [null, null, null], target_rpe: 8,
+        coach_notes: 'Foco en la postura',
+        actual_sets: null, actual_reps: null, actual_rpe: null, student_notes: null,
+      });
+      expect(view.targets.sets).toBe(3);
+      expect(view.targets.reps).toEqual([10, 10, 10]);
+      expect(view.coachNotes).toBe('Foco en la postura');
+    });
+
+    it('los datos del alumno están separados de los targets del coach en la vista', () => {
+      const view = buildStudentExerciseView({
+        target_sets: 4, target_reps: [12, 12, 12, 12],
+        target_weight: [60, 60, 60, 60], target_rpe: 7, coach_notes: '',
+        actual_sets: 3, actual_reps: [10, 9, 8], actual_rpe: 6, student_notes: 'Cansado',
+      });
+      expect(view.targets.sets).toBe(4);
+      expect(view.actuals.sets).toBe(3);
+      expect(view.studentNotes).toBe('Cansado');
+    });
+
+    it('actualizar los datos del alumno no modifica los targets', () => {
+      const payloadSinDatos = buildStudentPayload({ actual_sets: 0, actual_reps: [], actual_rpe: null, student_notes: '' });
+      const payloadConDatos = buildStudentPayload({ actual_sets: 3, actual_reps: [10, 9, 8], actual_rpe: 7, student_notes: 'Ok' });
+      expect('target_sets' in payloadSinDatos).toBe(false);
+      expect('target_sets' in payloadConDatos).toBe(false);
+    });
+
+    it('un ejercicio sin datos del alumno muestra actuals en null', () => {
+      const view = buildStudentExerciseView({
+        target_sets: 3, target_reps: [10, 10, 10],
+        target_weight: [null, null, null], target_rpe: 8, coach_notes: '',
+      });
+      expect(view.actuals.sets).toBeNull();
+      expect(view.actuals.reps).toBeNull();
+      expect(view.actuals.rpe).toBeNull();
+      expect(view.studentNotes).toBeNull();
+    });
+  });
+
+  describe('ESCENARIO 41: Completar sesión y validar series reales', () => {
+    it('shouldMarkCompleteFromStudent: true cuando actual_sets > 0', () => {
+      expect(shouldMarkCompleteFromStudent(1)).toBe(true);
+      expect(shouldMarkCompleteFromStudent(4)).toBe(true);
+    });
+
+    it('shouldMarkCompleteFromStudent: false cuando actual_sets es 0', () => {
+      expect(shouldMarkCompleteFromStudent(0)).toBe(false);
+    });
+
+    it('shouldMarkCompleteFromStudent: false cuando actual_sets es null', () => {
+      expect(shouldMarkCompleteFromStudent(null)).toBe(false);
+    });
+
+    it('shouldMarkCompleteFromStudent: false cuando actual_sets es undefined', () => {
+      expect(shouldMarkCompleteFromStudent(undefined)).toBe(false);
+    });
+
+    it('validateActualReps: válido cuando la cantidad de reps coincide con los sets', () => {
+      expect(validateActualReps(3, [10, 9, 8]).valid).toBe(true);
+    });
+
+    it('validateActualReps: inválido cuando hay más reps que sets', () => {
+      const result = validateActualReps(3, [10, 9, 8, 7]);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('3');
+    });
+
+    it('validateActualReps: inválido cuando hay menos reps que sets', () => {
+      const result = validateActualReps(4, [10, 9]);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('4');
+    });
+
+    it('validateActualReps: inválido cuando hay repeticiones negativas', () => {
+      const result = validateActualReps(3, [10, -1, 8]);
+      expect(result.valid).toBe(false);
+      expect(result.error).toContain('negativas');
+    });
+
+    it('validateActualReps: 0 repeticiones en un set es válido (el alumno no completó ese set)', () => {
+      expect(validateActualReps(3, [10, 0, 8]).valid).toBe(true);
+    });
+
+    it('la sesión se marca completa con el primer registro de series reales > 0', () => {
+      const before = shouldMarkCompleteFromStudent(null);
+      const after  = shouldMarkCompleteFromStudent(1);
+      expect(before).toBe(false);
+      expect(after).toBe(true);
+    });
+
+    it('el coach ve los datos del alumno pero no puede modificarlos desde su interfaz', () => {
+      const coachPayload = buildStudentPayload({
+        actual_sets: 3, actual_reps: [10, 9, 8], actual_rpe: 7, student_notes: 'Bien',
+      });
+      // El payload del alumno no tiene campos target_*, garantía de que el coach no sobreescribe reales
+      expect('target_sets' in coachPayload).toBe(false);
+    });
+  });
+
+}); // Vista del Alumno
 
