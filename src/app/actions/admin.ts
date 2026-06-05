@@ -110,12 +110,115 @@ export async function updateUserAsAdmin(userId: string, name: string, lastName: 
   return { success: true };
 }
 
+export async function getUserDeleteSummary(userId: string): Promise<{
+  role: string;
+  planCount: number;
+  templateCount: number;
+}> {
+  await ensureAdmin();
+  const adminClient = createSupabaseAdminClient();
+
+  const { data: profile } = await adminClient
+    .from("profiles")
+    .select("role")
+    .eq("id", userId as any)
+    .single();
+
+  const role = (profile as any)?.role ?? "STUDENT";
+
+  if (role === "STUDENT") {
+    const { count } = await adminClient
+      .from("training_plans")
+      .select("id", { count: "exact", head: true })
+      .eq("student_id", userId as any)
+      .eq("is_template", false as any);
+    return { role, planCount: count ?? 0, templateCount: 0 };
+  }
+
+  const { count } = await adminClient
+    .from("training_plans")
+    .select("id", { count: "exact", head: true })
+    .eq("coach_id", userId as any)
+    .eq("is_template", true as any);
+  return { role, planCount: 0, templateCount: count ?? 0 };
+}
+
 export async function deleteUser(userId: string) {
   await ensureAdmin();
   const adminClient = createSupabaseAdminClient();
 
-  const { error } = await adminClient.auth.admin.deleteUser(userId);
+  // 1. Determine role for cascade logic
+  const { data: profile } = await adminClient
+    .from("profiles")
+    .select("role")
+    .eq("id", userId as any)
+    .single();
+  const role = (profile as any)?.role ?? "STUDENT";
 
+  if (role === "STUDENT") {
+    // Get student's plans
+    const { data: plans } = await adminClient
+      .from("training_plans")
+      .select("id")
+      .eq("student_id", userId as any)
+      .eq("is_template", false as any);
+    const planIds = (plans ?? []).map((p: any) => p.id as number);
+
+    if (planIds.length > 0) {
+      const { data: sessions } = await adminClient
+        .from("sessions")
+        .select("id")
+        .in("plan_id", planIds as any);
+      const sessionIds = (sessions ?? []).map((s: any) => s.id as number);
+
+      if (sessionIds.length > 0) {
+        await adminClient.from("session_exercises").delete().in("session_id", sessionIds as any);
+      }
+      await adminClient.from("sessions").delete().in("plan_id", planIds as any);
+      await adminClient.from("training_plans").delete().in("id", planIds as any);
+    }
+  } else {
+    // COACH or ADMIN: delete templates, nullify coach_id on student plans
+    const { data: templates } = await adminClient
+      .from("training_plans")
+      .select("id")
+      .eq("coach_id", userId as any)
+      .eq("is_template", true as any);
+    const templateIds = (templates ?? []).map((t: any) => t.id as number);
+
+    if (templateIds.length > 0) {
+      const { data: sessions } = await adminClient
+        .from("sessions")
+        .select("id")
+        .in("plan_id", templateIds as any);
+      const sessionIds = (sessions ?? []).map((s: any) => s.id as number);
+
+      if (sessionIds.length > 0) {
+        await adminClient.from("session_exercises").delete().in("session_id", sessionIds as any);
+      }
+      await adminClient.from("sessions").delete().in("plan_id", templateIds as any);
+      await adminClient.from("training_plans").delete().in("id", templateIds as any);
+    }
+
+    // Nullify coach_id on student plans (preserve the plans)
+    await adminClient
+      .from("training_plans")
+      .update({ coach_id: null } as any)
+      .eq("coach_id", userId as any)
+      .eq("is_template", false as any);
+  }
+
+  // Delete coach-student relationships
+  await (adminClient as any)
+    .from("coach_students")
+    .delete()
+    .or(`coach_id.eq.${userId},student_id.eq.${userId}`);
+
+  // Delete profile
+  await adminClient.from("profiles").delete().eq("id", userId as any);
+
+  // Delete from Auth
+  const { error } = await adminClient.auth.admin.deleteUser(userId);
   if (error) throw error;
 
   revalidatePath("/admin/dashboard");

@@ -56,6 +56,8 @@ import {
   countCoachesForStudent, validateInviteForm, canDeleteUser,
 } from '@/lib/admin/filters';
 
+import { getDeleteScope, buildDeleteSummary } from '@/lib/admin/delete';
+
 import {
   type LibraryExercise, filterExercises, validateExerciseName,
   getBodyZoneLabel, getCategoryLabel,
@@ -2875,6 +2877,82 @@ describe('Administración', () => {
     it('no se puede eliminar a uno mismo independientemente del rol', () => {
       expect(canDeleteUser('u4', 'u4')).toBe(false); // admin no puede borrarse
       expect(canDeleteUser('u1', 'u1')).toBe(false); // coach tampoco
+    });
+  });
+
+  describe('ESCENARIO 42: Lógica de delete en cascada', () => {
+    describe('getDeleteScope', () => {
+      it('STUDENT: elimina planes, no templates, no nullifica coach_id', () => {
+        const scope = getDeleteScope('STUDENT');
+        expect(scope.deletesPlans).toBe(true);
+        expect(scope.deletesTemplates).toBe(false);
+        expect(scope.nullifiesCoachId).toBe(false);
+      });
+
+      it('COACH: no elimina planes, elimina templates, nullifica coach_id', () => {
+        const scope = getDeleteScope('COACH');
+        expect(scope.deletesPlans).toBe(false);
+        expect(scope.deletesTemplates).toBe(true);
+        expect(scope.nullifiesCoachId).toBe(true);
+      });
+
+      it('ADMIN: mismo comportamiento que COACH', () => {
+        const scopeAdmin = getDeleteScope('ADMIN');
+        const scopeCoach = getDeleteScope('COACH');
+        expect(scopeAdmin.deletesPlans).toBe(scopeCoach.deletesPlans);
+        expect(scopeAdmin.deletesTemplates).toBe(scopeCoach.deletesTemplates);
+        expect(scopeAdmin.nullifiesCoachId).toBe(scopeCoach.nullifiesCoachId);
+      });
+    });
+
+    describe('buildDeleteSummary', () => {
+      it('STUDENT con 3 planes: menciona el número y la palabra "planes"', () => {
+        const msg = buildDeleteSummary('STUDENT', 3, 0);
+        expect(msg).toContain('3');
+        expect(msg.toLowerCase()).toContain('plan');
+      });
+
+      it('STUDENT con 1 plan: usa singular "plan"', () => {
+        const msg = buildDeleteSummary('STUDENT', 1, 0);
+        expect(msg.toLowerCase()).toMatch(/\b1 plan\b/);
+      });
+
+      it('STUDENT con 0 planes: mensaje sin datos que eliminar', () => {
+        const msg = buildDeleteSummary('STUDENT', 0, 0);
+        expect(msg.toLowerCase()).not.toContain('eliminará');
+      });
+
+      it('COACH con 5 plantillas: menciona el número y la palabra "plantillas"', () => {
+        const msg = buildDeleteSummary('COACH', 0, 5);
+        expect(msg).toContain('5');
+        expect(msg.toLowerCase()).toContain('plantilla');
+      });
+
+      it('COACH con 1 plantilla: usa singular "plantilla"', () => {
+        const msg = buildDeleteSummary('COACH', 0, 1);
+        expect(msg.toLowerCase()).toMatch(/\b1 plantilla\b/);
+      });
+
+      it('ADMIN con 2 plantillas: mismo formato que COACH', () => {
+        const msgAdmin = buildDeleteSummary('ADMIN', 0, 2);
+        const msgCoach = buildDeleteSummary('COACH', 0, 2);
+        expect(msgAdmin).toBe(msgCoach);
+      });
+
+      it('COACH con 0 plantillas: mensaje sin datos que eliminar', () => {
+        const msg = buildDeleteSummary('COACH', 0, 0);
+        expect(msg.toLowerCase()).not.toContain('eliminará');
+      });
+
+      it('el resumen de STUDENT no menciona plantillas', () => {
+        const msg = buildDeleteSummary('STUDENT', 3, 0);
+        expect(msg.toLowerCase()).not.toContain('plantilla');
+      });
+
+      it('el resumen de COACH no menciona planes de entrenamiento del alumno', () => {
+        const msg = buildDeleteSummary('COACH', 0, 3);
+        expect(msg.toLowerCase()).not.toContain('plan de');
+      });
     });
   });
 
