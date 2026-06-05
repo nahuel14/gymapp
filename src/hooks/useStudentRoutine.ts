@@ -97,7 +97,7 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
   const { data: sessionExercises } = await supabase
     .from("session_exercises")
     .select(
-      "*, exercise:exercises(name, body_zone, category)",
+      "*, exercise:exercises(name, body_zone)",
     )
     .in("session_id", sessionIds)
     .order("order_index", { ascending: true });

@@ -53,8 +53,7 @@ export async function GET(
             exercises (
               id,
               name,
-              body_zone,
-              category
+              body_zone
             )
           )
         )
