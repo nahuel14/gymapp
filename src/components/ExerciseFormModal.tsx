@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { Plus, X, Database } from "lucide-react";
-import { BODY_ZONE_LABELS, EXERCISE_CATEGORY_LABELS } from "@/lib/constants";
+import { BODY_ZONE_LABELS } from "@/lib/constants";
 import { createInlineExercise } from "@/app/(dashboard)/coach/student/actions";
 import { useQueryClient } from "@tanstack/react-query";
 
@@ -44,7 +44,6 @@ export function ExerciseFormModal({
   const [newLibraryEx, setNewLibraryEx] = useState({
     name: "",
     body_zone: "",
-    category: ""
   });
 
   if (!isOpen) return null;
@@ -77,7 +76,7 @@ export function ExerciseFormModal({
       
       // 4. Volvemos a la vista normal
       setIsCreatingInline(false);
-      setNewLibraryEx({ name: "", body_zone: "", category: "" });
+      setNewLibraryEx({ name: "", body_zone: "" });
       setExerciseSearch("");
       
       // 5. Le decimos a React Query que re-valide la caché en segundo plano
@@ -144,17 +143,6 @@ export function ExerciseFormModal({
                 >
                   <option value="">Zona del Cuerpo (Opcional)</option>
                   {Object.entries(BODY_ZONE_LABELS || {}).map(([key, label]) => (
-                    <option key={key} value={key}>{label as string}</option>
-                  ))}
-                </select>
-
-                <select 
-                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 text-sm text-zinc-100 outline-none focus:border-yellow-400 appearance-none"
-                  value={newLibraryEx.category}
-                  onChange={e => setNewLibraryEx({...newLibraryEx, category: e.target.value})}
-                >
-                  <option value="">Categoría (Opcional)</option>
-                  {Object.entries(EXERCISE_CATEGORY_LABELS || {}).map(([key, label]) => (
                     <option key={key} value={key}>{label as string}</option>
                   ))}
                 </select>

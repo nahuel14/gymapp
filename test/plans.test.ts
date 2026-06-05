@@ -2981,7 +2981,7 @@ const LIBRARY_EXERCISES: LibraryExercise[] = [
   { id: 8, name: 'Remo con barra',   body_zone: null,         category: null },
 ];
 
-describe('Biblioteca', () => {
+describe('Ejercicios', () => {
 
   describe('ESCENARIO 36: Filtrado de ejercicios', () => {
     it('filtrar por zona UPPER_BODY retorna solo ejercicios de tren superior', () => {

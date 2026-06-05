@@ -146,7 +146,7 @@ function getBottomNavItems(role: UserRole): BottomNavItem[] {
     },
     {
       href: "/coach/library",
-      label: "Biblioteca",
+      label: "Ejercicios",
       icon: <Library className="h-5 w-5" />,
     },
     {

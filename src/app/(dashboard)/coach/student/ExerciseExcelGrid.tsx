@@ -3,7 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import {
   Play,
-  Settings2,
+  Pencil,
   Trash2,
   PlusCircle,
   ChevronDown,
@@ -12,8 +12,9 @@ import {
   ArrowDown,
   Link2,
   Link2Off,
+  X,
 } from "lucide-react";
-import { BODY_ZONE_LABELS, EXERCISE_CATEGORY_LABELS } from "@/lib/constants";
+import { BODY_ZONE_LABELS } from "@/lib/constants";
 import {
   updateExerciseInSession,
   deleteExerciseFromSession,
@@ -42,6 +43,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
   const sortedExercises = [...exercises].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
 
   const [expandedIds, setExpandedIds] = useState<Set<number>>(new Set());
+  const [exerciseToDelete, setExerciseToDelete] = useState<number | null>(null);
 
   useEffect(() => {
     setExpandedIds(allExpanded ? new Set(exercises.map(e => e.id)) : new Set());
@@ -131,10 +133,16 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     });
   };
 
-  const handleDelete = async (id: number) => {
-    if (!confirm("¿Eliminar ejercicio?")) return;
+  const handleDelete = (id: number) => {
+    setExerciseToDelete(id);
+  };
+
+  const handleConfirmDelete = () => {
+    if (exerciseToDelete === null) return;
+    const idToDelete = exerciseToDelete;
+    setExerciseToDelete(null);
     startTransition(async () => {
-      await deleteExerciseFromSession(id);
+      await deleteExerciseFromSession(idToDelete);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
       onMutated?.();
     });
@@ -222,9 +230,6 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
               <div className="flex flex-wrap items-center gap-1.5">
                 <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
                   {exerciseData?.body_zone ? BODY_ZONE_LABELS[exerciseData.body_zone as keyof typeof BODY_ZONE_LABELS] : "--"}
-                </span>
-                <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
-                  {exerciseData?.category ? EXERCISE_CATEGORY_LABELS[exerciseData.category as keyof typeof EXERCISE_CATEGORY_LABELS] : "--"}
                 </span>
               </div>
             )}
@@ -337,7 +342,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                   onClick={() => handleStartEdit(ex)}
                   className="h-7 w-7 flex items-center justify-center rounded-md bg-zinc-800/50 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-400/10 active:scale-95 transition-all"
                 >
-                  <Settings2 className="h-3.5 w-3.5" />
+                  <Pencil className="h-3.5 w-3.5" />
                 </button>
                 <button
                   onClick={() => handleDelete(ex.id)}
@@ -498,7 +503,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                       onClick={() => handleStartEdit(ex)}
                       className="flex items-center gap-1 rounded bg-zinc-800/50 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-zinc-400 hover:text-emerald-400 active:scale-95 transition-all"
                     >
-                      <Settings2 className="h-3 w-3" /> Editar
+                      <Pencil className="h-3 w-3" /> Editar
                     </button>
                   )}
                 </div>
@@ -665,7 +670,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     );
   };
 
-  return (
+  return (<>
     <div className="flex flex-col gap-3 w-full max-w-full">
       {linkingId !== null && (
         <div className="text-[10px] font-black uppercase tracking-widest text-yellow-400 text-center animate-pulse bg-yellow-400/5 border border-yellow-400/20 rounded-lg py-2 px-3">
@@ -706,5 +711,48 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
         return renderExCard(item.ex, itemIndex);
       })}
     </div>
+
+    {exerciseToDelete !== null && (
+      <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+        <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col">
+          <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+            <div className="flex items-center gap-3">
+              <div className="h-10 w-10 rounded-xl bg-red-500/15 border border-red-500/20 flex items-center justify-center">
+                <Trash2 className="h-5 w-5 text-red-400" />
+              </div>
+              <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Eliminar Ejercicio</h4>
+            </div>
+            <button
+              onClick={() => setExerciseToDelete(null)}
+              className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+            >
+              <X className="h-5 w-5" />
+            </button>
+          </div>
+          <div className="px-6 pb-2">
+            <p className="text-sm text-zinc-400 leading-relaxed">
+              ¿Estás seguro de eliminar este ejercicio? Esta acción no se puede deshacer.
+            </p>
+          </div>
+          <div className="px-6 pt-4 pb-8 sm:pb-6 flex gap-3">
+            <button
+              onClick={() => setExerciseToDelete(null)}
+              disabled={isPending}
+              className="flex-1 h-14 rounded-2xl border border-zinc-700 bg-zinc-900 text-sm font-black uppercase tracking-widest text-zinc-300 transition-all hover:bg-zinc-800 active:scale-95 disabled:opacity-50"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={handleConfirmDelete}
+              disabled={isPending}
+              className="flex-1 h-14 rounded-2xl bg-red-500 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-red-500/20 transition-all hover:bg-red-400 active:scale-95 disabled:opacity-50"
+            >
+              {isPending ? "Eliminando..." : "Eliminar"}
+            </button>
+          </div>
+        </div>
+      </div>
+    )}
+  </>
   );
 }

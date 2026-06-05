@@ -10,7 +10,7 @@ console.log("🚀 Iniciando automatización de envío...\n");
 
 // 1. Lint — falla rápido si hay errores de código (reglas ESLint)
 try {
-  console.log("🔍 1/4: Ejecutando LINT...");
+  console.log("🔍 1/6: Ejecutando LINT...");
   execSync('npm run lint', { stdio: 'inherit', shell: true });
 } catch {
   console.error("\n❌ Lint fallido. Corregí los errores antes de continuar.");
