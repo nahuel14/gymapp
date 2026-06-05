@@ -190,7 +190,7 @@ export function ExerciseFormModal({
                     <div className="absolute top-full left-0 z-70 mt-2 w-full bg-zinc-950 border border-zinc-800 rounded-xl shadow-2xl overflow-hidden flex flex-col animate-in fade-in zoom-in-95">
                       <div className="p-2 border-b border-zinc-800 bg-zinc-900">
                         <input
-                          autoFocus
+                          autoFocus // eslint-disable-line jsx-a11y/no-autofocus
                           className="w-full h-9 bg-zinc-950 border border-zinc-700 rounded-lg px-3 text-sm text-zinc-100 outline-none focus:border-yellow-400"
                           placeholder="Escribí para filtrar..."
                           value={exerciseSearch}

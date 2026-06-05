@@ -57,7 +57,7 @@ export default function CreateTemplatePage() {
               onKeyDown={(e) => e.key === "Enter" && handleCreate()}
               placeholder="Ej: Fuerza 3 días"
               className="w-full rounded-xl border-2 border-zinc-800 bg-zinc-900 px-4 py-3 text-sm font-bold text-zinc-100 outline-none placeholder:text-zinc-600 focus:border-yellow-400"
-              autoFocus
+              autoFocus // eslint-disable-line jsx-a11y/no-autofocus
             />
           </div>
 

@@ -8,7 +8,7 @@ type BlockItem =
   | { type: "standalone"; ex: ExItem }
   | { type: "superset"; group: number; exs: ExItem[] };
 
-export function sortByOrderIndex<T extends { order_index: number }>(items: T[]): T[] {
+function sortByOrderIndex<T extends { order_index: number }>(items: T[]): T[] {
   return [...items].sort((a, b) => a.order_index - b.order_index);
 }
 
@@ -41,7 +41,7 @@ export function canMoveDown(index: number, total: number): boolean {
   return index < total - 1;
 }
 
-export function buildBlocks(exercises: ExItem[]): BlockItem[] {
+function buildBlocks(exercises: ExItem[]): BlockItem[] {
   const sorted = sortByOrderIndex(exercises);
   const blocks: BlockItem[] = [];
   const seenGroups = new Set<number>();

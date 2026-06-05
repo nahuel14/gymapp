@@ -14,12 +14,15 @@ A Next.js 16 web application for gym coaching management. Coaches manage trainin
 ## Key Commands
 
 ```bash
-npm run dev        # Start dev server
-npm run build      # Production build
-npm run lint       # ESLint
-npm test           # Vitest (run once)
-npm run test:watch # Vitest watch mode
-npm run gym-push   # Lint + tests + build + commit + push (flujo completo antes de deploy)
+npm run dev                # Start dev server
+npm run build              # Production build
+npm run lint               # ESLint (no-unused-vars como error)
+npm test                   # Vitest (watch mode interactivo)
+npm run test:run           # Vitest (run once, sin watch)
+npm run test:watch         # Vitest watch mode explícito
+npm run test:coverage      # Vitest + coverage report (falla si baja del umbral)
+npm run dead-code          # Knip: detecta exports/archivos/deps no usados
+npm run gym-push           # Lint + dead-code + tests + coverage + build + commit + push
 ```
 
 ## Project Structure

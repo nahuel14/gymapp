@@ -2,7 +2,7 @@ import { createSupabaseServerClient } from "@/lib/supabase";
 import { NextResponse } from "next/server";
 
 export async function GET(
-  request: Request,
+  _request: Request,
   { params }: { params: Promise<{ id: string }> }
 ) {
   try {

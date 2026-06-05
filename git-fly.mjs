@@ -18,9 +18,19 @@ try {
   process.exit(1);
 }
 
-// 2. Tests — fallan rápido (2 seg), no tiene sentido esperar el build si ya hay un test roto
+// 2. Dead code — detecta exports sin usar, archivos huérfanos y deps no usadas
 try {
-  console.log("\n🧪 2/5: Ejecutando TESTS...");
+  console.log("\n🔍 2/6: Verificando DEAD CODE (knip)...");
+  execSync('npm run dead-code', { stdio: 'inherit', shell: true });
+} catch {
+  console.error("\n❌ Código muerto detectado. Eliminá los exports, archivos o dependencias no usadas.");
+  rl.close();
+  process.exit(1);
+}
+
+// 3. Tests — fallan rápido (2 seg), no tiene sentido esperar el build si ya hay un test roto
+try {
+  console.log("\n🧪 3/6: Ejecutando TESTS...");
   execSync('npm run test:run', { stdio: 'inherit', shell: true });
 } catch {
   console.error("\n❌ Tests fallidos. Corregí los errores antes de continuar.");
@@ -28,9 +38,9 @@ try {
   process.exit(1);
 }
 
-// 3. Coverage — falla si baja del umbral configurado en vitest.config.ts
+// 4. Coverage — falla si baja del umbral configurado en vitest.config.ts
 try {
-  console.log("\n📊 3/5: Verificando CODE COVERAGE...");
+  console.log("\n📊 4/6: Verificando CODE COVERAGE...");
   execSync('npm run test:coverage', { stdio: 'inherit', shell: true });
 } catch {
   console.error("\n❌ Coverage por debajo del umbral. Agregá tests para cubrir el código nuevo.");
@@ -40,7 +50,7 @@ try {
 
 // 4. Build — verifica tipado y compilación (~1-2 min)
 try {
-  console.log("\n🏗️  4/5: Ejecutando BUILD de Next.js...");
+  console.log("\n🏗️  5/6: Ejecutando BUILD de Next.js...");
   execSync('npm run build', { stdio: 'inherit', shell: true });
 } catch {
   console.error("\n❌ Build fallido. Corregí los errores antes de continuar.");
@@ -48,8 +58,8 @@ try {
   process.exit(1);
 }
 
-// 5. Git — solo llegamos acá si lint, tests, coverage y build pasaron
-console.log("\n📦 5/5: Indexando cambios...");
+// 6. Git — solo llegamos acá si lint, dead code, tests, coverage y build pasaron
+console.log("\n📦 6/6: Indexando cambios...");
 try {
   execSync('git add .', { stdio: 'inherit', shell: true });
 } catch {

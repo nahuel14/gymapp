@@ -1,0 +1,19 @@
+{
+  "entry": [
+    "src/app/**/{page,layout,route,middleware,default,not-found,error,loading,template}.{ts,tsx}",
+    "src/app/**/actions.ts",
+    "src/app/api/**/*.ts"
+  ],
+  "project": ["src/**/*.{ts,tsx}", "test/**/*.ts"],
+  "ignore": ["src/components/ui/**"],
+  "ignoreDependencies": ["tw-animate-css", "shadcn", "supabase"],
+  "rules": {
+    "files": "error",
+    "exports": "error",
+    "types": "error",
+    "dependencies": "error",
+    "devDependencies": "warn",
+    "optionalPeerDependencies": "warn",
+    "unlisted": "warn"
+  }
+}

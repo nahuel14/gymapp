@@ -18,8 +18,8 @@ const eslintConfig = defineConfig([
     rules: {
       // `any` se usa intencionalmente en todo el proyecto (Supabase, state genérico)
       "@typescript-eslint/no-explicit-any": "off",
-      // Unused vars: warn en lugar de error
-      "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
+      // Unused vars: error — usar prefijo _ para ignorar intencionalmente
+      "@typescript-eslint/no-unused-vars": ["error", { "argsIgnorePattern": "^_", "varsIgnorePattern": "^_" }],
       // React Compiler: falsos positivos en patrones de sincronización de estado válidos
       "react-hooks/set-state-in-effect": "off",
       "react-hooks/preserve-manual-memoization": "off",

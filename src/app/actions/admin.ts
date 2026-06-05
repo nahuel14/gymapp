@@ -70,24 +70,6 @@ export async function getAllProfiles() {
   return data;
 }
 
-export async function updateUserRole(userId: string, newRole: UserRole) {
-  await ensureAdmin();
-  const adminClient = createSupabaseAdminClient();
-
-  const { error } = await adminClient
-    .from("profiles")
-    .update({ role: newRole } as any)
-    .eq("id", userId as any);
-
-  if (error) {
-    console.error("Error updating role:", error);
-    throw new Error(error.message);
-  }
-
-  revalidatePath("/admin/dashboard");
-  return { success: true };
-}
-
 export async function updateOwnProfile(name: string, lastName: string) {
   const supabase = await createSupabaseServerClient();
   const { data: { user } } = await supabase.auth.getUser();
