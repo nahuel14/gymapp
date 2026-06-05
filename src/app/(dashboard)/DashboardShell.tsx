@@ -157,13 +157,16 @@ function getBottomNavItems(role: UserRole): BottomNavItem[] {
   ];
 
   if (role === "ADMIN") {
+    const profileItem = coachAdminItems[coachAdminItems.length - 1];
+    const mainItems = coachAdminItems.slice(0, -1);
     return [
+      ...mainItems,
       {
         href: "/admin/dashboard",
         label: "Admin",
         icon: <LayoutDashboard className="h-5 w-5" />,
       },
-      ...coachAdminItems,
+      profileItem,
     ];
   }
 

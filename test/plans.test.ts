@@ -63,6 +63,13 @@ import {
   getBodyZoneLabel, getCategoryLabel,
 } from '@/lib/exercises/library';
 
+import {
+  validateLoginFields, validateSignupFields, validateResetPasswordFields,
+  getAuthRedirect, resolveAuthError, resolveAuthSuccess,
+} from '@/lib/auth/validation';
+
+import { validateProfileFields, getLogoutRedirect } from '@/lib/profile/validation';
+
 // Alias — removeFromSupersetLocal kept for backward compat with test names
 const removeFromSupersetLocal = removeFromSuperset;
 
@@ -2974,7 +2981,7 @@ const LIBRARY_EXERCISES: LibraryExercise[] = [
   { id: 8, name: 'Remo con barra',   body_zone: null,         category: null },
 ];
 
-describe('Librería de Ejercicios', () => {
+describe('Biblioteca', () => {
 
   describe('ESCENARIO 36: Filtrado de ejercicios', () => {
     it('filtrar por zona UPPER_BODY retorna solo ejercicios de tren superior', () => {
@@ -3320,4 +3327,276 @@ describe('Vista del Alumno', () => {
   });
 
 }); // Vista del Alumno
+
+// ════════════════════════════════════════════════════════════════
+// Módulo: Autenticación
+// ════════════════════════════════════════════════════════════════
+// Módulo: Perfil
+// Edición de nombre/apellido y cierre de sesión
+// ════════════════════════════════════════════════════════════════
+
+describe('Perfil', () => {
+
+  describe('ESCENARIO 43: Editar perfil - Validación de campos', () => {
+    it('nombre y apellido válidos pasan', () => {
+      expect(validateProfileFields('Juan', 'Pérez')).toEqual({ ok: true });
+    });
+
+    it('nombre vacío falla con missing', () => {
+      expect(validateProfileFields('', 'Pérez')).toEqual({ ok: false, code: 'missing' });
+    });
+
+    it('apellido vacío falla con missing', () => {
+      expect(validateProfileFields('Juan', '')).toEqual({ ok: false, code: 'missing' });
+    });
+
+    it('nombre null falla con missing', () => {
+      expect(validateProfileFields(null, 'Pérez')).toEqual({ ok: false, code: 'missing' });
+    });
+
+    it('apellido undefined falla con missing', () => {
+      expect(validateProfileFields('Juan', undefined)).toEqual({ ok: false, code: 'missing' });
+    });
+
+    it('nombre solo espacios falla con missing', () => {
+      expect(validateProfileFields('   ', 'Pérez')).toEqual({ ok: false, code: 'missing' });
+    });
+
+    it('apellido solo espacios falla con missing', () => {
+      expect(validateProfileFields('Juan', '   ')).toEqual({ ok: false, code: 'missing' });
+    });
+  });
+
+  describe('ESCENARIO 44: Cierre de sesión', () => {
+    it('getLogoutRedirect retorna /auth', () => {
+      expect(getLogoutRedirect()).toBe('/auth');
+    });
+  });
+
+}); // Perfil
+
+// ════════════════════════════════════════════════════════════════
+// Módulo: Autenticación
+// Validación de login y registro, redirección por rol,
+// mensajes de error y éxito
+// ════════════════════════════════════════════════════════════════
+
+describe('Autenticación', () => {
+
+  describe('ESCENARIO 1: Login - Validación de campos', () => {
+    it('campos válidos retornan ok', () => {
+      expect(validateLoginFields('user@gym.com', 'pass123').ok).toBe(true);
+    });
+
+    it('email vacío falla con código missing', () => {
+      const r = validateLoginFields('', 'pass123');
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('missing');
+    });
+
+    it('password vacío falla con código missing', () => {
+      const r = validateLoginFields('user@gym.com', '');
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('missing');
+    });
+
+    it('email con solo espacios falla', () => {
+      expect(validateLoginFields('   ', 'pass123').ok).toBe(false);
+    });
+
+    it('email null falla con código missing', () => {
+      const r = validateLoginFields(null, 'pass123');
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('missing');
+    });
+
+    it('password undefined falla con código missing', () => {
+      const r = validateLoginFields('user@gym.com', undefined);
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('missing');
+    });
+
+    it('ambos campos ausentes fallan', () => {
+      expect(validateLoginFields(null, null).ok).toBe(false);
+    });
+  });
+
+  describe('ESCENARIO 2: Registro - Validación de campos', () => {
+    const ok = (overrides: Record<string, unknown> = {}) =>
+      validateSignupFields(
+        'firstName' in overrides ? overrides.firstName : 'Nahuel',
+        'lastName'  in overrides ? overrides.lastName  : 'Gym',
+        'email'     in overrides ? overrides.email     : 'nahuel@gym.com',
+        'password'  in overrides ? overrides.password  : 'Pass1234',
+        'confirm'   in overrides ? overrides.confirm   : 'Pass1234',
+      );
+
+    it('todos los campos válidos retornan ok', () => {
+      expect(ok().ok).toBe(true);
+    });
+
+    it('nombre vacío falla con código missing', () => {
+      const r = ok({ firstName: '' });
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('missing');
+    });
+
+    it('apellido vacío falla con código missing', () => {
+      const r = ok({ lastName: '' });
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('missing');
+    });
+
+    it('nombre con solo espacios falla', () => {
+      expect(ok({ firstName: '   ' }).ok).toBe(false);
+    });
+
+    it('apellido con solo espacios falla', () => {
+      expect(ok({ lastName: '   ' }).ok).toBe(false);
+    });
+
+    it('email null falla con código missing', () => {
+      const r = ok({ email: null });
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('missing');
+    });
+
+    it('email vacío falla con código missing', () => {
+      expect(ok({ email: '' }).ok).toBe(false);
+    });
+
+    it('contraseñas distintas fallan con código password_mismatch', () => {
+      const r = ok({ password: 'ABC', confirm: 'XYZ' });
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('password_mismatch');
+    });
+
+    it('contraseñas idénticas no fallan por mismatch', () => {
+      expect(ok({ password: 'Same99', confirm: 'Same99' }).ok).toBe(true);
+    });
+
+    it('password undefined falla con código missing antes de verificar mismatch', () => {
+      const r = ok({ password: undefined, confirm: 'Pass1234' });
+      expect(r.ok).toBe(false);
+      expect((r as any).code).toBe('missing');
+    });
+  });
+
+  describe('ESCENARIO 3: Redirección post-autenticación por rol', () => {
+    it('ADMIN redirige a /coach', () => {
+      expect(getAuthRedirect('ADMIN')).toBe('/coach');
+    });
+
+    it('COACH redirige a /coach', () => {
+      expect(getAuthRedirect('COACH')).toBe('/coach');
+    });
+
+    it('STUDENT redirige a /student', () => {
+      expect(getAuthRedirect('STUDENT')).toBe('/student');
+    });
+
+    it('rol null redirige a error norole', () => {
+      expect(getAuthRedirect(null)).toBe('/auth?error=norole&view=login');
+    });
+
+    it('rol undefined redirige a error norole', () => {
+      expect(getAuthRedirect(undefined)).toBe('/auth?error=norole&view=login');
+    });
+
+    it('rol desconocido redirige a error norole', () => {
+      expect(getAuthRedirect('SUPERUSER')).toBe('/auth?error=norole&view=login');
+    });
+
+    it('ADMIN y COACH aterrizan en el mismo módulo', () => {
+      expect(getAuthRedirect('ADMIN')).toBe(getAuthRedirect('COACH'));
+    });
+  });
+
+  describe('ESCENARIO 4: Mensajes de error de autenticación', () => {
+    it('missing → aviso de campos requeridos', () => {
+      expect(resolveAuthError('missing')).toBe('Por favor completa los campos requeridos.');
+    });
+
+    it('invalid → credenciales inválidas', () => {
+      expect(resolveAuthError('invalid')).toBe('Credenciales inválidas. Intenta nuevamente.');
+    });
+
+    it('norole → sin rol asignado', () => {
+      expect(resolveAuthError('norole')).toBe('No se encontró un rol asignado a este usuario.');
+    });
+
+    it('signup → error al crear cuenta', () => {
+      expect(resolveAuthError('signup')).toBe('No se pudo crear la cuenta. Revisa el email o intenta con otro.');
+    });
+
+    it('password_mismatch → contraseñas no coinciden', () => {
+      expect(resolveAuthError('password_mismatch')).toBe('Las contraseñas no coinciden. Vuelve a intentarlo.');
+    });
+
+    it('código desconocido retorna string vacío', () => {
+      expect(resolveAuthError('xyz')).toBe('');
+    });
+
+    it('undefined retorna string vacío', () => {
+      expect(resolveAuthError(undefined)).toBe('');
+    });
+  });
+
+  describe('ESCENARIO 5: Mensajes de éxito de autenticación', () => {
+    it('signupPending → instrucción de confirmar email', () => {
+      expect(resolveAuthSuccess('signupPending')).toBe(
+        'Te enviamos un correo para confirmar tu cuenta. Revisa tu bandeja de entrada.'
+      );
+    });
+
+    it('passwordUpdated → contraseña actualizada', () => {
+      expect(resolveAuthSuccess('passwordUpdated')).toBe(
+        '¡Contraseña actualizada! Ya puedes iniciar sesión con tu nueva clave.'
+      );
+    });
+
+    it('clave desconocida retorna string vacío', () => {
+      expect(resolveAuthSuccess('other')).toBe('');
+    });
+
+    it('undefined retorna string vacío', () => {
+      expect(resolveAuthSuccess(undefined)).toBe('');
+    });
+  });
+
+  describe('ESCENARIO 6: Nueva contraseña - Validación de campos', () => {
+    it('contraseñas iguales y >= 6 caracteres pasan', () => {
+      expect(validateResetPasswordFields('Abc123', 'Abc123')).toEqual({ ok: true });
+    });
+
+    it('exactamente 6 caracteres pasa', () => {
+      expect(validateResetPasswordFields('123456', '123456')).toEqual({ ok: true });
+    });
+
+    it('contraseñas que no coinciden fallan con password_mismatch', () => {
+      expect(validateResetPasswordFields('Abc123', 'Abc124')).toEqual({ ok: false, code: 'password_mismatch' });
+    });
+
+    it('confirmación vacía falla con password_mismatch', () => {
+      expect(validateResetPasswordFields('Abc123', '')).toEqual({ ok: false, code: 'password_mismatch' });
+    });
+
+    it('contraseña menor a 6 caracteres falla con password_too_short', () => {
+      expect(validateResetPasswordFields('abc', 'abc')).toEqual({ ok: false, code: 'password_too_short' });
+    });
+
+    it('exactamente 5 caracteres falla con password_too_short', () => {
+      expect(validateResetPasswordFields('12345', '12345')).toEqual({ ok: false, code: 'password_too_short' });
+    });
+
+    it('contraseña vacía falla con missing', () => {
+      expect(validateResetPasswordFields('', '')).toEqual({ ok: false, code: 'missing' });
+    });
+
+    it('contraseña undefined falla con missing', () => {
+      expect(validateResetPasswordFields(undefined, undefined)).toEqual({ ok: false, code: 'missing' });
+    });
+  });
+
+}); // Autenticación
 

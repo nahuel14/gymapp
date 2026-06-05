@@ -2,6 +2,13 @@ import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase";
 import type { Database } from "@/types/supabase";
 import { AuthPasswordField } from "./AuthPasswordField";
+import {
+  validateLoginFields,
+  validateSignupFields,
+  getAuthRedirect,
+  resolveAuthError,
+  resolveAuthSuccess,
+} from "@/lib/auth/validation";
 
 async function loginWithPassword(formData: FormData) {
   "use server";
@@ -9,15 +16,16 @@ async function loginWithPassword(formData: FormData) {
   const email = formData.get("email");
   const password = formData.get("password");
 
-  if (typeof email !== "string" || typeof password !== "string") {
-    redirect("/auth?error=missing&view=login");
+  const validation = validateLoginFields(email, password);
+  if (!validation.ok) {
+    redirect(`/auth?error=${validation.code}&view=login`);
   }
 
   const supabase = await createSupabaseServerClient();
 
   const { error } = await supabase.auth.signInWithPassword({
-    email,
-    password,
+    email: email as string,
+    password: password as string,
   });
 
   if (error) {
@@ -46,20 +54,7 @@ async function loginWithPassword(formData: FormData) {
       | null;
 
   const role = existingProfile?.role;
-
-  if (role === "ADMIN") {
-    redirect("/admin");
-  }
-
-  if (role === "COACH") {
-    redirect("/coach");
-  }
-
-  if (role === "STUDENT") {
-    redirect("/student");
-  }
-
-  redirect("/auth?error=norole&view=login");
+  redirect(getAuthRedirect(role));
 }
 
 async function signUpWithPassword(formData: FormData) {
@@ -71,32 +66,16 @@ async function signUpWithPassword(formData: FormData) {
   const password = formData.get("password");
   const confirmPassword = formData.get("confirm_password");
 
-  if (
-    typeof firstName !== "string" ||
-    typeof lastName !== "string" ||
-    firstName.trim().length === 0 ||
-    lastName.trim().length === 0
-  ) {
-    redirect("/auth?error=missing&view=signup");
-  }
-
-  if (
-    typeof email !== "string" ||
-    typeof password !== "string" ||
-    typeof confirmPassword !== "string"
-  ) {
-    redirect("/auth?error=missing&view=signup");
-  }
-
-  if (password !== confirmPassword) {
-    redirect("/auth?error=password_mismatch&view=signup");
+  const signupValidation = validateSignupFields(firstName, lastName, email, password, confirmPassword);
+  if (!signupValidation.ok) {
+    redirect(`/auth?error=${signupValidation.code}&view=signup`);
   }
 
   const supabase = await createSupabaseServerClient();
 
   const { data, error } = await supabase.auth.signUp({
-    email,
-    password,
+    email: email as string,
+    password: password as string,
     options: {
       data: {
         name: firstName,
@@ -141,19 +120,7 @@ async function signUpWithPassword(formData: FormData) {
     );
   }
 
-  if (role === "ADMIN") {
-    redirect("/admin");
-  }
-
-  if (role === "COACH") {
-    redirect("/coach");
-  }
-
-  if (role === "STUDENT") {
-    redirect("/student");
-  }
-
-  redirect("/auth?error=norole&view=login");
+  redirect(getAuthRedirect(role));
 }
 
 export default async function AuthPage({
@@ -171,28 +138,8 @@ export default async function AuthPage({
   const errorKey = params.error;
   const successKey = params.success;
 
-  let errorMessage = "";
-  let successMessage = "";
-
-  if (errorKey === "missing") {
-    errorMessage = "Por favor completa los campos requeridos.";
-  } else if (errorKey === "invalid") {
-    errorMessage = "Credenciales inválidas. Intenta nuevamente.";
-  } else if (errorKey === "norole") {
-    errorMessage = "No se encontró un rol asignado a este usuario.";
-  } else if (errorKey === "signup") {
-    errorMessage =
-      "No se pudo crear la cuenta. Revisa el email o intenta con otro.";
-  }
-
-  if (successKey === "signupPending") {
-    successMessage =
-      "Te enviamos un correo para confirmar tu cuenta. Revisa tu bandeja de entrada.";
-  } else if (successKey === "passwordUpdated") {
-    successMessage = "¡Contraseña actualizada! Ya puedes iniciar sesión con tu nueva clave.";
-  } else if (errorKey === "password_mismatch") {
-    errorMessage = "Las contraseñas no coinciden. Vuelve a intentarlo.";
-  }
+  const errorMessage = resolveAuthError(errorKey);
+  const successMessage = resolveAuthSuccess(successKey);
 
   const isLoginView = view === "login";
 

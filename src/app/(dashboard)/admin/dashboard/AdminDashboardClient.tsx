@@ -269,21 +269,31 @@ export function AdminDashboardClient({
 
       {/* ── MODAL: Invite ──────────────────────────────────────── */}
       {isInviteOpen && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
-          <div className="bg-card border-2 border-border w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl shadow-primary/10 animate-in zoom-in-95 duration-200">
-            <div className="flex items-center justify-between mb-6">
-              <h2 className="text-2xl font-black text-foreground tracking-tight">Agregar Usuario</h2>
-              <button onClick={() => setIsInviteOpen(false)} className="p-2 rounded-full hover:bg-muted transition">
-                <X className="h-6 w-6" />
-              </button>
+        <div className="fixed inset-0 z-60 flex items-end justify-center sm:items-center sm:p-4 bg-background/80 backdrop-blur-sm animate-in fade-in duration-200">
+          <div className="bg-card border-t-2 border-x-2 sm:border-2 border-border w-full sm:max-w-md rounded-t-4xl sm:rounded-[2.5rem] flex flex-col max-h-[92dvh] sm:max-h-[90dvh] shadow-2xl shadow-primary/10 animate-in slide-in-from-bottom-4 sm:zoom-in-95 duration-200">
+
+            {/* Encabezado fijo */}
+            <div className="shrink-0 px-6 pt-4 pb-3 sm:px-8 sm:pt-8 sm:pb-4">
+              <div className="mx-auto mb-3 h-1 w-10 rounded-full bg-border sm:hidden" />
+              <div className="flex items-center justify-between">
+                <div>
+                  <h2 className="text-lg font-black text-foreground tracking-tight">Agregar Usuario</h2>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Nuevo acceso a Gymapp</p>
+                </div>
+                <button onClick={() => setIsInviteOpen(false)} className="ml-4 shrink-0 h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted transition">
+                  <X className="h-5 w-5" />
+                </button>
+              </div>
             </div>
-            <form onSubmit={handleInvite} className="flex flex-col gap-5">
-              <div className="grid grid-cols-2 gap-4">
+
+            {/* Contenido scrollable */}
+            <div className="overflow-y-auto px-6 pb-24 pt-2 sm:px-8 sm:pb-8 sm:pt-0">
+              <form onSubmit={handleInvite} className="flex flex-col gap-5">
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Nombre</label>
                   <input required type="text" autoComplete="given-name"
                     className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
-                    placeholder="Ej: Nahuel"
+                    placeholder="Ej: Juan"
                     value={inviteForm.name}
                     onChange={(e) => setInviteForm({ ...inviteForm, name: e.target.value })}
                   />
@@ -292,37 +302,38 @@ export function AdminDashboardClient({
                   <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Apellido</label>
                   <input required type="text" autoComplete="family-name"
                     className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
-                    placeholder="Ej: Gym"
+                    placeholder="Ej: Pérez"
                     value={inviteForm.last_name}
                     onChange={(e) => setInviteForm({ ...inviteForm, last_name: e.target.value })}
                   />
                 </div>
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Email</label>
-                <input required type="email" autoComplete="email"
-                  className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
-                  placeholder="nahuel@gym.com"
-                  value={inviteForm.email}
-                  onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Rol Inicial</label>
-                <div className="grid grid-cols-2 gap-3">
-                  {(["STUDENT", "COACH"] as UserRole[]).map((r) => (
-                    <button key={r} type="button" onClick={() => setInviteForm({ ...inviteForm, role: r })}
-                      className={`p-4 rounded-2xl border-2 font-black text-xs transition ${inviteForm.role === r ? "border-primary bg-primary/10 text-primary" : "border-border bg-card text-muted-foreground"}`}>
-                      {r === "STUDENT" ? "ESTUDIANTE" : "COACH"}
-                    </button>
-                  ))}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Email</label>
+                  <input required type="email" autoComplete="email"
+                    className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
+                    placeholder="juan@gmail.com"
+                    value={inviteForm.email}
+                    onChange={(e) => setInviteForm({ ...inviteForm, email: e.target.value })}
+                  />
                 </div>
-              </div>
-              <button disabled={isPending}
-                className="mt-4 bg-foreground text-background py-5 rounded-3xl font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50">
-                {isPending ? "PROCESANDO..." : "ENVIAR INVITACIÓN"}
-              </button>
-            </form>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Rol Inicial</label>
+                  <div className="flex rounded-2xl border-2 border-border overflow-hidden">
+                    {(["STUDENT", "COACH"] as UserRole[]).map((r) => (
+                      <button key={r} type="button" onClick={() => setInviteForm({ ...inviteForm, role: r })}
+                        className={`flex-1 py-3.5 font-black text-xs tracking-widest uppercase transition ${inviteForm.role === r ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/60"}`}>
+                        {r === "STUDENT" ? "Estudiante" : "Coach"}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+                <button disabled={isPending}
+                  className="mt-2 bg-foreground text-background py-5 rounded-3xl font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50">
+                  {isPending ? "PROCESANDO..." : "ENVIAR INVITACIÓN"}
+                </button>
+              </form>
+            </div>
+
           </div>
         </div>
       )}
@@ -341,23 +352,21 @@ export function AdminDashboardClient({
               </button>
             </div>
             <form onSubmit={handleUpdateUser} className="flex flex-col gap-5">
-              <div className="grid grid-cols-2 gap-4">
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Nombre</label>
-                  <input required type="text" autoComplete="given-name"
-                    className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
-                    value={editForm.name}
-                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                  />
-                </div>
-                <div className="flex flex-col gap-1.5">
-                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Apellido</label>
-                  <input required type="text" autoComplete="family-name"
-                    className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
-                    value={editForm.last_name}
-                    onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                  />
-                </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Nombre</label>
+                <input required type="text" autoComplete="given-name"
+                  className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
+                  value={editForm.name}
+                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                />
+              </div>
+              <div className="flex flex-col gap-1.5">
+                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Apellido</label>
+                <input required type="text" autoComplete="family-name"
+                  className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
+                  value={editForm.last_name}
+                  onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                />
               </div>
               <div className="flex flex-col gap-1.5">
                 <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Rol del Usuario</label>

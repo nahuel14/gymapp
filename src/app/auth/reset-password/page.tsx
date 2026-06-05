@@ -1,9 +1,10 @@
- "use client";
+"use client";
 
 import { useState, useTransition } from "react";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { Lock, CheckCircle2, AlertCircle } from "lucide-react";
 import { useRouter } from "next/navigation";
+import { validateResetPasswordFields } from "@/lib/auth/validation";
 
 export default function ResetPasswordPage() {
   const [isPending, startTransition] = useTransition();
@@ -16,13 +17,15 @@ export default function ResetPasswordPage() {
     e.preventDefault();
     setMessage(null);
 
-    if (password !== confirmPassword) {
-      setMessage({ type: "error", text: "Las contraseñas no coinciden." });
-      return;
-    }
-
-    if (password.length < 6) {
-      setMessage({ type: "error", text: "La contraseña debe tener al menos 6 caracteres." });
+    const validation = validateResetPasswordFields(password, confirmPassword);
+    if (!validation.ok) {
+      if (validation.code === 'password_mismatch') {
+        setMessage({ type: "error", text: "Las contraseñas no coinciden." });
+      } else if (validation.code === 'password_too_short') {
+        setMessage({ type: "error", text: "La contraseña debe tener al menos 6 caracteres." });
+      } else {
+        setMessage({ type: "error", text: "Completá todos los campos." });
+      }
       return;
     }
 

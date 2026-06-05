@@ -58,10 +58,10 @@ function getNavItems(role: UserRole): NavItem[] {
 
   if (role === "ADMIN") {
     return [
-      { href: "/admin/dashboard", label: "Administración" },
       { href: "/coach", label: "Estudiantes" },
       { href: "/coach/templates", label: "Plantillas" },
       { href: "/coach/library", label: "Librería de ejercicios" },
+      { href: "/admin/dashboard", label: "Administración" },
       ...commonItems,
     ];
   }
