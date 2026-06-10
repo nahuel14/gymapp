@@ -2,7 +2,8 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Plus, Trash2, Dumbbell, AlertTriangle, X, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { ArrowLeft, Save, Plus, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { DumbbellIcon } from "@/components/DumbbellIcon";
 import { useTemplate } from "@/hooks/useTemplates";
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "@/app/(dashboard)/coach/student/ExerciseExcelGrid";
@@ -476,13 +477,13 @@ export function TemplateEditorClient({ templateId }: Props) {
       {/* ── Área de ejercicios ── */}
       {noSessions ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-800 py-24 text-center">
-          <Dumbbell className="mb-4 h-12 w-12 text-zinc-800" />
+          <DumbbellIcon className="mb-4 h-12 w-12 text-zinc-800" />
           <p className="text-sm font-black uppercase tracking-widest text-zinc-600">Sin semanas</p>
           <p className="mt-1 text-xs text-zinc-700">Agrega una semana para empezar</p>
         </div>
       ) : noDaySelected ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-zinc-800 py-24 text-center">
-          <Dumbbell className="mb-4 h-12 w-12 text-zinc-800" />
+          <DumbbellIcon className="mb-4 h-12 w-12 text-zinc-800" />
           <p className="text-sm font-black uppercase tracking-widest text-zinc-600">Sin sesión</p>
           <p className="mt-1 text-xs text-zinc-700">
             Esta semana no tiene un día &quot;{selectedDayName}&quot;.
@@ -540,7 +541,7 @@ export function TemplateEditorClient({ templateId }: Props) {
             />
           ) : (
             <div className="flex flex-col items-center justify-center rounded-xl border-2 border-dashed border-zinc-800 py-16 text-center">
-              <Dumbbell className="mb-3 h-10 w-10 text-zinc-800" />
+              <DumbbellIcon className="mb-3 h-10 w-10 text-zinc-800" />
               <p className="text-xs font-black uppercase tracking-widest text-zinc-600">Sin ejercicios</p>
               <p className="mt-1 text-xs text-zinc-700">Usá el botón &quot;Agregar&quot; para empezar</p>
             </div>

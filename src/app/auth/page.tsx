@@ -147,12 +147,12 @@ export default async function AuthPage({
     <div className="flex min-h-screen items-center justify-center bg-background px-4">
       <div className="w-full max-w-md rounded-xl bg-card p-8 shadow-md">
         <h1 className="mb-2 text-center text-2xl font-semibold text-foreground">
-          Gymapp
+          BeeGym
         </h1>
         <p className="mb-6 text-center text-sm text-muted-foreground">
           {isLoginView
             ? "Inicia sesión para acceder a tu panel."
-            : "Crea una cuenta para comenzar a usar Gymapp."}
+            : "Crea una cuenta para comenzar a usar BeeGym."}
         </p>
 
         <div className="mb-4 flex rounded-md bg-muted p-1 text-sm">

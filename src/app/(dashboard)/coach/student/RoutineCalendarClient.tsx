@@ -4,11 +4,11 @@ import { useState, useTransition, useMemo, useEffect } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
 import { ExerciseFormModal } from "@/components/ExerciseFormModal";
+import { DumbbellIcon } from "@/components/DumbbellIcon";
 import {
   ChevronLeft,
   ChevronRight,
   Calendar,
-  Dumbbell,
   Plus,
   X,
   Copy,
@@ -647,7 +647,7 @@ export function RoutineCalendarClient({
             </div>
           ) : activeExercises.length === 0 ? (
             <div className="flex flex-col items-center justify-center py-12 px-4 rounded-4xl border-2 border-dashed border-zinc-800 bg-zinc-950/50">
-              <Dumbbell className="h-12 w-12 text-zinc-700 mb-4" />
+              <DumbbellIcon className="h-12 w-12 text-zinc-700 mb-4" />
               <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">Sin ejercicios para este día</p>
             </div>
           ) : (

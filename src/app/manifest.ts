@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "GymApp",
-    short_name: "GymApp",
+    name: "BeeGym",
+    short_name: "BeeGym",
     description: "App de entrenamiento para coaches y alumnos",
     start_url: "/",
     display: "standalone",

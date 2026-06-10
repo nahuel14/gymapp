@@ -3,7 +3,8 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Calendar, Dumbbell, Edit, Trash2, LayoutTemplate, X } from "lucide-react";
+import { Plus, Calendar, Edit, Trash2, LayoutTemplate, X } from "lucide-react";
+import { DumbbellIcon } from "@/components/DumbbellIcon";
 import { createTemplatePlan, duplicatePlan, deleteTemplatePlan } from "@/app/(dashboard)/coach/student/actions";
 
 type TemplatePlan = {
@@ -221,7 +222,7 @@ function TemplateCard({
             {template.session_count || 0} sesiones
           </span>
           <span className="flex items-center gap-1 text-xs">
-            <Dumbbell className="h-3 w-3" />
+            <DumbbellIcon className="h-3 w-3" />
             {template.exercise_count || 0} ejercicios
           </span>
         </div>

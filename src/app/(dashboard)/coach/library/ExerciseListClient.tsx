@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, Search, Dumbbell, X } from "lucide-react";
+import { Plus, Search, X } from "lucide-react";
+import { DumbbellIcon } from "@/components/DumbbellIcon";
 import { BODY_ZONE_LABELS } from "@/lib/constants";
 import { filterExercises } from "@/lib/exercises/library";
 import { useExercises } from "@/hooks/useExercises";
@@ -68,7 +69,7 @@ export function ExerciseListClient({ initialExercises, createAction, errorKey }:
       {/* List */}
       {filtered.length === 0 ? (
         <div className="flex flex-col items-center justify-center rounded-2xl border-2 border-dashed border-border py-20 px-4">
-          <Dumbbell className="mb-4 h-12 w-12 text-muted-foreground" />
+          <DumbbellIcon className="mb-4 h-12 w-12 text-muted-foreground" />
           <h3 className="mb-1 text-base font-black text-foreground">
             {searchTerm ? "Sin resultados" : "No hay ejercicios aún"}
           </h3>

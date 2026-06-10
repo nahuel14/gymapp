@@ -2,7 +2,8 @@
 
 import { useState, useTransition } from "react";
 import { useParams, useRouter } from "next/navigation";
-import { ArrowLeft, Dumbbell, Edit, Trash2, X, Plus, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { ArrowLeft, Edit, Trash2, X, Plus, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { DumbbellIcon } from "@/components/DumbbellIcon";
 import { useTemplate } from "@/hooks/useTemplates";
 import { useExercises } from "@/hooks/useExercises";
 import { ExerciseExcelGrid } from "@/app/(dashboard)/coach/student/ExerciseExcelGrid";
@@ -191,7 +192,7 @@ export default function TemplateViewPage() {
                           />
                         ) : (
                           <div className="text-center py-6 rounded-xl border border-dashed border-zinc-800">
-                            <Dumbbell className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
+                            <DumbbellIcon className="h-8 w-8 text-zinc-700 mx-auto mb-2" />
                             <p className="text-zinc-600 font-black uppercase tracking-widest text-[10px]">
                               Sin ejercicios
                             </p>

@@ -3,8 +3,9 @@
 import { useState, useTransition, useEffect } from "react";
 import {
   UserPlus, Mail, X, Search, Square, CheckSquare,
-  Pencil, Save, Loader2, Trash2, Users, User, ShieldCheck, Dumbbell,
+  Pencil, Save, Loader2, Trash2, Users, User, ShieldCheck,
 } from "lucide-react";
+import { DumbbellIcon } from "@/components/DumbbellIcon";
 import type { Tables, Database } from "@/types/supabase";
 import {
   inviteUser,
@@ -167,7 +168,7 @@ export function AdminDashboardClient({
       <header className="flex items-center justify-between gap-4">
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-black tracking-tight text-foreground">Panel de Control</h1>
-          <p className="text-xs text-muted-foreground">Gestiona usuarios, roles y asignaciones de Gymapp.</p>
+          <p className="text-xs text-muted-foreground">Gestiona usuarios, roles y asignaciones de BeeGym.</p>
         </div>
         <button
           onClick={() => setIsInviteOpen(true)}
@@ -213,7 +214,7 @@ export function AdminDashboardClient({
                   {profile.role === "ADMIN" ? (
                     <ShieldCheck className="h-5 w-5 text-purple-400" />
                   ) : profile.role === "COACH" ? (
-                    <Dumbbell className="h-5 w-5 text-blue-400" />
+                    <DumbbellIcon className="h-5 w-5 text-blue-400" />
                   ) : (
                     <User className="h-5 w-5 text-yellow-400" />
                   )}
@@ -278,7 +279,7 @@ export function AdminDashboardClient({
               <div className="flex items-center justify-between">
                 <div>
                   <h2 className="text-lg font-black text-foreground tracking-tight">Agregar Usuario</h2>
-                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Nuevo acceso a Gymapp</p>
+                  <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest mt-0.5">Nuevo acceso a BeeGym</p>
                 </div>
                 <button onClick={() => setIsInviteOpen(false)} className="ml-4 shrink-0 h-9 w-9 flex items-center justify-center rounded-full hover:bg-muted transition">
                   <X className="h-5 w-5" />

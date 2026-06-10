@@ -14,7 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "GymApp",
+  title: "BeeGym",
   description: "App de entrenamiento con roles Coach y Student",
 };
 

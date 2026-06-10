@@ -4,13 +4,13 @@ import type { ReactNode } from "react";
 import { usePathname } from "next/navigation";
 import Link from "next/link";
 import {
-  Dumbbell,
   LayoutDashboard,
   UserCircle,
   Users,
   ClipboardList,
   Library,
 } from "lucide-react";
+import { DumbbellIcon } from "@/components/DumbbellIcon";
 import type { Database } from "@/types/supabase";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
@@ -62,7 +62,7 @@ function NavIcon({ href, role }: { href: string; role: UserRole }) {
     return <Library className={iconClass} />;
   }
   if (href === "/student") {
-    return <Dumbbell className={iconClass} />;
+    return <DumbbellIcon className={iconClass} />;
   }
   if (href === "/profile") {
     return <UserCircle className={iconClass} />;
@@ -86,9 +86,9 @@ function SidebarContent({
   return (
     <>
       <div className="mb-8 flex items-center gap-2">
-        <Dumbbell className="h-6 w-6 text-yellow-400" />
+        <DumbbellIcon className="h-6 w-6 text-yellow-400" />
         <div>
-          <p className="text-sm font-black uppercase tracking-wider text-zinc-100">Gymapp</p>
+          <p className="text-sm font-black uppercase tracking-wider text-zinc-100">BeeGym</p>
           <p className="text-xs text-zinc-500 uppercase font-bold tracking-widest">{roleLabel}</p>
         </div>
       </div>
@@ -176,7 +176,7 @@ function getBottomNavItems(role: UserRole): BottomNavItem[] {
     {
       href: "/student",
       label: "Rutina",
-      icon: <Dumbbell className="h-6 w-6" />,
+      icon: <DumbbellIcon className="h-6 w-6" />,
     },
     {
       href: "/profile",
