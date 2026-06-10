@@ -68,3 +68,26 @@ export function validateActualReps(
 export function canStudentEditTargets(): boolean {
   return false;
 }
+
+function buildAdminPayload(form: CoachForm & Partial<StudentForm>) {
+  return {
+    target_sets: form.target_sets,
+    target_reps: form.target_reps,
+    target_weight: form.target_weight,
+    target_rpe: form.target_rpe,
+    rest_seconds: form.rest_seconds,
+    coach_notes: form.coach_notes,
+    actual_sets: form.actual_sets,
+    actual_reps: form.actual_reps,
+    actual_rpe: form.actual_rpe,
+    student_notes: form.student_notes,
+  };
+}
+
+export function buildPayloadByMode(
+  form: CoachForm & Partial<StudentForm>,
+  editingAs: "coach" | "student" | "admin"
+) {
+  if (editingAs === "admin") return buildAdminPayload(form);
+  return editingAs === "coach" ? buildCoachPayload(form) : buildStudentPayload(form as StudentForm);
+}

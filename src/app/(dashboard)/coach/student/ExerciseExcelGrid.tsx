@@ -22,13 +22,14 @@ import {
   setSuperset,
   removeFromSuperset,
 } from "./actions";
+import { buildPayloadByMode } from "@/lib/student/payload";
 import { useQueryClient } from "@tanstack/react-query";
 
 type SessionExercise = any;
 
 interface Props {
   exercises: SessionExercise[];
-  role: "COACH" | "STUDENT";
+  role: "COACH" | "STUDENT" | "ADMIN";
   isTemplate?: boolean;
   allExpanded?: boolean;
   onMutated?: () => void;
@@ -38,6 +39,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
   const queryClient = useQueryClient();
   const [isPending, startTransition] = useTransition();
   const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingAs, setEditingAs] = useState<"coach" | "student" | "admin" | null>(null);
   const [editForm, setEditForm] = useState<any>(null);
   const [linkingId, setLinkingId] = useState<number | null>(null);
   const sortedExercises = [...exercises].sort((a, b) => (a.order_index ?? 0) - (b.order_index ?? 0));
@@ -68,9 +70,10 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     return "text-muted-foreground";
   };
 
-  const handleStartEdit = (ex: any) => {
+  const handleStartEdit = (ex: any, as?: "coach" | "student" | "admin") => {
     setExpandedIds(prev => new Set([...prev, ex.id]));
     setEditingId(ex.id);
+    setEditingAs(as ?? (role === "STUDENT" ? "student" : "coach"));
 
     const hasStudentData = ex.actual_sets && ex.actual_sets > 0;
     const initialSets = hasStudentData ? ex.actual_sets : (ex.target_sets || 0);
@@ -96,20 +99,12 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
 
   const handleSave = async (id: number) => {
     startTransition(async () => {
-      const dataToSave = role === "COACH"
-        ? {
-            target_sets: editForm.target_sets,
-            target_reps: editForm.target_reps,
-            target_weight: editForm.target_weight,
-            target_rpe: editForm.target_rpe,
-            rest_seconds: editForm.rest_seconds,
-            coach_notes: editForm.coach_notes,
-          }
-        : editForm;
+      const dataToSave = buildPayloadByMode(editForm, editingAs ?? "coach");
       await updateExerciseInSession(id, dataToSave);
       await queryClient.invalidateQueries({ queryKey: ["student", "routine"] });
       onMutated?.();
       setEditingId(null);
+      setEditingAs(null);
     });
   };
 
@@ -212,7 +207,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     const coachSets = Number(data.target_sets || 0);
     const studentSets = Number(data.actual_sets || coachSets);
     const hasStudentData = ex.actual_sets && ex.actual_sets > 0;
-    const isSaveDisabled = isPending || (role === "STUDENT" && (!data.actual_rpe || data.actual_rpe <= 0));
+    const isSaveDisabled = isPending || (editingAs === "student" && (!data.actual_rpe || data.actual_rpe <= 0));
     const inSuperset = ex.superset_group !== null && ex.superset_group !== undefined;
     const linkingSource = linkingId !== null ? sortedExercises.find(e => e.id === linkingId) : null;
     const isSameGroupAsLinking =
@@ -250,7 +245,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
               </a>
             )}
             {/* ↑↓ solo en standalone (no dentro de superset) */}
-            {role === "COACH" && !isEditing && !isExpanded && !inSuperset && (
+            {(role === "COACH" || role === "ADMIN") && !isEditing && !isExpanded && !inSuperset && (
               <div className="flex gap-0.5">
                 <button
                   onClick={() => handleReorder(ex, 'up')}
@@ -268,7 +263,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                 </button>
               </div>
             )}
-            {role === "COACH" && !isEditing && isExpanded && (
+            {(role === "COACH" || role === "ADMIN") && !isEditing && isExpanded && (
               <>
                 {inSuperset ? (
                   <>
@@ -339,7 +334,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                   </button>
                 )}
                 <button
-                  onClick={() => handleStartEdit(ex)}
+                  onClick={() => handleStartEdit(ex, "coach")}
                   className="h-7 w-7 flex items-center justify-center rounded-md bg-zinc-800/50 text-zinc-400 hover:text-yellow-400 hover:bg-yellow-400/10 active:scale-95 transition-all"
                 >
                   <Pencil className="h-3.5 w-3.5" />
@@ -374,7 +369,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                 </span>
               </div>
 
-              {role === "COACH" && isEditing ? (
+              {isEditing && (editingAs === "coach" || editingAs === "admin") ? (
                 <div className="flex flex-col gap-2 animate-in fade-in">
                   <div className="grid grid-cols-3 gap-1.5">
                     <div className="flex flex-col gap-1">
@@ -498,9 +493,9 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                       Alumno
                     </span>
                   </div>
-                  {role === "STUDENT" && !isEditing && hasStudentData && (
+                  {(role === "STUDENT" || role === "ADMIN") && !isEditing && hasStudentData && (
                     <button
-                      onClick={() => handleStartEdit(ex)}
+                      onClick={() => handleStartEdit(ex, role === "ADMIN" ? "admin" : "student")}
                       className="flex items-center gap-1 rounded bg-zinc-800/50 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-zinc-400 hover:text-emerald-400 active:scale-95 transition-all"
                     >
                       <Pencil className="h-3 w-3" /> Editar
@@ -508,7 +503,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                   )}
                 </div>
 
-                {role === "STUDENT" && isEditing ? (
+                {isEditing && (editingAs === "student" || editingAs === "admin") ? (
                   <div className="flex flex-col gap-2 animate-in fade-in w-full">
                     <div className="grid grid-cols-2 gap-1.5">
                       <div className="flex flex-col gap-1">
@@ -617,9 +612,9 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                       </>
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center py-2">
-                        {role === "STUDENT" ? (
+                        {(role === "STUDENT" || role === "ADMIN") ? (
                           <button
-                            onClick={() => handleStartEdit(ex)}
+                            onClick={() => handleStartEdit(ex, role === "ADMIN" ? "admin" : "student")}
                             className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-400 border border-emerald-400/50 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-950 shadow-lg shadow-emerald-400/20 hover:bg-emerald-300 active:scale-95 transition-all"
                           >
                             <PlusCircle className="h-4 w-4" />
@@ -642,7 +637,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
           <div className="mt-1 flex flex-col gap-1.5">
             <div className="flex gap-1.5">
               <button
-                onClick={() => setEditingId(null)}
+                onClick={() => { setEditingId(null); setEditingAs(null); }}
                 className="flex-1 rounded-lg bg-zinc-900 py-2.5 text-[10px] font-black uppercase tracking-widest text-zinc-400 border border-zinc-800 hover:bg-zinc-800 transition-all active:scale-95"
               >
                 Cancelar
@@ -651,7 +646,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                 onClick={() => handleSave(ex.id)}
                 disabled={isSaveDisabled}
                 className={`flex-1 rounded-lg py-2.5 text-[10px] font-black uppercase tracking-widest transition-all active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                  role === "COACH"
+                  editingAs === "coach" || editingAs === "admin"
                     ? "bg-yellow-400 hover:bg-yellow-300 text-black"
                     : "bg-emerald-400 hover:bg-emerald-300 text-black"
                 }`}
@@ -659,7 +654,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                 {isPending ? "Guardando..." : "Guardar Cambios"}
               </button>
             </div>
-            {role === "STUDENT" && isSaveDisabled && !isPending && (
+            {editingAs === "student" && isSaveDisabled && !isPending && (
               <span className="text-[10px] text-red-400 text-center uppercase tracking-widest font-black animate-pulse">
                 Debes indicar el RPE sentido para guardar
               </span>
@@ -685,7 +680,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                 <span className="text-[8px] font-black uppercase tracking-widest text-yellow-400/60 flex items-center gap-1">
                   <Link2 className="h-2.5 w-2.5" /> Super Serie
                 </span>
-                {role === "COACH" && (
+                {(role === "COACH" || role === "ADMIN") && (
                   <div className="flex gap-0.5 ml-auto">
                     <button
                       onClick={() => handleMoveSuperset(item.group, 'up')}

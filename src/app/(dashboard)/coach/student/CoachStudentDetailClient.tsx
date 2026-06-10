@@ -7,9 +7,10 @@ import Link from "next/link";
 
 type Props = {
   studentId: string;
+  viewerRole: "COACH" | "ADMIN";
 };
 
-export function CoachStudentDetailClient({ studentId }: Props) {
+export function CoachStudentDetailClient({ studentId, viewerRole }: Props) {
   const { data, isLoading, error } = useStudentRoutine(studentId);
 
   if (isLoading) {
@@ -50,7 +51,7 @@ export function CoachStudentDetailClient({ studentId }: Props) {
 
       <RoutineCalendarClient
         studentId={studentId}
-        role="COACH"
+        role={viewerRole}
         profile={data.profile}
         plan={data.plan}
         allPlans={data.allPlans}

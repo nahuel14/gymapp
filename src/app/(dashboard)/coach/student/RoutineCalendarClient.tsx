@@ -450,8 +450,8 @@ export function RoutineCalendarClient({
               </button>
             )}
 
-            {/* Acciones de COACH (Duplicar, Borrar, Añadir Ex) */}
-            {role === "COACH" && activeSessionsForDate.length > 0 && !isAddingDay && (
+            {/* Acciones de COACH/ADMIN (Duplicar, Borrar, Añadir Ex) */}
+            {(role === "COACH" || role === "ADMIN") && activeSessionsForDate.length > 0 && !isAddingDay && (
               <>
                 <button onClick={handleDuplicateDay} className="flex h-9 w-9 sm:w-auto items-center justify-center sm:gap-1.5 rounded-lg bg-zinc-900 border border-zinc-800 sm:px-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition hover:text-yellow-400 active:scale-95">
                   <Copy className="h-4 w-4 shrink-0" />
@@ -608,7 +608,7 @@ export function RoutineCalendarClient({
           </div>
         )}
 
-        {isAddingExercise && role === "COACH" && (
+        {isAddingExercise && (role === "COACH" || role === "ADMIN") && (
           <ExerciseFormModal isOpen={isAddingExercise} onClose={() => setIsAddingExercise(false)} formState={newExForm} setFormState={setNewExForm} onSave={handleAddExercise} isPending={isPending} allExercises={allExercises} />
         )}
       </div>
@@ -626,7 +626,7 @@ export function RoutineCalendarClient({
                   {currentViewedPlan ? (role === "STUDENT" ? "Día de Descanso" : "Día sin planificar") : "Semana Libre"}
                 </p>
                 
-                {role === "COACH" && currentViewedPlan && (
+                {(role === "COACH" || role === "ADMIN") && currentViewedPlan && (
                   <button
                     onClick={() => {
                       setIsAddingDay(true);
@@ -651,7 +651,7 @@ export function RoutineCalendarClient({
               <p className="text-zinc-500 font-black uppercase tracking-widest text-xs">Sin ejercicios para este día</p>
             </div>
           ) : (
-            <ExerciseExcelGrid exercises={activeExercises} role={role === "ADMIN" ? "COACH" : role} allExpanded={allExpanded} />
+            <ExerciseExcelGrid exercises={activeExercises} role={role} allExpanded={allExpanded} />
           )}
 
         </div>

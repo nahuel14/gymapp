@@ -29,5 +29,5 @@ export default async function CoachStudentPage({ params }: PageProps) {
     redirect("/auth?view=login");
   }
 
-  return <CoachStudentDetailClient studentId={studentId} />;
+  return <CoachStudentDetailClient studentId={studentId} viewerRole={profile.role as "COACH" | "ADMIN"} />;
 }

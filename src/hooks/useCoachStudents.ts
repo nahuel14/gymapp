@@ -54,8 +54,13 @@ async function fetchCoachStudents(): Promise<CoachStudentsResult | null> {
       .from("profiles")
       .select("id")
       .eq("role", "STUDENT");
-    
+
     studentIds = allStudents?.map(s => s.id) || [];
+
+    // El ADMIN también aparece en su propia lista (puede gestionar su propia rutina)
+    if (!studentIds.includes(user.id)) {
+      studentIds.push(user.id);
+    }
   }
 
   if (studentIds.length === 0) {

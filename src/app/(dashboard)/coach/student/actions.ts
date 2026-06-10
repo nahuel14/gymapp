@@ -724,7 +724,7 @@ export async function updateExerciseInSession(
     actual_sets?: number;
     actual_reps?: number[];
     actual_weight?: (number | null)[];
-    actual_rpe?: number;
+    actual_rpe?: number | null;
     student_notes?: string;
   }
 ) {

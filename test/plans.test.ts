@@ -35,6 +35,7 @@ import {
 import {
   buildCoachPayload, buildStudentPayload,
   shouldMarkCompleteFromStudent, validateActualReps, canStudentEditTargets,
+  buildPayloadByMode,
 } from '@/lib/student/payload';
 
 import {
@@ -1206,6 +1207,54 @@ describe('Ejercicios y Rutina', () => {
       const payload = buildCoachPayload(coachEdit);
       expect(payload.target_sets).toBe(2);
       expect('actual_sets' in payload).toBe(false);
+    });
+  });
+
+  describe('ESCENARIO 20b: ADMIN como auto-alumno - Separación de payloads por modo', () => {
+    const form = {
+      target_sets: 3, target_reps: [10, 10, 10],
+      target_weight: [60, 60, 60], target_rpe: 8,
+      rest_seconds: 90, coach_notes: 'Foco bajada',
+      actual_sets: 2, actual_reps: [10, 9],
+      actual_rpe: 7, student_notes: 'Pesado',
+    };
+
+    it('editingAs=coach produce payload solo con targets (no sobreescribe datos del alumno)', () => {
+      const payload = buildPayloadByMode(form, 'coach') as Record<string, unknown>;
+      expect('actual_sets' in payload).toBe(false);
+      expect('actual_rpe' in payload).toBe(false);
+      expect(payload['target_sets']).toBe(3);
+    });
+
+    it('editingAs=student produce payload solo con actuals (no sobreescribe planificación)', () => {
+      const payload = buildPayloadByMode(form, 'student') as Record<string, unknown>;
+      expect('target_sets' in payload).toBe(false);
+      expect('coach_notes' in payload).toBe(false);
+      expect(payload['actual_sets']).toBe(2);
+      expect(payload['actual_rpe']).toBe(7);
+    });
+
+    it('ADMIN registrando resultados puede marcar sesión como completada', () => {
+      const payload = buildPayloadByMode(form, 'student') as Record<string, unknown>;
+      expect(shouldMarkCompleteFromStudent(payload['actual_sets'] as number)).toBe(true);
+    });
+
+    it('ADMIN editando planificación nunca marca sesión como completada', () => {
+      const payload = buildPayloadByMode(form, 'coach') as Record<string, unknown>;
+      expect(shouldMarkCompleteFromStudent(payload['actual_sets'] as number)).toBe(false);
+    });
+
+    it('editingAs=admin produce payload con targets Y actuals combinados', () => {
+      const payload = buildPayloadByMode(form, 'admin') as Record<string, unknown>;
+      expect(payload['target_sets']).toBe(3);
+      expect(payload['actual_sets']).toBe(2);
+      expect(payload['coach_notes']).toBe('Foco bajada');
+      expect(payload['actual_rpe']).toBe(7);
+    });
+
+    it('editingAs=admin puede marcar sesión como completada si hay actual_sets', () => {
+      const payload = buildPayloadByMode(form, 'admin') as Record<string, unknown>;
+      expect(shouldMarkCompleteFromStudent(payload['actual_sets'] as number)).toBe(true);
     });
   });
 });

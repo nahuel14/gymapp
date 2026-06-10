@@ -61,7 +61,7 @@ function NavIcon({ href, role }: { href: string; role: UserRole }) {
   if ((role === "COACH" || role === "ADMIN") && href === "/coach/library") {
     return <Library className={iconClass} />;
   }
-  if (role === "STUDENT" && href === "/student") {
+  if (href === "/student") {
     return <Dumbbell className={iconClass} />;
   }
   if (href === "/profile") {
@@ -157,16 +157,14 @@ function getBottomNavItems(role: UserRole): BottomNavItem[] {
   ];
 
   if (role === "ADMIN") {
-    const profileItem = coachAdminItems[coachAdminItems.length - 1];
-    const mainItems = coachAdminItems.slice(0, -1);
     return [
-      ...mainItems,
+      ...coachAdminItems.slice(0, -1),
       {
         href: "/admin/dashboard",
         label: "Admin",
         icon: <LayoutDashboard className="h-5 w-5" />,
       },
-      profileItem,
+      coachAdminItems[coachAdminItems.length - 1],
     ];
   }
 
