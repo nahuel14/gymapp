@@ -18,7 +18,7 @@ async function fetchExercises() {
 
   const { data } = await supabase
     .from("exercises")
-    .select("id, name, body_zone, created_at")
+    .select("id, name, body_zone, video_url, created_at")
     .order("created_at", { ascending: false });
 
   return (data ?? []) as Exercise[];

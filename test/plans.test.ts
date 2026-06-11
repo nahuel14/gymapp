@@ -61,7 +61,7 @@ import { getDeleteScope, buildDeleteSummary } from '@/lib/admin/delete';
 
 import {
   type LibraryExercise, filterExercises, validateExerciseName,
-  getBodyZoneLabel, getCategoryLabel,
+  getBodyZoneLabel, getCategoryLabel, paginateExercises,
 } from '@/lib/exercises/library';
 
 import {
@@ -3203,6 +3203,67 @@ describe('Ejercicios', () => {
       expect(result.some(e => e.name === 'Press de banca')).toBe(true);
     });
   });
+
+  describe('ESCENARIO 39: Paginación de ejercicios', () => {
+    const mkEx = (id: number): LibraryExercise => ({ id, name: `Ejercicio ${id}`, body_zone: null, category: null });
+    const list7 = Array.from({ length: 7 }, (_, i) => mkEx(i + 1));
+
+    it('página 1 con pageSize=3 devuelve los primeros 3 items', () => {
+      const result = paginateExercises(list7, 1, 3);
+      expect(result.items).toHaveLength(3);
+      expect(result.items[0].id).toBe(1);
+      expect(result.items[2].id).toBe(3);
+    });
+
+    it('página 2 con pageSize=3 devuelve items 4-6', () => {
+      const result = paginateExercises(list7, 2, 3);
+      expect(result.items).toHaveLength(3);
+      expect(result.items[0].id).toBe(4);
+      expect(result.items[2].id).toBe(6);
+    });
+
+    it('última página devuelve los items restantes aunque sean menos que pageSize', () => {
+      const result = paginateExercises(list7, 3, 3);
+      expect(result.items).toHaveLength(1);
+      expect(result.items[0].id).toBe(7);
+    });
+
+    it('lista vacía: totalPages=1, items=[], currentPage=1', () => {
+      const result = paginateExercises([], 1, 10);
+      expect(result.totalPages).toBe(1);
+      expect(result.items).toHaveLength(0);
+      expect(result.currentPage).toBe(1);
+    });
+
+    it('página mayor que totalPages se clampea a la última', () => {
+      const result = paginateExercises(list7, 99, 3);
+      expect(result.currentPage).toBe(result.totalPages);
+      expect(result.items.length).toBeGreaterThan(0);
+    });
+
+    it('pageSize mayor que el array devuelve todos los items en página 1', () => {
+      const result = paginateExercises(list7, 1, 100);
+      expect(result.items).toHaveLength(7);
+      expect(result.totalPages).toBe(1);
+    });
+
+    it('totalPages es Math.ceil(total/pageSize)', () => {
+      expect(paginateExercises(list7, 1, 3).totalPages).toBe(3);
+      expect(paginateExercises(list7, 1, 4).totalPages).toBe(2);
+      expect(paginateExercises(list7, 1, 7).totalPages).toBe(1);
+    });
+
+    it('totalItems refleja el tamaño del array original', () => {
+      expect(paginateExercises(list7, 1, 3).totalItems).toBe(7);
+      expect(paginateExercises([], 1, 10).totalItems).toBe(0);
+    });
+
+    it('currentPage refleja la página solicitada cuando está dentro del rango', () => {
+      expect(paginateExercises(list7, 1, 3).currentPage).toBe(1);
+      expect(paginateExercises(list7, 2, 3).currentPage).toBe(2);
+      expect(paginateExercises(list7, 3, 3).currentPage).toBe(3);
+    });
+  }); // ESCENARIO 39
 
 }); // Librería de Ejercicios
 

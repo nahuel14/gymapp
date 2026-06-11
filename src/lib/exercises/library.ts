@@ -15,14 +15,15 @@ export type LibraryExercise = {
   name: string;
   body_zone: string | null;
   category: string | null;
+  video_url?: string | null;
 };
 
-export function filterExercises(
-  exercises: LibraryExercise[],
+export function filterExercises<T extends LibraryExercise>(
+  exercises: T[],
   searchTerm: string,
   bodyZone?: string | null,
   category?: string | null
-): LibraryExercise[] {
+): T[] {
   return exercises.filter((ex) => {
     const matchesName =
       !searchTerm ||
@@ -39,4 +40,28 @@ export function validateExerciseName(name: string): {
 } {
   if (!name.trim()) return { valid: false, error: "El nombre es obligatorio" };
   return { valid: true };
+}
+
+export type PaginatedExercises<T extends LibraryExercise = LibraryExercise> = {
+  items: T[];
+  totalPages: number;
+  currentPage: number;
+  totalItems: number;
+};
+
+export function paginateExercises<T extends LibraryExercise>(
+  exercises: T[],
+  page: number,
+  pageSize: number
+): PaginatedExercises<T> {
+  const totalItems = exercises.length;
+  const totalPages = Math.max(1, Math.ceil(totalItems / pageSize));
+  const safePage = Math.min(Math.max(1, page), totalPages);
+  const start = (safePage - 1) * pageSize;
+  return {
+    items: exercises.slice(start, start + pageSize),
+    totalPages,
+    currentPage: safePage,
+    totalItems,
+  };
 }

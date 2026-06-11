@@ -61,7 +61,7 @@ function getNavItems(role: UserRole, userId: string): NavItem[] {
     return [
       { href: "/coach", label: "Alumnos" },
       { href: "/coach/templates", label: "Plantillas" },
-      { href: "/coach/library", label: "Librería de ejercicios" },
+      { href: "/coach/library", label: "Ejercicios" },
       { href: "/admin/dashboard", label: "Administración" },
       ...commonItems,
     ];
@@ -71,7 +71,7 @@ function getNavItems(role: UserRole, userId: string): NavItem[] {
     return [
       { href: "/coach", label: "Alumnos" },
       { href: "/coach/templates", label: "Plantillas" },
-      { href: "/coach/library", label: "Librería de ejercicios" },
+      { href: "/coach/library", label: "Ejercicios" },
       ...commonItems,
     ];
   }

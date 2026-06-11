@@ -91,12 +91,70 @@ async function createExercise(formData: FormData) {
   redirect("/coach/library");
 }
 
+async function updateExercise(formData: FormData) {
+  "use server";
+
+  const { supabase } = await ensureCoach();
+
+  const idValue = formData.get("id");
+  const nameValue = formData.get("name");
+  const bodyZoneValue = formData.get("body_zone");
+  const videoUrlValue = formData.get("video_url");
+
+  const id = typeof idValue === "string" ? parseInt(idValue, 10) : NaN;
+  if (isNaN(id)) redirect("/coach/library?error=save");
+
+  if (typeof nameValue !== "string" || nameValue.trim().length === 0) {
+    redirect("/coach/library?error=missingName");
+  }
+
+  const bodyZone =
+    typeof bodyZoneValue === "string" && bodyZoneValue in BODY_ZONE_LABELS
+      ? (bodyZoneValue as BodyZone)
+      : null;
+
+  const videoUrl =
+    typeof videoUrlValue === "string" && videoUrlValue.trim().length > 0
+      ? videoUrlValue.trim()
+      : null;
+
+  const { error } = await supabase
+    .from("exercises")
+    .update({ name: nameValue.trim(), body_zone: bodyZone, video_url: videoUrl } as never)
+    .eq("id", id as never);
+
+  if (error) redirect("/coach/library?error=save");
+
+  revalidatePath("/coach/library");
+  redirect("/coach/library");
+}
+
+async function deleteExercise(formData: FormData) {
+  "use server";
+
+  const { supabase } = await ensureCoach();
+
+  const idValue = formData.get("id");
+  const id = typeof idValue === "string" ? parseInt(idValue, 10) : NaN;
+  if (isNaN(id)) redirect("/coach/library?error=save");
+
+  const { error } = await supabase
+    .from("exercises")
+    .delete()
+    .eq("id", id as never);
+
+  if (error) redirect("/coach/library?error=save");
+
+  revalidatePath("/coach/library");
+  redirect("/coach/library");
+}
+
 async function getExercises(): Promise<Exercise[]> {
   const { supabase } = await ensureCoach();
 
   const response = (await supabase
     .from("exercises")
-    .select("id, name, body_zone, created_at")
+    .select("id, name, body_zone, video_url, created_at")
     .order("created_at", { ascending: false })) as ExercisesResponse;
 
   return response.data ?? [];
@@ -110,6 +168,8 @@ export default async function LibraryPage({ searchParams }: LibraryPageProps) {
     <ExerciseListClient
       initialExercises={exercises}
       createAction={createExercise}
+      updateAction={updateExercise}
+      deleteAction={deleteExercise}
       errorKey={params.error}
     />
   );

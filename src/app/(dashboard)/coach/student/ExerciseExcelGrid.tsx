@@ -3,6 +3,7 @@
 import { useState, useTransition, useEffect } from "react";
 import {
   Play,
+  Image as ImageIcon,
   Pencil,
   Trash2,
   PlusCircle,
@@ -14,6 +15,10 @@ import {
   Link2Off,
   X,
 } from "lucide-react";
+
+function isImageUrl(url: string): boolean {
+  return /\.(jpe?g|png|gif|webp|svg|avif)(\?.*)?$/i.test(url);
+}
 import { BODY_ZONE_LABELS } from "@/lib/constants";
 import {
   updateExerciseInSession,
@@ -219,29 +224,33 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
     return (
       <div key={ex.id} className="bg-zinc-900/40 rounded-xl border border-zinc-800/80 p-3 flex flex-col gap-2.5 shadow-md relative overflow-hidden">
         {/* Cabecera del Ejercicio */}
-        <div className="flex items-start justify-between gap-2">
-          <div className="flex-1 min-w-0 flex flex-col gap-1">
-            {isExpanded && (
-              <div className="flex flex-wrap items-center gap-1.5">
+        <div className="flex flex-col gap-1">
+          <div className="flex items-center justify-between gap-2">
+            <div className="flex flex-wrap items-center gap-1.5 min-w-0">
+              {isExpanded ? (
                 <span className="text-[8px] font-black uppercase tracking-widest text-zinc-500 bg-zinc-950 px-1.5 py-0.5 rounded border border-zinc-800">
                   {exerciseData?.body_zone ? BODY_ZONE_LABELS[exerciseData.body_zone as keyof typeof BODY_ZONE_LABELS] : "--"}
                 </span>
-              </div>
-            )}
-            <h3 className="text-sm font-black uppercase tracking-tight text-zinc-100 leading-snug">
-              {exerciseData?.name || "--"}
-            </h3>
-          </div>
+              ) : (
+                <h3 className="text-sm font-black uppercase tracking-tight text-zinc-100 leading-snug truncate">
+                  {exerciseData?.name || "--"}
+                </h3>
+              )}
+            </div>
 
-          <div className="flex items-center gap-1 shrink-0">
-            {exerciseData?.video_url && (
+            <div className="flex items-center gap-1 shrink-0">
+            {isExpanded && exerciseData?.video_url && (
               <a
                 href={exerciseData.video_url}
                 target="_blank"
                 rel="noopener noreferrer"
+                aria-label={isImageUrl(exerciseData.video_url) ? "Ver imagen" : "Ver video"}
                 className="inline-flex items-center justify-center h-7 w-7 rounded-lg bg-zinc-800 text-yellow-400 hover:bg-yellow-400 hover:text-black hover:scale-105 active:scale-95 transition-all shadow-sm"
               >
-                <Play className="h-3 w-3 fill-current" />
+                {isImageUrl(exerciseData.video_url)
+                  ? <ImageIcon className="h-3 w-3" />
+                  : <Play className="h-3 w-3 fill-current" />
+                }
               </a>
             )}
             {/* ↑↓ solo en standalone (no dentro de superset) */}
@@ -355,7 +364,13 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                 {isExpanded ? <ChevronUp className="h-3.5 w-3.5" /> : <ChevronDown className="h-3.5 w-3.5" />}
               </button>
             )}
+            </div>
           </div>
+          {isExpanded && (
+            <h3 className="text-sm font-black uppercase tracking-tight text-zinc-100 leading-snug">
+              {exerciseData?.name || "--"}
+            </h3>
+          )}
         </div>
 
         {isExpanded && (
