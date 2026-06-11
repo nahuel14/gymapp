@@ -9,6 +9,7 @@ import {
   resolveAuthError,
   resolveAuthSuccess,
 } from "@/lib/auth/validation";
+import { DumbbellIcon } from "@/components/DumbbellIcon";
 
 async function loginWithPassword(formData: FormData) {
   "use server";
@@ -144,18 +145,20 @@ export default async function AuthPage({
   const isLoginView = view === "login";
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background px-4">
-      <div className="w-full max-w-md rounded-xl bg-card p-8 shadow-md">
-        <h1 className="mb-2 text-center text-2xl font-semibold text-foreground">
-          BeeGym
-        </h1>
-        <p className="mb-6 text-center text-sm text-muted-foreground">
-          {isLoginView
-            ? "Inicia sesión para acceder a tu panel."
-            : "Crea una cuenta para comenzar a usar BeeGym."}
-        </p>
+    <div className="flex min-h-dvh flex-col items-center justify-center bg-background px-4 py-8 gap-6">
 
-        <div className="mb-4 flex rounded-md bg-muted p-1 text-sm">
+      {/* Branding hero */}
+      <div className="flex flex-col items-center gap-3 text-center">
+        <div className="rounded-2xl bg-yellow-400/10 p-4 ring-1 ring-yellow-400/20">
+          <DumbbellIcon className="h-10 w-10 text-yellow-400" />
+        </div>
+        <p className="text-2xl font-black text-foreground tracking-tight">BeeGym</p>
+      </div>
+
+      {/* Form card */}
+      <div className="w-full max-w-md rounded-xl bg-card p-8 shadow-md">
+
+          <div className="mb-4 flex rounded-md bg-muted p-1 text-sm">
           <a
             href="/auth?view=login"
             className={`flex-1 rounded-md px-3 py-1.5 text-center ${
