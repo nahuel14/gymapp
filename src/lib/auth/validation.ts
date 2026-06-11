@@ -48,10 +48,10 @@ export function validateSignupFields(
   return { ok: true };
 }
 
-export function getAuthRedirect(role: string | null | undefined): string {
+export function getAuthRedirect(role: string | null | undefined, userId?: string): string {
   if (role === 'ADMIN' || role === 'COACH') return '/coach';
   if (role === 'STUDENT') return '/student';
-  if (role === 'SUPER_STUDENT') return '/coach/templates';
+  if (role === 'SUPER_STUDENT') return userId ? `/coach/student/${userId}` : '/coach';
   return '/auth?error=norole&view=login';
 }
 

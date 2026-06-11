@@ -2,7 +2,7 @@
 
 import { useState, useTransition, useMemo } from "react";
 import { useRouter } from "next/navigation";
-import { ArrowLeft, Save, Plus, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
+import { ArrowLeft, Plus, Trash2, AlertTriangle, X, ChevronLeft, ChevronRight, ChevronsDownUp, ChevronsUpDown } from "lucide-react";
 import { DumbbellIcon } from "@/components/DumbbellIcon";
 import { useTemplate } from "@/hooks/useTemplates";
 import { useExercises } from "@/hooks/useExercises";
@@ -250,7 +250,7 @@ export function TemplateEditorClient({ templateId }: Props) {
         {/* Fila: Volver + indicador de guardado */}
         <div className="flex items-center justify-between">
           <button
-            onClick={() => router.push(`/coach/templates/${templateId}`)}
+            onClick={() => router.push("/coach/templates")}
             className="flex items-center gap-2 text-sm text-zinc-400 transition hover:text-zinc-100"
           >
             <ArrowLeft className="h-4 w-4" />
@@ -258,8 +258,8 @@ export function TemplateEditorClient({ templateId }: Props) {
           </button>
 
           {statusMsg && (
-            <span className="text-xs font-bold text-yellow-400 flex items-center gap-1">
-              <Save className="h-3 w-3" /> {statusMsg}
+            <span className="text-xs font-bold text-zinc-500 flex items-center gap-1">
+              {statusMsg}
             </span>
           )}
         </div>
@@ -272,7 +272,7 @@ export function TemplateEditorClient({ templateId }: Props) {
             onChange={(e) => setTemplateName(e.target.value)}
             onBlur={handleSaveName}
             placeholder="Nombre de la plantilla"
-            className="w-full bg-transparent text-lg font-black uppercase tracking-tight text-zinc-100 outline-none placeholder:text-zinc-700 focus:ring-0 md:text-2xl"
+            className="w-full bg-transparent text-lg font-black tracking-tight text-zinc-100 outline-none placeholder:text-zinc-700 focus:ring-0 md:text-2xl"
           />
           <p className="mt-0.5 text-xs text-zinc-500">
             Plantilla • {weekNumbers.length} {weekNumbers.length === 1 ? "semana" : "semanas"} •{" "}

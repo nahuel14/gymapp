@@ -55,7 +55,7 @@ async function loginWithPassword(formData: FormData) {
       | null;
 
   const role = existingProfile?.role;
-  redirect(getAuthRedirect(role));
+  redirect(getAuthRedirect(role, user.id));
 }
 
 async function signUpWithPassword(formData: FormData) {
@@ -121,7 +121,7 @@ async function signUpWithPassword(formData: FormData) {
     );
   }
 
-  redirect(getAuthRedirect(role));
+  redirect(getAuthRedirect(role, data.user.id));
 }
 
 export default async function AuthPage({

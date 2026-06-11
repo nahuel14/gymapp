@@ -61,7 +61,7 @@ import { getDeleteScope, buildDeleteSummary } from '@/lib/admin/delete';
 
 import {
   type LibraryExercise, filterExercises, validateExerciseName,
-  getBodyZoneLabel, getCategoryLabel, paginateExercises,
+  getBodyZoneLabel, getCategoryLabel, paginateExercises, getExerciseDeleteError,
 } from '@/lib/exercises/library';
 
 import {
@@ -1272,8 +1272,12 @@ describe('Ejercicios y Rutina', () => {
       expect(getAuthRedirect('STUDENT')).toBe('/student');
     });
 
-    it('SUPER_STUDENT redirige a /coach/templates', () => {
-      expect(getAuthRedirect('SUPER_STUDENT')).toBe('/coach/templates');
+    it('SUPER_STUDENT con userId redirige a su página de rutina', () => {
+      expect(getAuthRedirect('SUPER_STUDENT', 'abc-123')).toBe('/coach/student/abc-123');
+    });
+
+    it('SUPER_STUDENT sin userId redirige a /coach como fallback', () => {
+      expect(getAuthRedirect('SUPER_STUDENT')).toBe('/coach');
     });
 
     it('null redirige a error de norole', () => {
@@ -3265,6 +3269,32 @@ describe('Ejercicios', () => {
     });
   }); // ESCENARIO 39
 
+  describe('ESCENARIO 40: Validación de eliminación de ejercicio en uso', () => {
+    it('usageCount 0 retorna null (se puede eliminar)', () => {
+      expect(getExerciseDeleteError(0)).toBeNull();
+    });
+
+    it('usageCount 1 retorna "inUse"', () => {
+      expect(getExerciseDeleteError(1)).toBe('inUse');
+    });
+
+    it('usageCount mayor a 1 también retorna "inUse"', () => {
+      expect(getExerciseDeleteError(5)).toBe('inUse');
+      expect(getExerciseDeleteError(100)).toBe('inUse');
+    });
+
+    it('usageCount negativo retorna null (caso borde, no debería ocurrir)', () => {
+      expect(getExerciseDeleteError(-1)).toBeNull();
+    });
+
+    it('solo usageCount > 0 bloquea la eliminación', () => {
+      const bloqueados = [1, 2, 10].map(getExerciseDeleteError);
+      const permitidos = [0, -1].map(getExerciseDeleteError);
+      expect(bloqueados.every(r => r === 'inUse')).toBe(true);
+      expect(permitidos.every(r => r === null)).toBe(true);
+    });
+  }); // ESCENARIO 40
+
 }); // Librería de Ejercicios
 
 // ════════════════════════════════════════════════════════════════
@@ -3644,6 +3674,14 @@ describe('Autenticación', () => {
 
     it('rol desconocido redirige a error norole', () => {
       expect(getAuthRedirect('SUPERUSER')).toBe('/auth?error=norole&view=login');
+    });
+
+    it('SUPER_STUDENT con userId redirige a su página de rutina', () => {
+      expect(getAuthRedirect('SUPER_STUDENT', 'user-456')).toBe('/coach/student/user-456');
+    });
+
+    it('SUPER_STUDENT sin userId redirige a /coach como fallback', () => {
+      expect(getAuthRedirect('SUPER_STUDENT')).toBe('/coach');
     });
 
     it('ADMIN y COACH aterrizan en el mismo módulo', () => {

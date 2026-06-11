@@ -41,6 +41,7 @@ export function ExerciseListClient({ initialExercises, createAction, updateActio
 
   let errorMessage = "";
   if (errorKey === "missingName") errorMessage = "El nombre del ejercicio es obligatorio.";
+  else if (errorKey === "inUse") errorMessage = "No podés eliminar este ejercicio porque está asignado a una o más rutinas.";
   else if (errorKey === "save") errorMessage = "Ocurrió un error al guardar el ejercicio.";
 
   function closeModal() {

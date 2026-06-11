@@ -203,7 +203,7 @@ function BottomNavigation({ role, userId }: { role: UserRole; userId: string }) 
   const navItems = getBottomNavItems(role, userId);
 
   return (
-    <nav className="w-full shrink-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] md:hidden">
+    <nav className="fixed bottom-0 left-0 right-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] md:hidden">
       <div className="flex w-full items-center justify-between px-1">
         {navItems.map((item) => {
           const isActive = checkIsActive(pathname, item.href);
@@ -243,7 +243,7 @@ export function DashboardShell({ children, fullName, navItems, role, roleLabel, 
 
       {/* Área Principal y Barra Inferior */}
       <div className="flex flex-1 flex-col min-w-0 h-dvh">
-        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-zinc-950 relative">
+        <main className="flex-1 overflow-y-auto overflow-x-hidden bg-zinc-950 relative pb-16 md:pb-0">
           {children}
         </main>
         <BottomNavigation role={role} userId={userId} />

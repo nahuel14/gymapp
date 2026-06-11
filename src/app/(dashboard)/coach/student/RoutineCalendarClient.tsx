@@ -510,7 +510,7 @@ export function RoutineCalendarClient({
           <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
             <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col max-h-[92dvh]">
               <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
-                <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Iniciar Rutina</h4>
+                <h4 className="text-lg font-black uppercase tracking-tight text-zinc-100">Iniciar día</h4>
                 <button onClick={() => { setIsAddingDay(false); setNewDayForm(null); }} className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors">
                   <X className="h-5 w-5" />
                 </button>
@@ -634,7 +634,7 @@ export function RoutineCalendarClient({
                     }}
                     className="flex items-center gap-2 rounded-xl bg-yellow-400 px-6 py-3 text-[11px] font-black uppercase tracking-widest text-black transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-yellow-400/20 mt-2"
                   >
-                    <Plus className="h-4 w-4" /> Iniciar Rutina
+                    <Plus className="h-4 w-4" /> Iniciar día
                   </button>
                 )}
 

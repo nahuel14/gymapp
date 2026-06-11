@@ -49,6 +49,10 @@ export type PaginatedExercises<T extends LibraryExercise = LibraryExercise> = {
   totalItems: number;
 };
 
+export function getExerciseDeleteError(usageCount: number): "inUse" | null {
+  return usageCount > 0 ? "inUse" : null;
+}
+
 export function paginateExercises<T extends LibraryExercise>(
   exercises: T[],
   page: number,

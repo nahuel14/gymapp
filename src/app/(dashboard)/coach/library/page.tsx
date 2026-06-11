@@ -1,6 +1,6 @@
 import { redirect } from "next/navigation";
 import { revalidatePath } from "next/cache";
-import { createSupabaseServerClient } from "@/lib/supabase";
+import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase";
 import { BODY_ZONE_LABELS } from "@/lib/constants";
 import type { Database, Tables, TablesInsert } from "@/types/supabase";
 import { ExerciseListClient } from "./ExerciseListClient";
@@ -132,13 +132,21 @@ async function updateExercise(formData: FormData) {
 async function deleteExercise(formData: FormData) {
   "use server";
 
-  const { supabase } = await ensureCoach();
+  await ensureCoach();
+  const admin = createSupabaseAdminClient();
 
   const idValue = formData.get("id");
   const id = typeof idValue === "string" ? parseInt(idValue, 10) : NaN;
   if (isNaN(id)) redirect("/coach/library?error=save");
 
-  const { error } = await supabase
+  const { count } = await admin
+    .from("session_exercises")
+    .select("id", { count: "exact", head: true })
+    .eq("exercise_id", id as never);
+
+  if ((count ?? 0) > 0) redirect("/coach/library?error=inUse");
+
+  const { error } = await admin
     .from("exercises")
     .delete()
     .eq("id", id as never);
@@ -155,7 +163,7 @@ async function getExercises(): Promise<Exercise[]> {
   const response = (await supabase
     .from("exercises")
     .select("id, name, body_zone, video_url, created_at")
-    .order("created_at", { ascending: false })) as ExercisesResponse;
+    .order("name", { ascending: true })) as ExercisesResponse;
 
   return response.data ?? [];
 }
