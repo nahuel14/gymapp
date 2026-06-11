@@ -36,8 +36,8 @@ const ROLE_BADGE: Record<string, string> = {
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
   COACH: "Coach",
-  STUDENT: "Estudiante",
-  SUPER_STUDENT: "Super Est.",
+  STUDENT: "Alumno",
+  SUPER_STUDENT: "Autogestionado",
 };
 
 export function AdminDashboardClient({
@@ -160,7 +160,7 @@ export function AdminDashboardClient({
       return `${count} coach${count !== 1 ? "es" : ""} asignado${count !== 1 ? "s" : ""}`;
     }
     if (profile.role === "COACH") return "Coach";
-    if (profile.role === "SUPER_STUDENT") return "Super Estudiante";
+    if (profile.role === "SUPER_STUDENT") return "Alumno autogestionado";
     return "Administrador";
   };
 
@@ -328,7 +328,7 @@ export function AdminDashboardClient({
                     {(["STUDENT", "SUPER_STUDENT", "COACH"] as UserRole[]).map((r) => (
                       <button key={r} type="button" onClick={() => setInviteForm({ ...inviteForm, role: r })}
                         className={`flex-1 py-3.5 font-black text-xs tracking-widest uppercase transition ${inviteForm.role === r ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/60"}`}>
-                        {r === "STUDENT" ? "Estudiante" : r === "SUPER_STUDENT" ? "Super Est." : "Coach"}
+                        {r === "STUDENT" ? "Alumno" : r === "SUPER_STUDENT" ? "Autogestionado" : "Coach"}
                       </button>
                     ))}
                   </div>
@@ -381,8 +381,8 @@ export function AdminDashboardClient({
                   value={editForm.role}
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
                 >
-                  <option value="STUDENT">ESTUDIANTE</option>
-                  <option value="SUPER_STUDENT">SUPER ESTUDIANTE</option>
+                  <option value="STUDENT">ALUMNO</option>
+                  <option value="SUPER_STUDENT">ALUMNO AUTOGESTIONADO</option>
                   <option value="COACH">COACH</option>
                   <option value="ADMIN">ADMINISTRADOR</option>
                 </select>

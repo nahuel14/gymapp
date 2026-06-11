@@ -303,7 +303,7 @@ export default async function AuthPage({
             />
 
             <p className="text-xs text-muted-foreground">
-              Crearemos tu cuenta como estudiante. Más adelante un coach podrá
+              Crearemos tu cuenta como alumno. Más adelante un coach podrá
               cambiar tu rol si corresponde.
             </p>
 

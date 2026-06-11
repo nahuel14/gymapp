@@ -59,7 +59,7 @@ function getNavItems(role: UserRole, userId: string): NavItem[] {
 
   if (role === "ADMIN") {
     return [
-      { href: "/coach", label: "Estudiantes" },
+      { href: "/coach", label: "Alumnos" },
       { href: "/coach/templates", label: "Plantillas" },
       { href: "/coach/library", label: "Librería de ejercicios" },
       { href: "/admin/dashboard", label: "Administración" },
@@ -69,7 +69,7 @@ function getNavItems(role: UserRole, userId: string): NavItem[] {
 
   if (role === "COACH") {
     return [
-      { href: "/coach", label: "Estudiantes" },
+      { href: "/coach", label: "Alumnos" },
       { href: "/coach/templates", label: "Plantillas" },
       { href: "/coach/library", label: "Librería de ejercicios" },
       ...commonItems,
@@ -94,8 +94,8 @@ function getNavItems(role: UserRole, userId: string): NavItem[] {
 function getRoleLabel(role: UserRole) {
   if (role === "ADMIN") return "Administrador";
   if (role === "COACH") return "Coach";
-  if (role === "SUPER_STUDENT") return "Super Estudiante";
-  return "Estudiante";
+  if (role === "SUPER_STUDENT") return "Alumno autogestionado";
+  return "Alumno";
 }
 
 export default async function DashboardLayout({

@@ -25,7 +25,7 @@ export function CoachStudentDetailClient({ studentId, viewerRole }: Props) {
     return (
       <div className="flex h-[80vh] flex-col items-center justify-center gap-4 px-6 text-center">
         <p className="text-sm text-muted-foreground">
-          No se pudo cargar la rutina del estudiante.
+          No se pudo cargar la rutina del alumno.
         </p>
         <Link 
           href="/coach"

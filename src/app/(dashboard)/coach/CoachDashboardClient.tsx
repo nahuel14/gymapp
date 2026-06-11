@@ -191,7 +191,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
     return (
       <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
         <p className="text-sm text-muted-foreground flex items-center gap-2">
-          <Loader2 className="h-4 w-4 animate-spin text-primary" /> Cargando estudiantes...
+          <Loader2 className="h-4 w-4 animate-spin text-primary" /> Cargando alumnos...
         </p>
       </div>
     );
@@ -210,9 +210,9 @@ export function CoachDashboardClient({ errorKey }: Props) {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       <header className="flex flex-col gap-1">
-        <h1 className="text-xl font-black text-foreground tracking-tight">Panel de estudiantes</h1>
+        <h1 className="text-xl font-black text-foreground tracking-tight">Panel de alumnos</h1>
         <p className="text-xs text-muted-foreground">
-          {(coach as any).name ? `Hola, ${(coach as any).name}.` : "Hola, revisa el estado de tus estudiantes."}
+          {(coach as any).name ? `Hola, ${(coach as any).name}.` : "Hola, revisa el estado de tus alumnos."}
         </p>
       </header>
 
@@ -224,7 +224,7 @@ export function CoachDashboardClient({ errorKey }: Props) {
 
       {students.length === 0 ? (
         <div className="rounded-2xl bg-card p-6 text-xs font-bold text-muted-foreground shadow-sm text-center border-2 border-dashed border-border">
-          No tienes estudiantes asignados.
+          No tienes alumnos asignados.
         </div>
       ) : (
         <div className="flex flex-col gap-2">
