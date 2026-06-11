@@ -32,7 +32,8 @@ async function fetchCoachStudents(): Promise<CoachStudentsResult | null> {
     .eq("id", user.id)
     .single();
 
-  if (!profile || ((profile as any).role !== "COACH" && (profile as any).role !== "ADMIN")) {
+  const role = (profile as any).role;
+  if (!profile || (role !== "COACH" && role !== "ADMIN")) {
     return null;
   }
 
@@ -41,7 +42,7 @@ async function fetchCoachStudents(): Promise<CoachStudentsResult | null> {
   // 1. Obtener los IDs de los estudiantes según el rol
   let studentIds: string[] = [];
 
-  if (typedProfile.role === "COACH") {
+  if (role === "COACH") {
     const { data: assignments } = await (supabase as any)
       .from("coach_students")
       .select("student_id")
@@ -56,11 +57,6 @@ async function fetchCoachStudents(): Promise<CoachStudentsResult | null> {
       .eq("role", "STUDENT");
 
     studentIds = allStudents?.map(s => s.id) || [];
-
-    // El ADMIN también aparece en su propia lista (puede gestionar su propia rutina)
-    if (!studentIds.includes(user.id)) {
-      studentIds.push(user.id);
-    }
   }
 
   if (studentIds.length === 0) {

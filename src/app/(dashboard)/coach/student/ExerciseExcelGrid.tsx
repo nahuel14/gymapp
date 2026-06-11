@@ -29,7 +29,7 @@ type SessionExercise = any;
 
 interface Props {
   exercises: SessionExercise[];
-  role: "COACH" | "STUDENT" | "ADMIN";
+  role: "COACH" | "STUDENT" | "ADMIN" | "SUPER_STUDENT";
   isTemplate?: boolean;
   allExpanded?: boolean;
   onMutated?: () => void;
@@ -245,7 +245,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
               </a>
             )}
             {/* ↑↓ solo en standalone (no dentro de superset) */}
-            {(role === "COACH" || role === "ADMIN") && !isEditing && !isExpanded && !inSuperset && (
+            {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && !isEditing && !isExpanded && !inSuperset && (
               <div className="flex gap-0.5">
                 <button
                   onClick={() => handleReorder(ex, 'up')}
@@ -263,7 +263,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                 </button>
               </div>
             )}
-            {(role === "COACH" || role === "ADMIN") && !isEditing && isExpanded && (
+            {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && !isEditing && isExpanded && (
               <>
                 {inSuperset ? (
                   <>
@@ -493,9 +493,9 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                       Alumno
                     </span>
                   </div>
-                  {(role === "STUDENT" || role === "ADMIN") && !isEditing && hasStudentData && (
+                  {(role === "STUDENT" || role === "SUPER_STUDENT") && !isEditing && hasStudentData && (
                     <button
-                      onClick={() => handleStartEdit(ex, role === "ADMIN" ? "admin" : "student")}
+                      onClick={() => handleStartEdit(ex, role === "SUPER_STUDENT" ? "admin" : "student")}
                       className="flex items-center gap-1 rounded bg-zinc-800/50 px-2 py-0.5 text-[8px] font-black uppercase tracking-widest text-zinc-400 hover:text-emerald-400 active:scale-95 transition-all"
                     >
                       <Pencil className="h-3 w-3" /> Editar
@@ -612,9 +612,9 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                       </>
                     ) : (
                       <div className="flex-1 flex flex-col items-center justify-center py-2">
-                        {(role === "STUDENT" || role === "ADMIN") ? (
+                        {(role === "STUDENT" || role === "SUPER_STUDENT") ? (
                           <button
-                            onClick={() => handleStartEdit(ex, role === "ADMIN" ? "admin" : "student")}
+                            onClick={() => handleStartEdit(ex, role === "SUPER_STUDENT" ? "admin" : "student")}
                             className="w-full flex items-center justify-center gap-2 rounded-lg bg-emerald-400 border border-emerald-400/50 py-3 text-[10px] font-black uppercase tracking-widest text-zinc-950 shadow-lg shadow-emerald-400/20 hover:bg-emerald-300 active:scale-95 transition-all"
                           >
                             <PlusCircle className="h-4 w-4" />
@@ -680,7 +680,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                 <span className="text-[8px] font-black uppercase tracking-widest text-yellow-400/60 flex items-center gap-1">
                   <Link2 className="h-2.5 w-2.5" /> Super Serie
                 </span>
-                {(role === "COACH" || role === "ADMIN") && (
+                {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && (
                   <div className="flex gap-0.5 ml-auto">
                     <button
                       onClick={() => handleMoveSuperset(item.group, 'up')}

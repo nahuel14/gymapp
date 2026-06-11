@@ -25,9 +25,13 @@ export default async function CoachStudentPage({ params }: PageProps) {
     .eq("id", user.id as any)
     .single();
 
-  if (!profile || (profile.role !== "COACH" && profile.role !== "ADMIN")) {
+  if (!profile || (profile.role !== "COACH" && profile.role !== "ADMIN" && profile.role !== "SUPER_STUDENT")) {
     redirect("/auth?view=login");
   }
 
-  return <CoachStudentDetailClient studentId={studentId} viewerRole={profile.role as "COACH" | "ADMIN"} />;
+  if (profile.role === "SUPER_STUDENT" && studentId !== user.id) {
+    redirect("/coach/templates");
+  }
+
+  return <CoachStudentDetailClient studentId={studentId} viewerRole={profile.role as "COACH" | "ADMIN" | "SUPER_STUDENT"} />;
 }

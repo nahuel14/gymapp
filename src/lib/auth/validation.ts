@@ -51,6 +51,7 @@ export function validateSignupFields(
 export function getAuthRedirect(role: string | null | undefined): string {
   if (role === 'ADMIN' || role === 'COACH') return '/coach';
   if (role === 'STUDENT') return '/student';
+  if (role === 'SUPER_STUDENT') return '/coach/templates';
   return '/auth?error=norole&view=login';
 }
 

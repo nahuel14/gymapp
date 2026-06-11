@@ -7,7 +7,7 @@ import Link from "next/link";
 
 type Props = {
   studentId: string;
-  viewerRole: "COACH" | "ADMIN";
+  viewerRole: "COACH" | "ADMIN" | "SUPER_STUDENT";
 };
 
 export function CoachStudentDetailClient({ studentId, viewerRole }: Props) {
@@ -41,11 +41,13 @@ export function CoachStudentDetailClient({ studentId, viewerRole }: Props) {
     <div className="min-h-screen bg-background">
       {/* Navigation Header */}
       <div className="sticky top-0 z-10 flex items-center gap-3 bg-background/80 px-4 py-3 backdrop-blur-md border-b border-border">
-        <Link href="/coach" className="rounded-full p-1 transition hover:bg-muted">
-          <ChevronLeft className="h-6 w-6" />
-        </Link>
+        {viewerRole !== "SUPER_STUDENT" && (
+          <Link href="/coach" className="rounded-full p-1 transition hover:bg-muted">
+            <ChevronLeft className="h-6 w-6" />
+          </Link>
+        )}
         <h1 className="text-sm font-bold uppercase tracking-widest text-foreground">
-          Rutina de Alumno
+          {viewerRole === "SUPER_STUDENT" ? "Mi Rutina" : "Rutina de Alumno"}
         </h1>
       </div>
 

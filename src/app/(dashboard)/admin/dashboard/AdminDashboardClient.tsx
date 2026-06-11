@@ -30,12 +30,14 @@ const ROLE_BADGE: Record<string, string> = {
   ADMIN: "bg-purple-500/15 text-purple-400 border-purple-500/20",
   COACH: "bg-blue-500/15 text-blue-400 border-blue-500/20",
   STUDENT: "bg-yellow-500/15 text-yellow-400 border-yellow-500/20",
+  SUPER_STUDENT: "bg-green-500/15 text-green-400 border-green-500/20",
 };
 
 const ROLE_LABEL: Record<string, string> = {
   ADMIN: "Admin",
   COACH: "Coach",
   STUDENT: "Estudiante",
+  SUPER_STUDENT: "Super Est.",
 };
 
 export function AdminDashboardClient({
@@ -158,6 +160,7 @@ export function AdminDashboardClient({
       return `${count} coach${count !== 1 ? "es" : ""} asignado${count !== 1 ? "s" : ""}`;
     }
     if (profile.role === "COACH") return "Coach";
+    if (profile.role === "SUPER_STUDENT") return "Super Estudiante";
     return "Administrador";
   };
 
@@ -215,6 +218,8 @@ export function AdminDashboardClient({
                     <ShieldCheck className="h-5 w-5 text-purple-400" />
                   ) : profile.role === "COACH" ? (
                     <DumbbellIcon className="h-5 w-5 text-blue-400" />
+                  ) : profile.role === "SUPER_STUDENT" ? (
+                    <DumbbellIcon className="h-5 w-5 text-green-400" />
                   ) : (
                     <User className="h-5 w-5 text-yellow-400" />
                   )}
@@ -320,10 +325,10 @@ export function AdminDashboardClient({
                 <div className="flex flex-col gap-1.5">
                   <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Rol Inicial</label>
                   <div className="flex rounded-2xl border-2 border-border overflow-hidden">
-                    {(["STUDENT", "COACH"] as UserRole[]).map((r) => (
+                    {(["STUDENT", "SUPER_STUDENT", "COACH"] as UserRole[]).map((r) => (
                       <button key={r} type="button" onClick={() => setInviteForm({ ...inviteForm, role: r })}
                         className={`flex-1 py-3.5 font-black text-xs tracking-widest uppercase transition ${inviteForm.role === r ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground hover:bg-muted/60"}`}>
-                        {r === "STUDENT" ? "Estudiante" : "Coach"}
+                        {r === "STUDENT" ? "Estudiante" : r === "SUPER_STUDENT" ? "Super Est." : "Coach"}
                       </button>
                     ))}
                   </div>
@@ -377,6 +382,7 @@ export function AdminDashboardClient({
                   onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
                 >
                   <option value="STUDENT">ESTUDIANTE</option>
+                  <option value="SUPER_STUDENT">SUPER ESTUDIANTE</option>
                   <option value="COACH">COACH</option>
                   <option value="ADMIN">ADMINISTRADOR</option>
                 </select>

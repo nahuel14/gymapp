@@ -1210,7 +1210,7 @@ describe('Ejercicios y Rutina', () => {
     });
   });
 
-  describe('ESCENARIO 20b: ADMIN como auto-alumno - Separación de payloads por modo', () => {
+  describe('ESCENARIO 20b: SUPER_STUDENT modo dual - Separación de payloads por modo', () => {
     const form = {
       target_sets: 3, target_reps: [10, 10, 10],
       target_weight: [60, 60, 60], target_rpe: 8,
@@ -1259,6 +1259,35 @@ describe('Ejercicios y Rutina', () => {
   });
 });
 
+  describe('ESCENARIO 21: Redirección post-login por rol', () => {
+    it('ADMIN redirige a /coach', () => {
+      expect(getAuthRedirect('ADMIN')).toBe('/coach');
+    });
+
+    it('COACH redirige a /coach', () => {
+      expect(getAuthRedirect('COACH')).toBe('/coach');
+    });
+
+    it('STUDENT redirige a /student', () => {
+      expect(getAuthRedirect('STUDENT')).toBe('/student');
+    });
+
+    it('SUPER_STUDENT redirige a /coach/templates', () => {
+      expect(getAuthRedirect('SUPER_STUDENT')).toBe('/coach/templates');
+    });
+
+    it('null redirige a error de norole', () => {
+      expect(getAuthRedirect(null)).toBe('/auth?error=norole&view=login');
+    });
+
+    it('undefined redirige a error de norole', () => {
+      expect(getAuthRedirect(undefined)).toBe('/auth?error=norole&view=login');
+    });
+
+    it('rol desconocido redirige a error de norole', () => {
+      expect(getAuthRedirect('UNKNOWN')).toBe('/auth?error=norole&view=login');
+    });
+  });
 }); // Estudiantes
 
 // ════════════════════════════════════════════════════════════════

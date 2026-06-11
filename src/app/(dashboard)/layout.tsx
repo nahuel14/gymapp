@@ -48,10 +48,11 @@ async function getCurrentUserRole() {
   return {
     role: typedProfile.role,
     fullName: `${typedProfile.name || ""} ${typedProfile.last_name || ""}`.trim(),
+    userId: user.id,
   };
 }
 
-function getNavItems(role: UserRole): NavItem[] {
+function getNavItems(role: UserRole, userId: string): NavItem[] {
   const commonItems: NavItem[] = [
     { href: "/profile", label: "Mi Perfil" },
   ];
@@ -75,6 +76,15 @@ function getNavItems(role: UserRole): NavItem[] {
     ];
   }
 
+  if (role === "SUPER_STUDENT") {
+    return [
+      { href: `/coach/student/${userId}`, label: "Rutina" },
+      { href: "/coach/templates", label: "Plantillas" },
+      { href: "/coach/library", label: "Ejercicios" },
+      ...commonItems,
+    ];
+  }
+
   return [
     { href: "/student", label: "Rutina" },
     ...commonItems,
@@ -82,24 +92,21 @@ function getNavItems(role: UserRole): NavItem[] {
 }
 
 function getRoleLabel(role: UserRole) {
-  if (role === "ADMIN") {
-    return "Administrador";
-  }
-  if (role === "COACH") {
-    return "Coach";
-  }
+  if (role === "ADMIN") return "Administrador";
+  if (role === "COACH") return "Coach";
+  if (role === "SUPER_STUDENT") return "Super Estudiante";
   return "Estudiante";
 }
 
 export default async function DashboardLayout({
   children,
 }: DashboardLayoutProps) {
-  const { role, fullName } = await getCurrentUserRole();
-  const navItems = getNavItems(role);
+  const { role, fullName, userId } = await getCurrentUserRole();
+  const navItems = getNavItems(role, userId);
   const roleLabel = getRoleLabel(role);
 
   return (
-    <DashboardShell role={role} roleLabel={roleLabel} fullName={fullName} navItems={navItems}>
+    <DashboardShell role={role} roleLabel={roleLabel} fullName={fullName} navItems={navItems} userId={userId}>
       {children}
     </DashboardShell>
   );

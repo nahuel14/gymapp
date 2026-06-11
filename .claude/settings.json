@@ -30,7 +30,8 @@
       "Bash(npm install *)",
       "Bash(npm run *)",
       "Bash(npx knip *)",
-      "Bash(npm uninstall *)"
+      "Bash(npm uninstall *)",
+      "Bash(node -e ' *)"
     ]
   }
 }

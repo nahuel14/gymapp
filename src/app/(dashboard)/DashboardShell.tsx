@@ -26,47 +26,34 @@ type DashboardShellProps = {
   navItems: NavItem[];
   role: UserRole;
   roleLabel: string;
+  userId: string;
 };
 
-// Función centralizada para saber qué pestaña está activa
 function checkIsActive(pathname: string | null, href: string) {
   if (!pathname) return false;
-  
-  // Regla especial para "Alumnos" (porque es la ruta raíz /coach)
+
   if (href === "/coach") {
     return pathname === "/coach" || pathname.startsWith("/coach/student");
   }
-  
-  // Regla especial para Perfil (para que no se active accidentalmente)
   if (href === "/profile") {
     return pathname === "/profile";
   }
 
-  // Para el resto (plantillas, librería, student, admin, etc.)
   return pathname === href || pathname.startsWith(href + "/");
 }
 
 function NavIcon({ href, role }: { href: string; role: UserRole }) {
   const iconClass = "h-4 w-4";
-  
-  if (href === "/admin/dashboard") {
-    return <LayoutDashboard className={iconClass} />;
-  }
-  if ((role === "COACH" || role === "ADMIN") && href === "/coach") {
-    return <Users className={iconClass} />;
-  }
-  if ((role === "COACH" || role === "ADMIN") && href === "/coach/templates") {
-    return <ClipboardList className={iconClass} />;
-  }
-  if ((role === "COACH" || role === "ADMIN") && href === "/coach/library") {
-    return <Library className={iconClass} />;
-  }
-  if (href === "/student") {
-    return <DumbbellIcon className={iconClass} />;
-  }
-  if (href === "/profile") {
-    return <UserCircle className={iconClass} />;
-  }
+
+  if (href === "/admin/dashboard") return <LayoutDashboard className={iconClass} />;
+  if ((role === "COACH" || role === "ADMIN") && href === "/coach") return <Users className={iconClass} />;
+  if ((role === "COACH" || role === "ADMIN") && href === "/coach/templates") return <ClipboardList className={iconClass} />;
+  if ((role === "COACH" || role === "ADMIN") && href === "/coach/library") return <Library className={iconClass} />;
+  if (role === "SUPER_STUDENT" && href.startsWith("/coach/student/")) return <DumbbellIcon className={iconClass} />;
+  if (role === "SUPER_STUDENT" && href === "/coach/templates") return <ClipboardList className={iconClass} />;
+  if (role === "SUPER_STUDENT" && href === "/coach/library") return <Library className={iconClass} />;
+  if (href === "/student") return <DumbbellIcon className={iconClass} />;
+  if (href === "/profile") return <UserCircle className={iconClass} />;
   return null;
 }
 
@@ -96,14 +83,14 @@ function SidebarContent({
       <nav className="flex flex-1 flex-col gap-1">
         {navItems.map((item) => {
           const isActive = checkIsActive(pathname, item.href);
-          
+
           return (
             <Link
               key={item.href}
               href={item.href}
               className={`flex items-center gap-3 rounded-lg px-3 py-3 text-sm font-medium transition ${
-                isActive 
-                  ? "bg-yellow-400/10 text-yellow-400" 
+                isActive
+                  ? "bg-yellow-400/10 text-yellow-400"
                   : "text-zinc-400 hover:bg-yellow-400/10 hover:text-yellow-400"
               }`}
             >
@@ -132,7 +119,7 @@ type BottomNavItem = {
   icon: ReactNode;
 };
 
-function getBottomNavItems(role: UserRole): BottomNavItem[] {
+function getBottomNavItems(role: UserRole, userId: string): BottomNavItem[] {
   const coachAdminItems = [
     {
       href: "/coach",
@@ -172,6 +159,31 @@ function getBottomNavItems(role: UserRole): BottomNavItem[] {
     return coachAdminItems;
   }
 
+  if (role === "SUPER_STUDENT") {
+    return [
+      {
+        href: `/coach/student/${userId}`,
+        label: "Rutina",
+        icon: <DumbbellIcon className="h-5 w-5" />,
+      },
+      {
+        href: "/coach/templates",
+        label: "Plantillas",
+        icon: <ClipboardList className="h-5 w-5" />,
+      },
+      {
+        href: "/coach/library",
+        label: "Ejercicios",
+        icon: <Library className="h-5 w-5" />,
+      },
+      {
+        href: "/profile",
+        label: "Perfil",
+        icon: <UserCircle className="h-5 w-5" />,
+      },
+    ];
+  }
+
   return [
     {
       href: "/student",
@@ -186,16 +198,16 @@ function getBottomNavItems(role: UserRole): BottomNavItem[] {
   ];
 }
 
-function BottomNavigation({ role }: { role: UserRole }) {
+function BottomNavigation({ role, userId }: { role: UserRole; userId: string }) {
   const pathname = usePathname();
-  const navItems = getBottomNavItems(role);
+  const navItems = getBottomNavItems(role, userId);
 
   return (
     <nav className="w-full shrink-0 z-50 border-t border-zinc-800 bg-zinc-950/95 backdrop-blur-md pb-[env(safe-area-inset-bottom)] md:hidden">
       <div className="flex w-full items-center justify-between px-1">
         {navItems.map((item) => {
           const isActive = checkIsActive(pathname, item.href);
-          
+
           return (
             <Link
               key={item.href}
@@ -220,10 +232,10 @@ function BottomNavigation({ role }: { role: UserRole }) {
   );
 }
 
-export function DashboardShell({ children, fullName, navItems, role, roleLabel }: DashboardShellProps) {
+export function DashboardShell({ children, fullName, navItems, role, roleLabel, userId }: DashboardShellProps) {
   return (
     <div className="flex h-dvh w-screen overflow-hidden bg-zinc-950">
-      
+
       {/* Desktop Sidebar */}
       <aside className="hidden w-64 shrink-0 flex-col border-r border-zinc-800 bg-zinc-900 px-4 py-6 md:flex">
         <SidebarContent fullName={fullName} navItems={navItems} role={role} roleLabel={roleLabel} />
@@ -234,9 +246,8 @@ export function DashboardShell({ children, fullName, navItems, role, roleLabel }
         <main className="flex-1 overflow-y-auto overflow-x-hidden bg-zinc-950 relative">
           {children}
         </main>
-        <BottomNavigation role={role} />
+        <BottomNavigation role={role} userId={userId} />
       </div>
     </div>
   );
 }
-

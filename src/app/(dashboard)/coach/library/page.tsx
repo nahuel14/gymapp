@@ -43,7 +43,7 @@ async function ensureCoach() {
         }
       | null;
 
-  if (!coachProfile || (coachProfile.role !== "COACH" && coachProfile.role !== "ADMIN")) {
+  if (!coachProfile || (coachProfile.role !== "COACH" && coachProfile.role !== "ADMIN" && coachProfile.role !== "SUPER_STUDENT")) {
     redirect("/auth?view=login");
   }
 

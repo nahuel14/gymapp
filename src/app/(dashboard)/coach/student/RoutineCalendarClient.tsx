@@ -47,7 +47,7 @@ type TrainingPlan = Pick<Tables<"training_plans">, "id" | "name" | "start_date" 
 
 type RoutineCalendarClientProps = {
   studentId?: string;
-  role: "COACH" | "STUDENT" | "ADMIN";
+  role: "COACH" | "STUDENT" | "ADMIN" | "SUPER_STUDENT";
   profile: { id: string; name: string | null; last_name: string | null } | null;
   plan: { id: number; name: string; start_date: string | null } | null;
   allPlans: TrainingPlan[];
@@ -304,7 +304,7 @@ export function RoutineCalendarClient({
 
   return (
     <div className="flex flex-col gap-4 pb-24">
-      {(role === "COACH" || role === "ADMIN") && studentId && (
+      {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && studentId && (
         <ImportTemplateModal
           isOpen={isImportModalOpen}
           onClose={() => setIsImportModalOpen(false)}
@@ -332,7 +332,7 @@ export function RoutineCalendarClient({
             </div>
 
             {/* Acciones del Coach/Admin sobre el plan */}
-            {(role === "COACH" || role === "ADMIN") && studentId && (
+            {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && studentId && (
               <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   onClick={() => setIsImportModalOpen(true)}
@@ -451,7 +451,7 @@ export function RoutineCalendarClient({
             )}
 
             {/* Acciones de COACH/ADMIN (Duplicar, Borrar, Añadir Ex) */}
-            {(role === "COACH" || role === "ADMIN") && activeSessionsForDate.length > 0 && !isAddingDay && (
+            {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && activeSessionsForDate.length > 0 && !isAddingDay && (
               <>
                 <button onClick={handleDuplicateDay} className="flex h-9 w-9 sm:w-auto items-center justify-center sm:gap-1.5 rounded-lg bg-zinc-900 border border-zinc-800 sm:px-3 text-[10px] font-black uppercase tracking-widest text-zinc-400 transition hover:text-yellow-400 active:scale-95">
                   <Copy className="h-4 w-4 shrink-0" />
@@ -608,7 +608,7 @@ export function RoutineCalendarClient({
           </div>
         )}
 
-        {isAddingExercise && (role === "COACH" || role === "ADMIN") && (
+        {isAddingExercise && (role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && (
           <ExerciseFormModal isOpen={isAddingExercise} onClose={() => setIsAddingExercise(false)} formState={newExForm} setFormState={setNewExForm} onSave={handleAddExercise} isPending={isPending} allExercises={allExercises} />
         )}
       </div>
@@ -626,7 +626,7 @@ export function RoutineCalendarClient({
                   {currentViewedPlan ? (role === "STUDENT" ? "Día de Descanso" : "Día sin planificar") : "Semana Libre"}
                 </p>
                 
-                {(role === "COACH" || role === "ADMIN") && currentViewedPlan && (
+                {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && currentViewedPlan && (
                   <button
                     onClick={() => {
                       setIsAddingDay(true);
