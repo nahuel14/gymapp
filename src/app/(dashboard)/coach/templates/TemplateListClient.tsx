@@ -3,29 +3,55 @@
 import { useState, useEffect, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
-import { Plus, Calendar, Edit, Trash2, LayoutTemplate, X } from "lucide-react";
-import { DumbbellIcon } from "@/components/DumbbellIcon";
+import { Plus, Edit, Trash2, LayoutTemplate, X, Users, Copy } from "lucide-react";
 import { createTemplatePlan, duplicatePlan, deleteTemplatePlan } from "@/app/(dashboard)/coach/student/actions";
+import { reassignTemplate } from "@/app/actions/admin";
 
 type TemplatePlan = {
   id: number;
   name: string;
   created_at: string;
   coach_id: string;
-  session_count?: number;
-  exercise_count?: number;
+  week_count: number;
+  days_per_week: number;
+  owner_name?: string;
+  owner_last_name?: string;
+  owner_role?: string;
+};
+
+type AssignableUser = {
+  id: string;
+  name: string;
+  last_name: string;
+  role: string;
 };
 
 interface TemplateListClientProps {
   initialTemplates: TemplatePlan[];
+  isAdmin?: boolean;
+  currentUserId?: string;
+  assignableUsers?: AssignableUser[];
 }
 
-export default function TemplateListClient({ initialTemplates }: TemplateListClientProps) {
+const ROLE_LABEL: Record<string, string> = {
+  ADMIN: "Admin",
+  COACH: "Coach",
+  STUDENT: "Alumno",
+  SUPER_STUDENT: "Autogestionado",
+};
+
+export default function TemplateListClient({
+  initialTemplates,
+  isAdmin = false,
+  currentUserId,
+  assignableUsers = [],
+}: TemplateListClientProps) {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const [userRole, setUserRole] = useState<string | null>(null);
   const [localTemplates, setLocalTemplates] = useState<TemplatePlan[]>(initialTemplates);
   const [templateToDelete, setTemplateToDelete] = useState<number | null>(null);
+  const [templateToReassign, setTemplateToReassign] = useState<TemplatePlan | null>(null);
+  const [selectedNewOwnerId, setSelectedNewOwnerId] = useState("");
   const [isPending, startTransition] = useTransition();
 
   useEffect(() => {
@@ -33,21 +59,6 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
       setLocalTemplates(initialTemplates);
     }
   }, [initialTemplates]);
-
-  useEffect(() => {
-    const fetchUserRole = async () => {
-      try {
-        const response = await fetch("/api/user");
-        const { user } = await response.json();
-        if (user?.role) {
-          setUserRole(user.role);
-        }
-      } catch (error) {
-        console.error("Error fetching user role:", error);
-      }
-    };
-    fetchUserRole();
-  }, []);
 
   const handleCreateTemplate = async () => {
     try {
@@ -94,6 +105,30 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
     });
   };
 
+  const handleOpenReassign = (template: TemplatePlan) => {
+    setTemplateToReassign(template);
+    setSelectedNewOwnerId("");
+  };
+
+  const handleConfirmReassign = () => {
+    if (!templateToReassign || !selectedNewOwnerId) return;
+    startTransition(async () => {
+      try {
+        await reassignTemplate(templateToReassign.id, selectedNewOwnerId);
+        setTemplateToReassign(null);
+        router.refresh();
+        queryClient.invalidateQueries({ queryKey: ["templates"] });
+      } catch (error) {
+        console.error("Error reassigning template:", error);
+      }
+    });
+  };
+
+  // Users available for reassignment (exclude current owner)
+  const reassignOptions = templateToReassign
+    ? assignableUsers.filter(u => u.id !== templateToReassign.coach_id)
+    : assignableUsers;
+
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6 px-4 py-6 md:px-6 md:py-8">
       {/* Header */}
@@ -101,7 +136,7 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
         <div className="flex flex-col gap-1">
           <h1 className="text-xl font-black tracking-tight text-foreground">Plantillas</h1>
           <p className="text-xs text-muted-foreground">
-            Crea y gestiona tus planes de entrenamiento maestros
+            {isAdmin ? "Todas las plantillas del sistema" : "Crea y gestiona tus planes de entrenamiento maestros"}
           </p>
         </div>
         <button
@@ -136,17 +171,19 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
             <TemplateCard
               key={template.id}
               template={template}
+              isAdmin={isAdmin}
+              currentUserId={currentUserId}
               onDuplicate={() => handleDuplicateTemplate(template.id)}
               onEdit={() => router.push(`/coach/templates/${template.id}/edit`)}
               onPreview={() => router.push(`/coach/templates/${template.id}`)}
               onDelete={() => setTemplateToDelete(template.id)}
-              userRole={userRole}
+              onReassign={() => handleOpenReassign(template)}
             />
           ))}
         </div>
       )}
 
-      {/* MODAL ELIMINAR PLANTILLA */}
+      {/* ── MODAL: Eliminar plantilla ──────────────────────────── */}
       {templateToDelete !== null && (
         <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
           <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col">
@@ -188,62 +225,180 @@ export default function TemplateListClient({ initialTemplates }: TemplateListCli
           </div>
         </div>
       )}
+
+      {/* ── MODAL: Reasignar plantilla ──────────────────────────── */}
+      {templateToReassign && (
+        <div className="fixed inset-0 z-60 flex items-end justify-center bg-black/80 backdrop-blur-sm sm:items-center sm:p-4 animate-in fade-in">
+          <div className="w-full bg-zinc-950 rounded-t-4xl sm:rounded-3xl border-t sm:border border-zinc-800 shadow-2xl animate-in slide-in-from-bottom-1/2 sm:max-w-md flex flex-col">
+            <div className="flex items-center justify-between px-6 pt-6 pb-4 shrink-0">
+              <div className="flex items-center gap-3">
+                <div className="h-10 w-10 rounded-xl bg-blue-500/15 border border-blue-500/20 flex items-center justify-center">
+                  <Users className="h-5 w-5 text-blue-400" />
+                </div>
+                <div>
+                  <h4 className="text-base font-black uppercase tracking-tight text-zinc-100">Reasignar Plantilla</h4>
+                  <p className="text-xs text-zinc-500 truncate max-w-48">{templateToReassign.name}</p>
+                </div>
+              </div>
+              <button
+                onClick={() => setTemplateToReassign(null)}
+                className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
+              >
+                <X className="h-5 w-5" />
+              </button>
+            </div>
+
+            <div className="px-6 pb-4 flex flex-col gap-4">
+              {/* Propietario actual */}
+              {templateToReassign.owner_name && (
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-zinc-500 uppercase tracking-widest font-black">Propietario actual:</span>
+                  <span className={`inline-flex items-center px-2 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${
+                    templateToReassign.owner_role === "STUDENT"
+                      ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/20"
+                      : "bg-zinc-800 text-zinc-400 border-zinc-700"
+                  }`}>
+                    {templateToReassign.owner_role === "STUDENT" && "⚠ "}
+                    {templateToReassign.owner_name} {templateToReassign.owner_last_name}
+                  </span>
+                </div>
+              )}
+
+              {/* Selector de nuevo propietario */}
+              <div className="flex flex-col gap-2 max-h-56 overflow-y-auto">
+                {reassignOptions.length === 0 ? (
+                  <p className="text-xs text-zinc-500 py-4 text-center">No hay otros usuarios disponibles.</p>
+                ) : (
+                  reassignOptions.map((u) => (
+                    <button
+                      key={u.id}
+                      onClick={() => setSelectedNewOwnerId(u.id)}
+                      disabled={isPending}
+                      className={`flex items-center gap-3 w-full px-4 py-3 rounded-xl border-2 font-medium text-sm transition-all disabled:opacity-50 ${
+                        selectedNewOwnerId === u.id
+                          ? "border-blue-400/60 bg-blue-400/10 text-blue-300"
+                          : "border-zinc-800 bg-zinc-900 text-zinc-400 hover:border-zinc-600"
+                      }`}
+                    >
+                      <span className="font-black flex-1 text-left">{u.name} {u.last_name}</span>
+                      <span className="text-[10px] uppercase tracking-wider font-black text-zinc-500">
+                        {ROLE_LABEL[u.role] ?? u.role}
+                      </span>
+                    </button>
+                  ))
+                )}
+              </div>
+            </div>
+
+            <div className="px-6 pb-8 sm:pb-6 flex gap-3">
+              <button
+                onClick={() => setTemplateToReassign(null)}
+                disabled={isPending}
+                className="flex-1 h-14 rounded-2xl border border-zinc-700 bg-zinc-900 text-sm font-black uppercase tracking-widest text-zinc-300 transition-all hover:bg-zinc-800 active:scale-95 disabled:opacity-50"
+              >
+                Cancelar
+              </button>
+              <button
+                onClick={handleConfirmReassign}
+                disabled={isPending || !selectedNewOwnerId}
+                className="flex-1 h-14 rounded-2xl bg-blue-500 text-sm font-black uppercase tracking-widest text-white shadow-lg shadow-blue-500/20 transition-all hover:bg-blue-400 active:scale-95 disabled:opacity-50"
+              >
+                {isPending ? "Reasignando..." : "Reasignar"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
 function TemplateCard({
   template,
-  onDuplicate: _onDuplicate,
+  isAdmin,
+  currentUserId,
+  onDuplicate,
   onEdit,
   onPreview,
   onDelete,
-  userRole,
+  onReassign,
 }: {
   template: TemplatePlan;
+  isAdmin: boolean;
+  currentUserId?: string;
   onDuplicate: () => void;
   onEdit: () => void;
   onPreview: () => void;
   onDelete: () => void;
-  userRole: string | null;
+  onReassign: () => void;
 }) {
-  const canEdit = userRole === "COACH" || userRole === "ADMIN";
+  const isOwner = template.coach_id === currentUserId;
+  const isOrphaned = template.owner_role === "STUDENT";
+  const canEdit = isAdmin || isOwner;
+
+  const ownerBadge = isAdmin && template.owner_name ? (
+    <span className={`inline-flex shrink-0 items-center px-1.5 py-0.5 rounded text-[10px] font-black uppercase tracking-wider border ${
+      isOrphaned
+        ? "bg-yellow-500/15 text-yellow-400 border-yellow-500/20"
+        : "bg-muted text-muted-foreground border-transparent"
+    }`}>
+      {isOrphaned && "⚠ "}
+      {template.owner_name} {template.owner_last_name}
+    </span>
+  ) : null;
+
+  const actionButtons = canEdit ? (
+    <div className="flex items-center gap-1 shrink-0" onClick={e => e.stopPropagation()}>
+      {isAdmin && (
+        <>
+          <button onClick={onReassign} title="Reasignar propietario"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-blue-400 hover:bg-blue-500/10 transition-colors">
+            <Users className="h-4 w-4" />
+          </button>
+          <button onClick={onDuplicate} title="Duplicar plantilla"
+            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+            <Copy className="h-4 w-4" />
+          </button>
+        </>
+      )}
+      <button onClick={onEdit}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors">
+        <Edit className="h-4 w-4" />
+      </button>
+      <button onClick={onDelete}
+        className="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:text-red-500 hover:bg-red-500/10 transition-colors">
+        <Trash2 className="h-4 w-4" />
+      </button>
+    </div>
+  ) : null;
 
   return (
     <div
       onClick={onPreview}
-      className="group flex items-center justify-between rounded-2xl border border-border bg-card p-3 shadow-sm hover:border-primary/40 active:scale-[0.99] transition-all cursor-pointer"
+      className="group flex flex-col rounded-2xl border border-border bg-card px-4 py-3 shadow-sm hover:border-primary/40 active:scale-[0.99] transition-all cursor-pointer gap-1"
     >
-      <div className="flex flex-1 flex-col min-w-0 justify-center">
-        <p className="text-sm font-black text-foreground truncate">{template.name}</p>
-        <div className="flex items-center gap-3 mt-0.5 text-muted-foreground">
-          <span className="flex items-center gap-1 text-xs">
-            <Calendar className="h-3 w-3" />
-            {template.session_count || 0} sesiones
-          </span>
-          <span className="flex items-center gap-1 text-xs">
-            <DumbbellIcon className="h-3 w-3" />
-            {template.exercise_count || 0} ejercicios
-          </span>
-        </div>
+      {/* Row 1: title + badge (desktop) */}
+      <div className="flex items-start justify-between gap-2">
+        <p className="text-sm font-black text-foreground leading-snug">{template.name}</p>
+        <span className="hidden sm:block">{ownerBadge}</span>
       </div>
 
-      {canEdit && (
-        <div className="flex items-center gap-1 shrink-0 pl-2" onClick={e => e.stopPropagation()}>
-          <button
-            onClick={onEdit}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-muted-foreground hover:text-foreground hover:bg-muted transition-colors"
-          >
-            <Edit className="h-4 w-4" />
-          </button>
-          <button
-            onClick={onDelete}
-            className="flex h-8 w-8 items-center justify-center rounded-lg text-red-400 hover:text-red-500 hover:bg-red-500/10 transition-colors"
-          >
-            <Trash2 className="h-4 w-4" />
-          </button>
+      {/* Badge own row (mobile only) */}
+      {ownerBadge && <span className="sm:hidden self-start">{ownerBadge}</span>}
+
+      {/* Stats + buttons */}
+      <div className="flex items-center justify-between mt-0.5">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:gap-2 gap-0.5">
+          <span className="text-xs text-muted-foreground">
+            {template.week_count} {template.week_count === 1 ? "semana" : "semanas"}
+          </span>
+          <span className="hidden sm:block text-xs text-muted-foreground/40">·</span>
+          <span className="text-xs text-muted-foreground">
+            {template.days_per_week} {template.days_per_week === 1 ? "día" : "días"}/sem
+          </span>
         </div>
-      )}
+        {actionButtons}
+      </div>
     </div>
   );
 }

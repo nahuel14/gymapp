@@ -55,6 +55,7 @@ import {
   filterProfiles, getCoachProfiles, isCoachAssignedToStudent,
   toggleAssignment as toggleAssignmentLocal,
   countCoachesForStudent, validateInviteForm, canDeleteUser,
+  computeRoleChangeImpact,
 } from '@/lib/admin/filters';
 
 import { getDeleteScope, buildDeleteSummary } from '@/lib/admin/delete';
@@ -2808,6 +2809,7 @@ const ADMIN_PROFILES: AdminProfile[] = [
   { id: 'u3', email: 'pedro@gym.com',   name: 'Pedro',   last_name: 'Martínez',role: 'STUDENT' },
   { id: 'u4', email: 'admin@gym.com',   name: 'Admin',   last_name: 'Root',    role: 'ADMIN' },
   { id: 'u5', email: 'laura@gym.com',   name: 'Laura',   last_name: 'Sánchez', role: 'COACH' },
+  { id: 'u6', email: 'super@gym.com',   name: 'Super',   last_name: 'Student', role: 'SUPER_STUDENT' },
 ];
 
 const ADMIN_ASSIGNMENTS: AdminAssignment[] = [
@@ -2992,6 +2994,21 @@ describe('Administración', () => {
         expect(scopeAdmin.deletesTemplates).toBe(scopeCoach.deletesTemplates);
         expect(scopeAdmin.nullifiesCoachId).toBe(scopeCoach.nullifiesCoachId);
       });
+
+      it('SUPER_STUDENT: elimina planes, elimina templates y nullifica coach_id', () => {
+        const scope = getDeleteScope('SUPER_STUDENT');
+        expect(scope.deletesPlans).toBe(true);
+        expect(scope.deletesTemplates).toBe(true);
+        expect(scope.nullifiesCoachId).toBe(true);
+      });
+
+      it('SUPER_STUDENT: difiere de STUDENT en que también elimina templates', () => {
+        const scopeSuper = getDeleteScope('SUPER_STUDENT');
+        const scopeStudent = getDeleteScope('STUDENT');
+        expect(scopeSuper.deletesPlans).toBe(scopeStudent.deletesPlans);
+        expect(scopeSuper.deletesTemplates).not.toBe(scopeStudent.deletesTemplates);
+        expect(scopeSuper.nullifiesCoachId).not.toBe(scopeStudent.nullifiesCoachId);
+      });
     });
 
     describe('buildDeleteSummary', () => {
@@ -3042,6 +3059,105 @@ describe('Administración', () => {
         const msg = buildDeleteSummary('COACH', 0, 3);
         expect(msg.toLowerCase()).not.toContain('plan de');
       });
+
+      it('SUPER_STUDENT con planes y plantillas: menciona ambos', () => {
+        const msg = buildDeleteSummary('SUPER_STUDENT', 2, 3);
+        expect(msg).toContain('2');
+        expect(msg).toContain('3');
+        expect(msg.toLowerCase()).toContain('plan');
+        expect(msg.toLowerCase()).toContain('plantilla');
+      });
+
+      it('SUPER_STUDENT con 1 plan y 0 plantillas: solo menciona el plan en singular', () => {
+        const msg = buildDeleteSummary('SUPER_STUDENT', 1, 0);
+        expect(msg.toLowerCase()).toMatch(/\b1 plan\b/);
+        expect(msg.toLowerCase()).not.toContain('plantilla');
+      });
+
+      it('SUPER_STUDENT con 0 planes y 1 plantilla: solo menciona la plantilla en singular', () => {
+        const msg = buildDeleteSummary('SUPER_STUDENT', 0, 1);
+        expect(msg.toLowerCase()).not.toMatch(/\bplanes?\b/);
+        expect(msg.toLowerCase()).toMatch(/\b1 plantilla\b/);
+      });
+
+      it('SUPER_STUDENT con 0 planes y 0 plantillas: mensaje sin eliminación', () => {
+        const msg = buildDeleteSummary('SUPER_STUDENT', 0, 0);
+        expect(msg.toLowerCase()).not.toContain('eliminará');
+      });
+    });
+  });
+
+  describe('ESCENARIO 43: Impacto de cambio de rol (computeRoleChangeImpact)', () => {
+    // u2 (STUDENT) → asignado a u1 y u5
+    // u1 (COACH)   → tiene u2 y u3 asignados
+    // u4 (ADMIN)   → tiene u2 y u3 asignados (via coach_id)
+    // u6 (SUPER_STUDENT) → sin asignaciones
+
+    it('mismo rol → sin impacto', () => {
+      const result = computeRoleChangeImpact('u2', 'STUDENT', 'STUDENT', ADMIN_ASSIGNMENTS);
+      expect(result.count).toBe(0);
+      expect(result.text).toBe('');
+    });
+
+    it('STUDENT con coaches asignados → informa cuántos coaches se eliminarán', () => {
+      const result = computeRoleChangeImpact('u2', 'STUDENT', 'COACH', ADMIN_ASSIGNMENTS);
+      expect(result.count).toBe(2); // u1 y u5 asignados a u2
+      expect(result.text).toContain('2');
+      expect(result.text.toLowerCase()).toContain('coach');
+    });
+
+    it('STUDENT con coaches asignados → usa plural "coaches"', () => {
+      const result = computeRoleChangeImpact('u2', 'STUDENT', 'SUPER_STUDENT', ADMIN_ASSIGNMENTS);
+      expect(result.text.toLowerCase()).toContain('coaches');
+    });
+
+    it('STUDENT sin coaches asignados → sin impacto', () => {
+      // u6 (SUPER_STUDENT) no está en ADMIN_ASSIGNMENTS como student_id
+      const result = computeRoleChangeImpact('u6', 'STUDENT', 'COACH', ADMIN_ASSIGNMENTS);
+      expect(result.count).toBe(0);
+      expect(result.text).toBe('');
+    });
+
+    it('COACH con alumnos asignados → informa cuántos alumnos se eliminarán', () => {
+      const result = computeRoleChangeImpact('u1', 'COACH', 'STUDENT', ADMIN_ASSIGNMENTS);
+      expect(result.count).toBe(2); // u2 y u3 asignados a u1
+      expect(result.text).toContain('2');
+      expect(result.text.toLowerCase()).toContain('alumno');
+    });
+
+    it('ADMIN con alumnos asignados → mismo comportamiento que COACH', () => {
+      const assignments = [
+        ...ADMIN_ASSIGNMENTS,
+        { coach_id: 'u4', student_id: 'u2' },
+      ];
+      const result = computeRoleChangeImpact('u4', 'ADMIN', 'STUDENT', assignments);
+      expect(result.count).toBe(1);
+      expect(result.text.toLowerCase()).toContain('alumno');
+    });
+
+    it('COACH sin alumnos asignados → sin impacto', () => {
+      const result = computeRoleChangeImpact('u1', 'COACH', 'STUDENT', []);
+      expect(result.count).toBe(0);
+      expect(result.text).toBe('');
+    });
+
+    it('COACH→ADMIN (ambos son coachRoles) → sin impacto', () => {
+      const result = computeRoleChangeImpact('u1', 'COACH', 'ADMIN', ADMIN_ASSIGNMENTS);
+      expect(result.count).toBe(0);
+      expect(result.text).toBe('');
+    });
+
+    it('SUPER_STUDENT→STUDENT → sin impacto (no usa coach_students)', () => {
+      const result = computeRoleChangeImpact('u6', 'SUPER_STUDENT', 'STUDENT', ADMIN_ASSIGNMENTS);
+      expect(result.count).toBe(0);
+      expect(result.text).toBe('');
+    });
+
+    it('COACH con 1 alumno → usa singular "alumno" y "asignado"', () => {
+      const singleAssignment = [{ coach_id: 'u5', student_id: 'u3' }];
+      const result = computeRoleChangeImpact('u5', 'COACH', 'STUDENT', singleAssignment);
+      expect(result.count).toBe(1);
+      expect(result.text).toMatch(/1 alumno\b/);
     });
   });
 

@@ -16,6 +16,7 @@ import {
   getUserDeleteSummary,
 } from "@/app/actions/admin";
 import { buildDeleteSummary } from "@/lib/admin/delete";
+import { computeRoleChangeImpact } from "@/lib/admin/filters";
 import { useRouter } from "next/navigation";
 
 type UserRole = Database["public"]["Enums"]["user_role"];
@@ -40,6 +41,8 @@ const ROLE_LABEL: Record<string, string> = {
   SUPER_STUDENT: "Autogestionado",
 };
 
+type EditModalMode = "edit" | "confirm";
+
 export function AdminDashboardClient({
   profiles,
   assignments: initialAssignments,
@@ -59,6 +62,9 @@ export function AdminDashboardClient({
   // Edit modal
   const [editingUser, setEditingUser] = useState<Profile | null>(null);
   const [editForm, setEditForm] = useState({ name: "", last_name: "", role: "STUDENT" as UserRole });
+  const [editModalMode, setEditModalMode] = useState<EditModalMode>("edit");
+  const [roleChangeImpactText, setRoleChangeImpactText] = useState("");
+  const [updateError, setUpdateError] = useState<string | null>(null);
 
   // Coach assignment modal
   const [assigningStudent, setAssigningStudent] = useState<Profile | null>(null);
@@ -67,6 +73,7 @@ export function AdminDashboardClient({
   const [confirmDelete, setConfirmDelete] = useState<Profile | null>(null);
   const [deleteSummary, setDeleteSummary] = useState<string | null>(null);
   const [isLoadingSummary, setIsLoadingSummary] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   const coaches = profiles.filter((p) => p.role === "COACH" || p.role === "ADMIN");
 
@@ -94,15 +101,60 @@ export function AdminDashboardClient({
   const openEdit = (user: Profile) => {
     setEditingUser(user);
     setEditForm({ name: (user as any).name ?? "", last_name: (user as any).last_name ?? "", role: (user.role as UserRole) ?? "STUDENT" });
+    setEditModalMode("edit");
+    setRoleChangeImpactText("");
+    setUpdateError(null);
+  };
+
+  const closeEdit = () => {
+    setEditingUser(null);
+    setEditModalMode("edit");
+    setRoleChangeImpactText("");
+    setUpdateError(null);
   };
 
   const handleUpdateUser = (e: React.FormEvent) => {
     e.preventDefault();
     if (!editingUser) return;
+
+    const fromRole = (editingUser.role as UserRole) ?? "STUDENT";
+    const toRole = editForm.role;
+
+    // Show confirmation if role change has impact
+    if (editModalMode === "edit" && fromRole !== toRole) {
+      const impact = computeRoleChangeImpact(editingUser.id, fromRole, toRole, assignments);
+      if (impact.count > 0) {
+        setRoleChangeImpactText(impact.text);
+        setEditModalMode("confirm");
+        return;
+      }
+    }
+
+    setUpdateError(null);
     startTransition(async () => {
-      await updateUserAsAdmin(editingUser.id, editForm.name, editForm.last_name, editForm.role);
-      setEditingUser(null);
-      router.refresh();
+      try {
+        await updateUserAsAdmin(editingUser.id, editForm.name, editForm.last_name, toRole);
+        closeEdit();
+        router.refresh();
+      } catch (err: any) {
+        setUpdateError(err.message ?? "Error al actualizar el usuario.");
+        setEditModalMode("edit");
+      }
+    });
+  };
+
+  const handleConfirmRoleChange = () => {
+    if (!editingUser) return;
+    setUpdateError(null);
+    startTransition(async () => {
+      try {
+        await updateUserAsAdmin(editingUser.id, editForm.name, editForm.last_name, editForm.role);
+        closeEdit();
+        router.refresh();
+      } catch (err: any) {
+        setUpdateError(err.message ?? "Error al actualizar el usuario.");
+        setEditModalMode("edit");
+      }
     });
   };
 
@@ -133,6 +185,7 @@ export function AdminDashboardClient({
   const openDeleteConfirm = (profile: Profile) => {
     setConfirmDelete(profile);
     setDeleteSummary(null);
+    setDeleteError(null);
     setIsLoadingSummary(true);
     startTransition(async () => {
       try {
@@ -146,10 +199,15 @@ export function AdminDashboardClient({
 
   const handleConfirmDelete = () => {
     if (!confirmDelete) return;
+    setDeleteError(null);
     startTransition(async () => {
-      await deleteUser(confirmDelete.id);
-      setConfirmDelete(null);
-      router.refresh();
+      try {
+        await deleteUser(confirmDelete.id);
+        setConfirmDelete(null);
+        router.refresh();
+      } catch (err: any) {
+        setDeleteError(err.message ?? "Error al eliminar el usuario.");
+      }
     });
   };
 
@@ -353,49 +411,89 @@ export function AdminDashboardClient({
                 <h2 className="text-2xl font-black text-foreground tracking-tight">Editar Usuario</h2>
                 <p className="text-[10px] font-bold text-muted-foreground uppercase tracking-widest">{editingUser.email}</p>
               </div>
-              <button onClick={() => setEditingUser(null)} className="p-2 rounded-full hover:bg-muted transition">
+              <button onClick={closeEdit} className="p-2 rounded-full hover:bg-muted transition">
                 <X className="h-6 w-6" />
               </button>
             </div>
-            <form onSubmit={handleUpdateUser} className="flex flex-col gap-5">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Nombre</label>
-                <input required type="text" autoComplete="given-name"
-                  className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
-                  value={editForm.name}
-                  onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Apellido</label>
-                <input required type="text" autoComplete="family-name"
-                  className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
-                  value={editForm.last_name}
-                  onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
-                />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Rol del Usuario</label>
-                <select
-                  className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-black text-xs appearance-none"
-                  value={editForm.role}
-                  onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
-                >
-                  <option value="STUDENT">ALUMNO</option>
-                  <option value="SUPER_STUDENT">ALUMNO AUTOGESTIONADO</option>
-                  <option value="COACH">COACH</option>
-                  <option value="ADMIN">ADMINISTRADOR</option>
-                </select>
-              </div>
-              <button disabled={isPending}
-                className="mt-4 flex items-center justify-center gap-2 bg-foreground text-background py-5 rounded-3xl font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50">
-                {isPending ? (
-                  <><Loader2 className="h-5 w-5 animate-spin" /> ACTUALIZANDO...</>
-                ) : (
-                  <><Save className="h-5 w-5" /> GUARDAR</>
+
+            {editModalMode === "edit" ? (
+              <form onSubmit={handleUpdateUser} className="flex flex-col gap-5">
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Nombre</label>
+                  <input required type="text" autoComplete="given-name"
+                    className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
+                    value={editForm.name}
+                    onChange={(e) => setEditForm({ ...editForm, name: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Apellido</label>
+                  <input required type="text" autoComplete="family-name"
+                    className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-medium"
+                    value={editForm.last_name}
+                    onChange={(e) => setEditForm({ ...editForm, last_name: e.target.value })}
+                  />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black uppercase text-muted-foreground tracking-widest ml-1">Rol del Usuario</label>
+                  <select
+                    className="bg-muted border-2 border-transparent focus:border-primary rounded-2xl p-4 outline-none transition font-black text-xs appearance-none"
+                    value={editForm.role}
+                    onChange={(e) => setEditForm({ ...editForm, role: e.target.value as UserRole })}
+                  >
+                    <option value="STUDENT" disabled={editingUser.role === "ADMIN"}>ALUMNO</option>
+                    <option value="SUPER_STUDENT" disabled={editingUser.role === "ADMIN"}>ALUMNO AUTOGESTIONADO</option>
+                    <option value="COACH">COACH</option>
+                    <option value="ADMIN">ADMINISTRADOR</option>
+                  </select>
+                  {editingUser.role === "ADMIN" && (
+                    <p className="text-[10px] text-muted-foreground ml-1">Un administrador solo puede cambiar a Coach o ser eliminado.</p>
+                  )}
+                </div>
+                {updateError && (
+                  <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{updateError}</p>
                 )}
-              </button>
-            </form>
+                <button disabled={isPending}
+                  className="mt-4 flex items-center justify-center gap-2 bg-foreground text-background py-5 rounded-3xl font-black text-sm shadow-xl shadow-foreground/10 hover:scale-[1.02] active:scale-[0.98] transition disabled:opacity-50">
+                  {isPending ? (
+                    <><Loader2 className="h-5 w-5 animate-spin" /> ACTUALIZANDO...</>
+                  ) : (
+                    <><Save className="h-5 w-5" /> GUARDAR</>
+                  )}
+                </button>
+              </form>
+            ) : (
+              <div className="flex flex-col gap-4">
+                <div className="p-4 rounded-2xl bg-yellow-500/10 border border-yellow-500/20">
+                  <p className="text-sm font-black text-yellow-300 mb-1">Cambio de rol con impacto</p>
+                  <p className="text-sm text-foreground leading-relaxed">{roleChangeImpactText}</p>
+                </div>
+                <p className="text-xs text-muted-foreground">
+                  Los planes de entrenamiento NO se eliminarán. Solo se limpian las asignaciones.
+                </p>
+                {updateError && (
+                  <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2">{updateError}</p>
+                )}
+                <div className="flex gap-3 pt-2">
+                  <button
+                    type="button"
+                    onClick={() => { setEditModalMode("edit"); setUpdateError(null); }}
+                    disabled={isPending}
+                    className="flex-1 h-14 rounded-2xl border border-border bg-muted text-sm font-black uppercase tracking-widest text-foreground transition-all hover:bg-muted/60 active:scale-95 disabled:opacity-50"
+                  >
+                    Cancelar
+                  </button>
+                  <button
+                    type="button"
+                    onClick={handleConfirmRoleChange}
+                    disabled={isPending}
+                    className="flex-1 h-14 rounded-2xl bg-yellow-500 text-sm font-black uppercase tracking-widest text-black shadow-lg shadow-yellow-500/20 transition-all hover:bg-yellow-400 active:scale-95 disabled:opacity-50"
+                  >
+                    {isPending ? "Guardando..." : "Confirmar"}
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}
@@ -475,7 +573,7 @@ export function AdminDashboardClient({
                 </h4>
               </div>
               <button
-                onClick={() => setConfirmDelete(null)}
+                onClick={() => { setConfirmDelete(null); setDeleteError(null); }}
                 className="h-10 w-10 flex items-center justify-center rounded-full bg-zinc-900 text-zinc-400 hover:text-white transition-colors"
               >
                 <X className="h-5 w-5" />
@@ -496,11 +594,14 @@ export function AdminDashboardClient({
                   <p className="text-xs text-zinc-400">{deleteSummary}</p>
                 )}
               </div>
+              {deleteError && (
+                <p className="text-xs text-red-400 bg-red-500/10 border border-red-500/20 rounded-xl px-3 py-2 mt-3">{deleteError}</p>
+              )}
               <p className="text-xs text-zinc-500 mt-3">Esta acción no se puede deshacer.</p>
             </div>
             <div className="px-6 pt-4 pb-8 sm:pb-6 flex gap-3">
               <button
-                onClick={() => setConfirmDelete(null)}
+                onClick={() => { setConfirmDelete(null); setDeleteError(null); }}
                 disabled={isPending}
                 className="flex-1 h-14 rounded-2xl border border-zinc-700 bg-zinc-900 text-sm font-black uppercase tracking-widest text-zinc-300 transition-all hover:bg-zinc-800 active:scale-95 disabled:opacity-50"
               >

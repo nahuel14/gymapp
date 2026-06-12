@@ -1,4 +1,4 @@
-type AdminUserRole = "ADMIN" | "COACH" | "STUDENT";
+type AdminUserRole = "ADMIN" | "COACH" | "STUDENT" | "SUPER_STUDENT";
 
 export type AdminProfile = {
   id: string;
@@ -71,4 +71,32 @@ export function canDeleteUser(
   targetUserId: string
 ): boolean {
   return currentUserId !== targetUserId;
+}
+
+export function computeRoleChangeImpact(
+  userId: string,
+  fromRole: AdminUserRole,
+  toRole: AdminUserRole,
+  assignments: AdminAssignment[]
+): { count: number; text: string } {
+  if (fromRole === toRole) return { count: 0, text: "" };
+  const coachRoles = new Set<AdminUserRole>(["COACH", "ADMIN"]);
+
+  if (fromRole === "STUDENT") {
+    const count = assignments.filter((a) => a.student_id === userId).length;
+    if (count === 0) return { count: 0, text: "" };
+    return {
+      count,
+      text: `Este alumno tiene ${count} coach${count !== 1 ? "es" : ""} asignado${count !== 1 ? "s" : ""}. Al cambiar su rol, se eliminarán todas sus asignaciones de coaches.`,
+    };
+  }
+  if (coachRoles.has(fromRole) && !coachRoles.has(toRole)) {
+    const count = assignments.filter((a) => a.coach_id === userId).length;
+    if (count === 0) return { count: 0, text: "" };
+    return {
+      count,
+      text: `Este coach tiene ${count} alumno${count !== 1 ? "s" : ""} asignado${count !== 1 ? "s" : ""}. Al cambiar su rol, se eliminarán todas sus asignaciones con alumnos.`,
+    };
+  }
+  return { count: 0, text: "" };
 }

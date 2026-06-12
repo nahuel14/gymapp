@@ -6,16 +6,25 @@ type TemplatePlan = {
   name: string;
   created_at: string;
   coach_id: string;
-  session_count?: number;
-  exercise_count?: number;
+  week_count: number;
+  days_per_week: number;
+  owner_name?: string;
+  owner_last_name?: string;
+  owner_role?: string;
+};
+
+type AssignableUser = {
+  id: string;
+  name: string;
+  last_name: string;
+  role: string;
 };
 
 export default async function TemplatesPage() {
   const supabase = await createSupabaseServerClient();
-  
-  // Obtener el usuario autenticado
+
   const { data: { user } } = await supabase.auth.getUser();
-  
+
   if (!user) {
     return (
       <div className="min-h-screen bg-zinc-950 flex items-center justify-center">
@@ -24,7 +33,6 @@ export default async function TemplatesPage() {
     );
   }
 
-  // Check role — admins see all coaches' templates
   const { data: profile } = await supabase
     .from('profiles')
     .select('role')
@@ -33,7 +41,6 @@ export default async function TemplatesPage() {
 
   const isAdmin = profile?.role === 'ADMIN';
 
-  // Fetch templates: admins see all, coaches see only their own
   let templateQuery = supabase
     .from('training_plans')
     .select('*')
@@ -55,43 +62,77 @@ export default async function TemplatesPage() {
     );
   }
 
-  // Calcular contadores de sesiones y ejercicios para cada plantilla
+  // Build owner map for ADMIN view
+  const ownerMap: Record<string, { name: string; last_name: string; role: string }> = {};
+  let assignableUsers: AssignableUser[] = [];
+
+  if (isAdmin) {
+    const ownerIds = [...new Set((templates ?? []).map((t: any) => t.coach_id).filter(Boolean))];
+
+    if (ownerIds.length > 0) {
+      const { data: owners } = await supabase
+        .from('profiles')
+        .select('id, name, last_name, role')
+        .in('id', ownerIds as any);
+
+      for (const owner of owners ?? []) {
+        ownerMap[(owner as any).id] = {
+          name: (owner as any).name ?? "",
+          last_name: (owner as any).last_name ?? "",
+          role: (owner as any).role ?? "",
+        };
+      }
+    }
+
+    const { data: assignable } = await supabase
+      .from('profiles')
+      .select('id, name, last_name, role')
+      .in('role', ['COACH', 'ADMIN', 'SUPER_STUDENT'] as any)
+      .order('name', { ascending: true });
+
+    assignableUsers = (assignable ?? []).map((u: any) => ({
+      id: u.id,
+      name: u.name ?? "",
+      last_name: u.last_name ?? "",
+      role: u.role ?? "",
+    }));
+  }
+
+  // Build templates with week/day stats and owner info
   const templatesWithCounts: TemplatePlan[] = await Promise.all(
     (templates || []).map(async (template: any) => {
-      // Contar sesiones
-      const { count: sessionCount } = await supabase
-        .from('sessions')
-        .select('*', { count: 'exact', head: true })
-        .eq('plan_id', Number(template.id));
-
-      // Obtener IDs de sesiones para contar ejercicios
       const { data: sessions } = await supabase
         .from('sessions')
-        .select('id')
+        .select('week_number')
         .eq('plan_id', Number(template.id));
 
-      const sessionIds = sessions?.map((s: any) => s.id) || [];
+      const totalSessions = sessions?.length ?? 0;
+      const distinctWeeks = new Set((sessions ?? []).map((s: any) => s.week_number)).size;
+      const weekCount = distinctWeeks || 0;
+      const daysPerWeek = weekCount > 0 ? Math.round(totalSessions / weekCount) : 0;
 
-      // Contar ejercicios
-      let exerciseCount = 0;
-      if (sessionIds.length > 0) {
-        const { count } = await supabase
-          .from('session_exercises')
-          .select('*', { count: 'exact', head: true })
-          .in('session_id', sessionIds);
-        exerciseCount = count || 0;
-      }
+      const owner = ownerMap[template.coach_id];
 
       return {
         id: Number(template.id),
         name: template.name,
         created_at: template.created_at,
         coach_id: template.coach_id,
-        session_count: sessionCount || 0,
-        exercise_count: exerciseCount
+        week_count: weekCount,
+        days_per_week: daysPerWeek,
+        owner_name: owner?.name,
+        owner_last_name: owner?.last_name,
+        owner_role: owner?.role,
       };
     })
   );
 
-  return <TemplateListClient initialTemplates={templatesWithCounts} />;
+  return (
+    <TemplateListClient
+      initialTemplates={templatesWithCounts}
+      isAdmin={isAdmin}
+      currentUserId={user.id}
+      assignableUsers={assignableUsers}
+    />
+  );
 }

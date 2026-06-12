@@ -128,9 +128,7 @@ export default function TemplateViewPage() {
         </div>
 
         <h1 className="text-lg font-black text-zinc-100 uppercase tracking-tight leading-tight">{template.name}</h1>
-        <p className="text-xs text-zinc-500 mt-0.5">
-          Plantilla • {template.sessions?.length || 0} sesiones • {template.total_exercises || 0} ejercicios
-        </p>
+        <p className="text-xs text-zinc-500 mt-0.5">Plantilla</p>
       </div>
 
       <div className="space-y-4">

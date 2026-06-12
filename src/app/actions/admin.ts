@@ -21,8 +21,30 @@ async function ensureAdmin() {
   if (!profile || profile.role !== "ADMIN") {
     throw new Error("No tienes permisos de administrador");
   }
-  
+
   return { supabase, adminUser: user };
+}
+
+async function handleRoleTransitionCleanup(
+  adminClient: ReturnType<typeof createSupabaseAdminClient>,
+  userId: string,
+  fromRole: UserRole,
+  toRole: UserRole
+): Promise<void> {
+  if (fromRole === toRole) return;
+  const coachRoles = new Set<UserRole>(["COACH", "ADMIN"]);
+
+  if (fromRole === "STUDENT") {
+    // Pierde rol de alumno → limpiar sus asignaciones de coaches
+    await (adminClient as any).from("coach_students").delete().eq("student_id", userId);
+  } else if (fromRole === "SUPER_STUDENT" && coachRoles.has(toRole)) {
+    // Pasa a coach/admin → limpiar stale entries como student_id
+    await (adminClient as any).from("coach_students").delete().eq("student_id", userId);
+  } else if (coachRoles.has(fromRole) && !coachRoles.has(toRole)) {
+    // Pierde rol de coach → sus alumnos pierden este coach
+    await (adminClient as any).from("coach_students").delete().eq("coach_id", userId);
+  }
+  // COACH↔ADMIN: sin cambios. SUPER_STUDENT→STUDENT: sin cambios.
 }
 
 export async function inviteUser(email: string, fullName: string, role: UserRole) {
@@ -40,7 +62,7 @@ export async function inviteUser(email: string, fullName: string, role: UserRole
 
   if (authError) throw authError;
 
-  // 2. El trigger de la base de datos debería crear el perfil, 
+  // 2. El trigger de la base de datos debería crear el perfil,
   // pero lo forzamos/actualizamos para asegurar el nombre y el rol correcto.
   const { error: profileError } = await adminClient
     .from("profiles")
@@ -92,12 +114,30 @@ export async function updateUserAsAdmin(userId: string, name: string, lastName: 
   await ensureAdmin();
   const adminClient = createSupabaseAdminClient();
 
+  // Fetch current role to detect transitions and enforce restrictions
+  const { data: current } = await adminClient
+    .from("profiles")
+    .select("role")
+    .eq("id", userId as any)
+    .single();
+
+  const fromRole = (current as any)?.role as UserRole | undefined;
+
+  // ADMIN → STUDENT/SUPER_STUDENT is blocked (too destructive; delete and recreate instead)
+  if (fromRole === "ADMIN" && (role === "STUDENT" || role === "SUPER_STUDENT")) {
+    throw new Error("Un administrador no puede cambiar a este rol. Eliminá el usuario y creá uno nuevo.");
+  }
+
+  if (fromRole && fromRole !== role) {
+    await handleRoleTransitionCleanup(adminClient, userId, fromRole, role);
+  }
+
   const { error } = await adminClient
     .from("profiles")
-    .update({ 
-      name, 
-      last_name: lastName, 
-      role: role as any 
+    .update({
+      name,
+      last_name: lastName,
+      role: role as any
     } as any)
     .eq("id", userId as any);
 
@@ -135,6 +175,23 @@ export async function getUserDeleteSummary(userId: string): Promise<{
     return { role, planCount: count ?? 0, templateCount: 0 };
   }
 
+  if (role === "SUPER_STUDENT") {
+    const [{ count: planCount }, { count: templateCount }] = await Promise.all([
+      adminClient
+        .from("training_plans")
+        .select("id", { count: "exact", head: true })
+        .eq("student_id", userId as any)
+        .eq("is_template", false as any),
+      adminClient
+        .from("training_plans")
+        .select("id", { count: "exact", head: true })
+        .eq("coach_id", userId as any)
+        .eq("is_template", true as any),
+    ]);
+    return { role, planCount: planCount ?? 0, templateCount: templateCount ?? 0 };
+  }
+
+  // COACH or ADMIN
   const { count } = await adminClient
     .from("training_plans")
     .select("id", { count: "exact", head: true })
@@ -154,6 +211,17 @@ export async function deleteUser(userId: string) {
     .eq("id", userId as any)
     .single();
   const role = (profile as any)?.role ?? "STUDENT";
+
+  // Block deleting the last ADMIN
+  if (role === "ADMIN") {
+    const { count } = await adminClient
+      .from("profiles")
+      .select("id", { count: "exact", head: true })
+      .eq("role", "ADMIN" as any);
+    if ((count ?? 0) <= 1) {
+      throw new Error("No se puede eliminar el único administrador del sistema.");
+    }
+  }
 
   if (role === "STUDENT") {
     // Get student's plans
@@ -177,6 +245,57 @@ export async function deleteUser(userId: string) {
       await adminClient.from("sessions").delete().in("plan_id", planIds as any);
       await adminClient.from("training_plans").delete().in("id", planIds as any);
     }
+  } else if (role === "SUPER_STUDENT") {
+    // Delete active plans (student_id=X)
+    const { data: plans } = await adminClient
+      .from("training_plans")
+      .select("id")
+      .eq("student_id", userId as any)
+      .eq("is_template", false as any);
+    const planIds = (plans ?? []).map((p: any) => p.id as number);
+
+    if (planIds.length > 0) {
+      const { data: sessions } = await adminClient
+        .from("sessions")
+        .select("id")
+        .in("plan_id", planIds as any);
+      const sessionIds = (sessions ?? []).map((s: any) => s.id as number);
+
+      if (sessionIds.length > 0) {
+        await adminClient.from("session_exercises").delete().in("session_id", sessionIds as any);
+      }
+      await adminClient.from("sessions").delete().in("plan_id", planIds as any);
+      await adminClient.from("training_plans").delete().in("id", planIds as any);
+    }
+
+    // Delete own templates (coach_id=X)
+    const { data: templates } = await adminClient
+      .from("training_plans")
+      .select("id")
+      .eq("coach_id", userId as any)
+      .eq("is_template", true as any);
+    const templateIds = (templates ?? []).map((t: any) => t.id as number);
+
+    if (templateIds.length > 0) {
+      const { data: sessions } = await adminClient
+        .from("sessions")
+        .select("id")
+        .in("plan_id", templateIds as any);
+      const sessionIds = (sessions ?? []).map((s: any) => s.id as number);
+
+      if (sessionIds.length > 0) {
+        await adminClient.from("session_exercises").delete().in("session_id", sessionIds as any);
+      }
+      await adminClient.from("sessions").delete().in("plan_id", templateIds as any);
+      await adminClient.from("training_plans").delete().in("id", templateIds as any);
+    }
+
+    // Nullify coach_id on student plans they coached
+    await adminClient
+      .from("training_plans")
+      .update({ coach_id: null } as any)
+      .eq("coach_id", userId as any)
+      .eq("is_template", false as any);
   } else {
     // COACH or ADMIN: delete templates, nullify coach_id on student plans
     const { data: templates } = await adminClient
@@ -269,5 +388,24 @@ export async function removeCoachFromStudent(coachId: string, studentId: string)
   }
 
   revalidatePath("/admin/dashboard");
+  return { success: true };
+}
+
+export async function reassignTemplate(templateId: number, newCoachId: string) {
+  await ensureAdmin();
+  const adminClient = createSupabaseAdminClient();
+
+  const { error } = await adminClient
+    .from("training_plans")
+    .update({ coach_id: newCoachId } as any)
+    .eq("id", templateId as any)
+    .eq("is_template", true as any);
+
+  if (error) {
+    console.error("Error reassigning template:", error);
+    throw new Error(error.message);
+  }
+
+  revalidatePath("/coach/templates");
   return { success: true };
 }
