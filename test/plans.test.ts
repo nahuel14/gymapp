@@ -3893,3 +3893,173 @@ describe('Autenticación', () => {
 
 }); // Autenticación
 
+// ════════════════════════════════════════════════════════════════
+// Módulo: Progreso del Alumno
+// Cálculo de tonelaje, peso máximo, agrupación por semana ISO
+// y etiquetas de fecha para los gráficos de progreso
+// ════════════════════════════════════════════════════════════════
+
+import {
+  calculateExerciseTonnage,
+  getMaxWeight,
+  getISOWeek,
+  formatProgressDateLabel,
+} from '@/lib/progress/calculations';
+
+describe('Progreso del Alumno', () => {
+
+  describe('ESCENARIO 1: Cálculo de Tonelaje por Ejercicio', () => {
+    it('3 sets × 10 reps × 100 kg = 3000', () => {
+      expect(calculateExerciseTonnage(['100', '100', '100'], ['10', '10', '10'])).toBe(3000);
+    });
+
+    it('pirámide ascendente suma correctamente', () => {
+      // 60×10 + 70×8 + 80×6 = 600 + 560 + 480 = 1640
+      expect(calculateExerciseTonnage(['60', '70', '80'], ['10', '8', '6'])).toBe(1640);
+    });
+
+    it('un solo set calcula correctamente', () => {
+      expect(calculateExerciseTonnage(['50'], ['12'])).toBe(600);
+    });
+
+    it('arrays vacíos retornan 0', () => {
+      expect(calculateExerciseTonnage([], [])).toBe(0);
+    });
+
+    it('peso 0 en un set contribuye 0 al tonelaje', () => {
+      expect(calculateExerciseTonnage(['0', '80'], ['10', '10'])).toBe(800);
+    });
+
+    it('reps 0 en un set contribuye 0 al tonelaje', () => {
+      expect(calculateExerciseTonnage(['80', '80'], ['0', '10'])).toBe(800);
+    });
+
+    it('string no numérico se ignora (NaN) sin crashear', () => {
+      // '' parseFloat = NaN → se ignora ese set
+      expect(calculateExerciseTonnage(['', '80'], ['10', '10'])).toBe(800);
+    });
+
+    it('pesos decimales (22.5 kg) se calculan con precisión', () => {
+      // 22.5 × 8 = 180
+      expect(calculateExerciseTonnage(['22.5'], ['8'])).toBeCloseTo(180);
+    });
+
+    it('el orden de los arrays no altera el total', () => {
+      const a = calculateExerciseTonnage(['60', '80'], ['10', '5']);
+      const b = calculateExerciseTonnage(['80', '60'], ['5', '10']);
+      expect(a).toBe(b);
+    });
+
+    it('dos ejercicios en la misma sesión suman sus tonelajes independientemente', () => {
+      const ex1 = calculateExerciseTonnage(['100', '100'], ['5', '5']);
+      const ex2 = calculateExerciseTonnage(['60', '60', '60'], ['10', '10', '10']);
+      expect(ex1 + ex2).toBe(1000 + 1800);
+    });
+  });
+
+  describe('ESCENARIO 2: Peso Máximo por Ejercicio', () => {
+    it('devuelve el mayor peso del array', () => {
+      expect(getMaxWeight(['60', '70', '80'])).toBe(80);
+    });
+
+    it('todos los pesos iguales devuelve ese valor', () => {
+      expect(getMaxWeight(['75', '75', '75'])).toBe(75);
+    });
+
+    it('un solo peso devuelve ese valor', () => {
+      expect(getMaxWeight(['90'])).toBe(90);
+    });
+
+    it('array vacío devuelve 0', () => {
+      expect(getMaxWeight([])).toBe(0);
+    });
+
+    it('ignora strings vacíos (parseFloat → 0)', () => {
+      expect(getMaxWeight(['', '50', ''])).toBe(50);
+    });
+
+    it('peso 0 es ignorado cuando hay pesos reales', () => {
+      expect(getMaxWeight(['0', '45', '0'])).toBe(45);
+    });
+
+    it('todos ceros devuelve 0', () => {
+      expect(getMaxWeight(['0', '0'])).toBe(0);
+    });
+
+    it('pesos con decimal: devuelve el mayor', () => {
+      expect(getMaxWeight(['22.5', '25.0', '27.5'])).toBe(27.5);
+    });
+
+    it('primer set siempre warm-up más ligero: devuelve el máximo del bloque', () => {
+      expect(getMaxWeight(['40', '60', '80', '80', '70'])).toBe(80);
+    });
+  });
+
+  describe('ESCENARIO 3: Agrupación por Semana ISO', () => {
+    it('lunes y domingo de la misma semana quedan en la misma semana ISO', () => {
+      expect(getISOWeek('2026-06-01')).toBe(getISOWeek('2026-06-07'));
+    });
+
+    it('lunes y el lunes siguiente quedan en semanas distintas', () => {
+      expect(getISOWeek('2026-06-01')).not.toBe(getISOWeek('2026-06-08'));
+    });
+
+    it('el formato de salida es YYYY-Wxx', () => {
+      expect(getISOWeek('2026-06-01')).toMatch(/^\d{4}-W\d{2}$/);
+    });
+
+    it('semana 1 de 2026 (lunes 29/12/2025 pertenece a 2026-W01)', () => {
+      expect(getISOWeek('2025-12-29')).toBe('2026-W01');
+    });
+
+    it('el número de semana tiene siempre 2 dígitos (ej: W01 no W1)', () => {
+      const week = getISOWeek('2026-01-05');
+      expect(week.split('-W')[1]).toHaveLength(2);
+    });
+
+    it('miércoles de la misma semana que el lunes → misma semana', () => {
+      expect(getISOWeek('2026-06-03')).toBe(getISOWeek('2026-06-01'));
+    });
+
+    it('sesiones de semanas diferentes nunca se mezclan', () => {
+      const w1 = getISOWeek('2026-06-01');
+      const w2 = getISOWeek('2026-06-08');
+      const w3 = getISOWeek('2026-06-15');
+      expect(new Set([w1, w2, w3]).size).toBe(3);
+    });
+
+    it('12 semanas consecutivas generan 12 semanas ISO distintas', () => {
+      const weeks = Array.from({ length: 12 }, (_, i) => {
+        const d = new Date('2026-06-01T12:00:00Z');
+        d.setUTCDate(d.getUTCDate() + i * 7);
+        return getISOWeek(d.toISOString().split('T')[0]);
+      });
+      expect(new Set(weeks).size).toBe(12);
+    });
+  });
+
+  describe('ESCENARIO 4: Etiqueta de Fecha para Gráficos', () => {
+    it('devuelve un string no vacío para una fecha válida', () => {
+      expect(formatProgressDateLabel('2026-06-01').length).toBeGreaterThan(0);
+    });
+
+    it('días distintos del mismo mes producen etiquetas distintas', () => {
+      expect(formatProgressDateLabel('2026-06-01')).not.toBe(formatProgressDateLabel('2026-06-15'));
+    });
+
+    it('meses distintos producen etiquetas distintas', () => {
+      expect(formatProgressDateLabel('2026-05-01')).not.toBe(formatProgressDateLabel('2026-06-01'));
+    });
+
+    it('la etiqueta contiene el número de día', () => {
+      const label = formatProgressDateLabel('2026-06-15');
+      expect(label).toContain('15');
+    });
+
+    it('sesiones del mismo día siempre producen la misma etiqueta', () => {
+      expect(formatProgressDateLabel('2026-06-01')).toBe(formatProgressDateLabel('2026-06-01'));
+    });
+  });
+
+}); // Progreso del Alumno
+

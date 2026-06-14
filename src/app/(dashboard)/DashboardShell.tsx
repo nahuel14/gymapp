@@ -9,6 +9,7 @@ import {
   Users,
   ClipboardList,
   Library,
+  TrendingUp,
 } from "lucide-react";
 import { DumbbellIcon } from "@/components/DumbbellIcon";
 import type { Database } from "@/types/supabase";
@@ -35,6 +36,9 @@ function checkIsActive(pathname: string | null, href: string) {
   if (href === "/coach") {
     return pathname === "/coach" || pathname.startsWith("/coach/student");
   }
+  if (href === "/student") {
+    return pathname === "/student";
+  }
   if (href === "/profile") {
     return pathname === "/profile";
   }
@@ -53,6 +57,7 @@ function NavIcon({ href, role }: { href: string; role: UserRole }) {
   if (role === "SUPER_STUDENT" && href === "/coach/templates") return <ClipboardList className={iconClass} />;
   if (role === "SUPER_STUDENT" && href === "/coach/library") return <Library className={iconClass} />;
   if (href === "/student") return <DumbbellIcon className={iconClass} />;
+  if (href === "/student/progreso") return <TrendingUp className={iconClass} />;
   if (href === "/profile") return <UserCircle className={iconClass} />;
   return null;
 }
@@ -188,12 +193,17 @@ function getBottomNavItems(role: UserRole, userId: string): BottomNavItem[] {
     {
       href: "/student",
       label: "Rutina",
-      icon: <DumbbellIcon className="h-6 w-6" />,
+      icon: <DumbbellIcon className="h-5 w-5" />,
+    },
+    {
+      href: "/student/progreso",
+      label: "Progreso",
+      icon: <TrendingUp className="h-5 w-5" />,
     },
     {
       href: "/profile",
       label: "Perfil",
-      icon: <UserCircle className="h-6 w-6" />,
+      icon: <UserCircle className="h-5 w-5" />,
     },
   ];
 }

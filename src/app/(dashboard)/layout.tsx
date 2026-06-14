@@ -87,6 +87,7 @@ function getNavItems(role: UserRole, userId: string): NavItem[] {
 
   return [
     { href: "/student", label: "Rutina" },
+    { href: "/student/progreso", label: "Progreso" },
     ...commonItems,
   ];
 }
