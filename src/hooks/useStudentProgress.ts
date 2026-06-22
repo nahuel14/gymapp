@@ -9,7 +9,7 @@ async function fetchStudentProgress(studentId: string, weeks: number): Promise<P
   return res.json() as Promise<ProgressData>;
 }
 
-export function useStudentProgress(studentId: string, weeks = 12) {
+export function useStudentProgress(studentId: string, weeks = 52) {
   return useQuery({
     queryKey: ["student", "progress", studentId, weeks],
     queryFn: () => fetchStudentProgress(studentId, weeks),

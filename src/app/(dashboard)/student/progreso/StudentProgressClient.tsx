@@ -10,6 +10,7 @@ const StrengthChart = dynamic(() => import("@/components/charts/StrengthChart").
 const AttendanceChart = dynamic(() => import("@/components/charts/AttendanceChart").then((m) => m.AttendanceChart), { ssr: false });
 
 type Tab = "volumen" | "fuerza" | "asistencia";
+type GroupBy = "semanas" | "meses";
 
 const TABS: { id: Tab; label: string; icon: ReactElement }[] = [
   { id: "volumen", label: "Volumen", icon: <TrendingUp className="h-4 w-4" /> },
@@ -25,6 +26,7 @@ type Props = {
 
 export function StudentProgressClient({ studentId, studentName, hideHeader }: Props) {
   const [activeTab, setActiveTab] = useState<Tab>("volumen");
+  const [groupBy, setGroupBy] = useState<GroupBy>("semanas");
   const { data, isLoading, error } = useStudentProgress(studentId);
 
   return (
@@ -37,7 +39,7 @@ export function StudentProgressClient({ studentId, studentName, hideHeader }: Pr
         </div>
       )}
 
-      <div className="mx-auto max-w-2xl px-4 py-6 space-y-6">
+      <div className="mx-auto max-w-2xl px-4 py-6 space-y-4">
         {/* Tab selector */}
         <div className="flex gap-1 rounded-xl bg-zinc-900 p-1">
           {TABS.map((tab) => (
@@ -54,6 +56,25 @@ export function StudentProgressClient({ studentId, studentName, hideHeader }: Pr
               <span className="hidden sm:inline">{tab.label}</span>
             </button>
           ))}
+        </div>
+
+        {/* Semanas / Meses toggle */}
+        <div className="flex justify-center">
+          <div className="flex gap-1 rounded-lg bg-zinc-900 p-0.5">
+            {(["semanas", "meses"] as const).map((g) => (
+              <button
+                key={g}
+                onClick={() => setGroupBy(g)}
+                className={`px-4 py-1.5 rounded-md text-xs font-black uppercase tracking-widest transition-all ${
+                  groupBy === g
+                    ? "bg-zinc-700 text-foreground shadow"
+                    : "text-zinc-500 hover:text-zinc-300"
+                }`}
+              >
+                {g === "semanas" ? "Semanas" : "Meses"}
+              </button>
+            ))}
+          </div>
         </div>
 
         {/* Content */}
@@ -75,12 +96,12 @@ export function StudentProgressClient({ studentId, studentName, hideHeader }: Pr
               <>
                 <div className="mb-4">
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Volumen semanal</p>
-                  <p className="text-xs text-muted-foreground mt-0.5">Tonelaje total movido por semana (sets × reps × kg)</p>
+                  <p className="text-xs text-muted-foreground mt-0.5">Tonelaje total movido (sets × reps × kg)</p>
                 </div>
                 {data.tonnageByWeek.length === 0 ? (
                   <p className="py-10 text-center text-xs text-muted-foreground">Sin datos de volumen aún.</p>
                 ) : (
-                  <TonnageChart data={data.tonnageByWeek} />
+                  <TonnageChart data={data.tonnageByWeek} groupBy={groupBy} />
                 )}
               </>
             )}
@@ -91,7 +112,7 @@ export function StudentProgressClient({ studentId, studentName, hideHeader }: Pr
                   <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Progresión de fuerza</p>
                   <p className="text-xs text-muted-foreground mt-0.5">Peso máximo por ejercicio a lo largo del tiempo</p>
                 </div>
-                <StrengthChart data={data.strengthByExercise} />
+                <StrengthChart data={data.strengthByExercise} groupBy={groupBy} />
               </>
             )}
 
@@ -104,7 +125,7 @@ export function StudentProgressClient({ studentId, studentName, hideHeader }: Pr
                 {data.attendanceByWeek.length === 0 ? (
                   <p className="py-10 text-center text-xs text-muted-foreground">Sin datos de asistencia aún.</p>
                 ) : (
-                  <AttendanceChart data={data.attendanceByWeek} />
+                  <AttendanceChart data={data.attendanceByWeek} groupBy={groupBy} />
                 )}
               </>
             )}

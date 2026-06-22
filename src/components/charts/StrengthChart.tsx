@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useMemo, useEffect } from "react";
 import {
   LineChart,
   Line,
@@ -12,15 +12,33 @@ import {
   ReferenceDot,
 } from "recharts";
 import type { StrengthPoint } from "@/app/api/progress/[studentId]/route";
+import { groupStrengthByMonth } from "@/lib/progress/grouping";
 import { ChevronLeft, ChevronRight } from "lucide-react";
+
+const WINDOW = 6;
+const EMPTY: StrengthPoint[] = [];
 
 type Props = {
   data: Record<string, StrengthPoint[]>;
+  groupBy: "semanas" | "meses";
 };
 
-export function StrengthChart({ data }: Props) {
-  const exercises = Object.keys(data).sort();
-  const [idx, setIdx] = useState(0);
+export function StrengthChart({ data, groupBy }: Props) {
+  const exercises = useMemo(() => Object.keys(data).sort(), [data]);
+  const [exIdx, setExIdx] = useState(0);
+
+  const rawPoints = exercises.length > 0 ? (data[exercises[exIdx]!] ?? EMPTY) : EMPTY;
+
+  const points = useMemo(
+    () => (groupBy === "meses" ? groupStrengthByMonth(rawPoints) : rawPoints),
+    [rawPoints, groupBy]
+  );
+
+  const [windowStart, setWindowStart] = useState(() => Math.max(0, points.length - WINDOW));
+
+  useEffect(() => {
+    setWindowStart(Math.max(0, points.length - WINDOW));
+  }, [points.length, groupBy, exIdx]);
 
   if (exercises.length === 0) {
     return (
@@ -30,19 +48,24 @@ export function StrengthChart({ data }: Props) {
     );
   }
 
-  const currentExercise = exercises[idx]!;
-  const points = data[currentExercise] ?? [];
-  const maxPoint = points.reduce((best, p) => (p.maxWeight > best.maxWeight ? p : best), points[0]!);
-  const first = points[0]?.maxWeight ?? 0;
-  const last = points[points.length - 1]?.maxWeight ?? 0;
-  const diff = last - first;
+  const visible = points.slice(windowStart, windowStart + WINDOW);
+  const canBack = windowStart > 0;
+  const canForward = windowStart + WINDOW < points.length;
+
+  const maxPoint = visible.length > 0
+    ? visible.reduce((best, p) => (p.maxWeight > best.maxWeight ? p : best), visible[0]!)
+    : null;
+
+  const allFirst = rawPoints[0]?.maxWeight ?? 0;
+  const allLast = rawPoints[rawPoints.length - 1]?.maxWeight ?? 0;
+  const allDiff = allLast - allFirst;
 
   return (
     <div className="space-y-3">
       {/* Exercise selector */}
       <div className="flex items-center justify-between gap-2">
         <button
-          onClick={() => setIdx((i) => (i - 1 + exercises.length) % exercises.length)}
+          onClick={() => setExIdx((i) => (i - 1 + exercises.length) % exercises.length)}
           className="rounded-full p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-yellow-400 disabled:opacity-30"
           disabled={exercises.length <= 1}
           aria-label="Ejercicio anterior"
@@ -51,10 +74,10 @@ export function StrengthChart({ data }: Props) {
         </button>
         <div className="text-center">
           <p className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">Ejercicio</p>
-          <p className="text-sm font-bold text-foreground">{currentExercise}</p>
+          <p className="text-sm font-bold text-foreground">{exercises[exIdx]}</p>
         </div>
         <button
-          onClick={() => setIdx((i) => (i + 1) % exercises.length)}
+          onClick={() => setExIdx((i) => (i + 1) % exercises.length)}
           className="rounded-full p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-yellow-400 disabled:opacity-30"
           disabled={exercises.length <= 1}
           aria-label="Ejercicio siguiente"
@@ -63,8 +86,33 @@ export function StrengthChart({ data }: Props) {
         </button>
       </div>
 
+      {/* Timeline navigation */}
+      {points.length > WINDOW && (
+        <div className="flex items-center justify-between gap-2">
+          <button
+            onClick={() => setWindowStart((s) => Math.max(0, s - WINDOW))}
+            disabled={!canBack}
+            aria-label="Periodo anterior"
+            className="rounded-full p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-yellow-400 disabled:opacity-30"
+          >
+            <ChevronLeft className="h-4 w-4" />
+          </button>
+          <span className="text-[10px] font-black uppercase tracking-widest text-muted-foreground">
+            {visible[0]?.label} — {visible[visible.length - 1]?.label}
+          </span>
+          <button
+            onClick={() => setWindowStart((s) => Math.min(points.length - WINDOW, s + WINDOW))}
+            disabled={!canForward}
+            aria-label="Periodo siguiente"
+            className="rounded-full p-1 text-zinc-400 transition hover:bg-zinc-800 hover:text-yellow-400 disabled:opacity-30"
+          >
+            <ChevronRight className="h-4 w-4" />
+          </button>
+        </div>
+      )}
+
       <ResponsiveContainer width="100%" height={220}>
-        <LineChart data={points} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
+        <LineChart data={visible} margin={{ top: 8, right: 8, left: -16, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" stroke="#27272a" vertical={false} />
           <XAxis
             dataKey="label"
@@ -111,13 +159,13 @@ export function StrengthChart({ data }: Props) {
         </LineChart>
       </ResponsiveContainer>
 
-      {points.length >= 2 && (
+      {rawPoints.length >= 2 && (
         <p className="text-center text-xs text-muted-foreground">
-          {diff >= 0 ? "Aumentaste" : "Bajaste"} tu fuerza un{" "}
-          <span className={`font-black ${diff >= 0 ? "text-green-400" : "text-red-400"}`}>
-            {first > 0 ? `${Math.abs(Math.round((diff / first) * 100))}%` : `${Math.abs(diff)} kg`}
+          {allDiff >= 0 ? "Aumentaste" : "Bajaste"} tu fuerza un{" "}
+          <span className={`font-black ${allDiff >= 0 ? "text-green-400" : "text-red-400"}`}>
+            {allFirst > 0 ? `${Math.abs(Math.round((allDiff / allFirst) * 100))}%` : `${Math.abs(allDiff)} kg`}
           </span>{" "}
-          ({first} kg → {last} kg).
+          ({allFirst} kg → {allLast} kg).
         </p>
       )}
     </div>

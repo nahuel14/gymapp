@@ -14,6 +14,7 @@ type CoachForm = {
 type StudentForm = {
   actual_sets: number;
   actual_reps: number[];
+  actual_weight?: (number | null)[];
   actual_rpe: number | null;
   student_notes: string;
   target_sets?: number;
@@ -38,6 +39,7 @@ export function buildStudentPayload(form: StudentForm) {
   return {
     actual_sets: form.actual_sets,
     actual_reps: form.actual_reps,
+    actual_weight: form.actual_weight,
     actual_rpe: form.actual_rpe,
     student_notes: form.student_notes,
   };
@@ -79,6 +81,7 @@ function buildAdminPayload(form: CoachForm & Partial<StudentForm>) {
     coach_notes: form.coach_notes,
     actual_sets: form.actual_sets,
     actual_reps: form.actual_reps,
+    actual_weight: form.actual_weight,
     actual_rpe: form.actual_rpe,
     student_notes: form.student_notes,
   };

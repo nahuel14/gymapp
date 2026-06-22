@@ -5,6 +5,7 @@ import {
   getMaxWeight,
   getISOWeek,
   formatProgressDateLabel,
+  getWeekMondayLabel,
 } from "@/lib/progress/calculations";
 
 export type TonnageWeek = {
@@ -169,17 +170,17 @@ export async function GET(
 
     // Sort weeks and assign labels
     const sortedWeeks = [...new Set([...tonnageMap.keys(), ...attendanceMap.keys()])].sort();
-    const weekLabel = (_isoWeek: string, idx: number) => `S${idx + 1}`;
+    const weekLabel = (isoWeek: string) => getWeekMondayLabel(isoWeek);
 
-    const tonnageByWeek: TonnageWeek[] = sortedWeeks.map((week, idx) => ({
-      label: weekLabel(week, idx),
+    const tonnageByWeek: TonnageWeek[] = sortedWeeks.map((week) => ({
+      label: weekLabel(week),
       week,
       tonnage: Math.round(tonnageMap.get(week) ?? 0),
     }));
 
-    const attendanceByWeek: AttendanceWeek[] = sortedWeeks.map((week, idx) => {
+    const attendanceByWeek: AttendanceWeek[] = sortedWeeks.map((week) => {
       const att = attendanceMap.get(week) ?? { completed: 0, total: 0 };
-      return { label: weekLabel(week, idx), week, ...att };
+      return { label: weekLabel(week), week, ...att };
     });
 
     // Strength: sort each exercise's points by date

@@ -1216,7 +1216,7 @@ describe('Ejercicios y Rutina', () => {
       target_sets: 3, target_reps: [10, 10, 10],
       target_weight: [60, 60, 60], target_rpe: 8,
       rest_seconds: 90, coach_notes: 'Foco bajada',
-      actual_sets: 2, actual_reps: [10, 9],
+      actual_sets: 2, actual_reps: [10, 9], actual_weight: [80, 82.5],
       actual_rpe: 7, student_notes: 'Pesado',
     };
 
@@ -1224,6 +1224,7 @@ describe('Ejercicios y Rutina', () => {
       const payload = buildPayloadByMode(form, 'coach') as Record<string, unknown>;
       expect('actual_sets' in payload).toBe(false);
       expect('actual_rpe' in payload).toBe(false);
+      expect('actual_weight' in payload).toBe(false);
       expect(payload['target_sets']).toBe(3);
     });
 
@@ -1233,6 +1234,7 @@ describe('Ejercicios y Rutina', () => {
       expect('coach_notes' in payload).toBe(false);
       expect(payload['actual_sets']).toBe(2);
       expect(payload['actual_rpe']).toBe(7);
+      expect(payload['actual_weight']).toEqual([80, 82.5]);
     });
 
     it('ADMIN registrando resultados puede marcar sesión como completada', () => {
@@ -3451,14 +3453,25 @@ function buildStudentExerciseView(
 describe('Vista del Alumno', () => {
 
   describe('ESCENARIO 39: Payload del alumno al registrar ejercicio', () => {
-    it('el payload incluye actual_sets, actual_reps, actual_rpe y student_notes', () => {
+    it('el payload incluye actual_sets, actual_reps, actual_weight, actual_rpe y student_notes', () => {
       const payload = buildStudentPayload({
-        actual_sets: 3, actual_reps: [10, 9, 8], actual_rpe: 7, student_notes: 'Bien',
+        actual_sets: 3, actual_reps: [10, 9, 8], actual_weight: [80, 80, 80], actual_rpe: 7, student_notes: 'Bien',
       });
       expect('actual_sets' in payload).toBe(true);
       expect('actual_reps' in payload).toBe(true);
+      expect('actual_weight' in payload).toBe(true);
       expect('actual_rpe' in payload).toBe(true);
       expect('student_notes' in payload).toBe(true);
+    });
+
+    it('el payload del alumno contiene exactamente los campos permitidos — ni más ni menos', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 3, actual_reps: [10, 10, 10],
+        actual_weight: [80, 80, 80], actual_rpe: 8, student_notes: 'ok',
+      });
+      expect(Object.keys(payload).sort()).toEqual(
+        ['actual_reps', 'actual_rpe', 'actual_sets', 'actual_weight', 'student_notes']
+      );
     });
 
     it('el payload NO incluye campos target_*', () => {
@@ -3493,12 +3506,29 @@ describe('Vista del Alumno', () => {
       expect(payload.student_notes).toBe('');
     });
 
+    it('el payload incluye actual_weight con los kg registrados', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 3, actual_reps: [10, 10, 10],
+        actual_weight: [80, 82.5, 85], actual_rpe: 8, student_notes: '',
+      });
+      expect(payload.actual_weight).toEqual([80, 82.5, 85]);
+    });
+
+    it('actual_weight puede ser undefined si el alumno no lo registra', () => {
+      const payload = buildStudentPayload({
+        actual_sets: 3, actual_reps: [10, 10, 10], actual_rpe: 7, student_notes: '',
+      });
+      expect(payload.actual_weight).toBeUndefined();
+    });
+
     it('los valores reales del alumno se guardan con exactitud', () => {
       const payload = buildStudentPayload({
-        actual_sets: 4, actual_reps: [10, 9, 8, 7], actual_rpe: 9, student_notes: 'Muy pesado',
+        actual_sets: 4, actual_reps: [10, 9, 8, 7], actual_weight: [100, 102.5, 105, 107.5],
+        actual_rpe: 9, student_notes: 'Muy pesado',
       });
       expect(payload.actual_sets).toBe(4);
       expect(payload.actual_reps).toEqual([10, 9, 8, 7]);
+      expect(payload.actual_weight).toEqual([100, 102.5, 105, 107.5]);
       expect(payload.actual_rpe).toBe(9);
       expect(payload.student_notes).toBe('Muy pesado');
     });
@@ -3904,6 +3934,7 @@ import {
   getMaxWeight,
   getISOWeek,
   formatProgressDateLabel,
+  getWeekMondayLabel,
 } from '@/lib/progress/calculations';
 
 describe('Progreso del Alumno', () => {
@@ -4058,6 +4089,43 @@ describe('Progreso del Alumno', () => {
 
     it('sesiones del mismo día siempre producen la misma etiqueta', () => {
       expect(formatProgressDateLabel('2026-06-01')).toBe(formatProgressDateLabel('2026-06-01'));
+    });
+  });
+
+  describe('ESCENARIO 5: Etiqueta de Lunes de Semana ISO', () => {
+    it('devuelve un string no vacío para una semana válida', () => {
+      expect(getWeekMondayLabel('2026-W23').length).toBeGreaterThan(0);
+    });
+
+    it('2026-W23 corresponde al lunes 1 jun', () => {
+      const label = getWeekMondayLabel('2026-W23');
+      expect(label).toContain('1');
+      expect(label.toLowerCase()).toContain('jun');
+    });
+
+    it('2026-W22 corresponde al lunes 25 may', () => {
+      const label = getWeekMondayLabel('2026-W22');
+      expect(label).toContain('25');
+      expect(label.toLowerCase()).toContain('may');
+    });
+
+    it('2026-W02 corresponde a enero (5 ene)', () => {
+      const label = getWeekMondayLabel('2026-W02');
+      expect(label).toContain('5');
+      expect(label.toLowerCase()).toContain('ene');
+    });
+
+    it('semanas distintas producen etiquetas distintas', () => {
+      expect(getWeekMondayLabel('2026-W22')).not.toBe(getWeekMondayLabel('2026-W23'));
+    });
+
+    it('la misma semana siempre produce la misma etiqueta', () => {
+      expect(getWeekMondayLabel('2026-W25')).toBe(getWeekMondayLabel('2026-W25'));
+    });
+
+    it('semana de fin de año avanza correctamente al año siguiente', () => {
+      const label = getWeekMondayLabel('2026-W52');
+      expect(label.length).toBeGreaterThan(0);
     });
   });
 

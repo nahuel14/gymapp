@@ -41,3 +41,14 @@ export function formatProgressDateLabel(dateStr: string): string {
   const date = new Date(dateStr + "T12:00:00Z");
   return date.toLocaleDateString("es-AR", { day: "numeric", month: "short", timeZone: "UTC" });
 }
+
+/**
+ * Convierte una semana ISO "YYYY-Wnn" a la fecha del lunes en español: "25 may".
+ */
+export function getWeekMondayLabel(isoWeek: string): string {
+  const [year, week] = isoWeek.split("-W").map(Number);
+  const jan4 = new Date(Date.UTC(year, 0, 4));
+  const monday = new Date(jan4);
+  monday.setUTCDate(jan4.getUTCDate() - ((jan4.getUTCDay() || 7) - 1) + (week - 1) * 7);
+  return monday.toLocaleDateString("es-AR", { day: "numeric", month: "short", timeZone: "UTC" });
+}
