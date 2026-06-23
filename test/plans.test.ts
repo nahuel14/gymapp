@@ -4131,3 +4131,173 @@ describe('Progreso del Alumno', () => {
 
 }); // Progreso del Alumno
 
+// ─── Progreso: Agrupación por Mes ─────────────────────────────────────────────
+import {
+  groupTonnageByMonth,
+  groupAttendanceByMonth,
+  groupStrengthByMonth,
+} from '@/lib/progress/grouping';
+
+// Semanas de referencia usadas en estos tests:
+// 2026-W05 → lunes 26 ene 2026 → mes '2026-01' → label "ene '26"
+// 2026-W06 → lunes  2 feb 2026 → mes '2026-02' → label "feb '26"
+// 2026-W07 → lunes  9 feb 2026 → mes '2026-02' → label "feb '26"
+// 2026-W14 → lunes 30 mar 2026 → mes '2026-03' → label "mar '26"
+
+type TW = { label: string; week: string; tonnage: number };
+type AW = { label: string; week: string; completed: number; total: number };
+type SP = { date: string; label: string; maxWeight: number };
+
+describe('groupTonnageByMonth', () => {
+  it('array vacío devuelve []', () => {
+    expect(groupTonnageByMonth([])).toEqual([]);
+  });
+
+  it('una semana en un mes devuelve un entry con label correcto', () => {
+    const result = groupTonnageByMonth([
+      { label: '26 ene', week: '2026-W05', tonnage: 500 },
+    ] as TW[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].tonnage).toBe(500);
+    expect(result[0].label).toMatch(/ene/i);
+  });
+
+  it('dos semanas en el mismo mes acumulan su tonelaje', () => {
+    const result = groupTonnageByMonth([
+      { label: '2 feb', week: '2026-W06', tonnage: 300 },
+      { label: '9 feb', week: '2026-W07', tonnage: 200 },
+    ] as TW[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].tonnage).toBe(500);
+    expect(result[0].label).toMatch(/feb/i);
+  });
+
+  it('semanas en meses distintos generan entries separados', () => {
+    const result = groupTonnageByMonth([
+      { label: '26 ene', week: '2026-W05', tonnage: 400 },
+      { label: '2 feb', week: '2026-W06', tonnage: 300 },
+    ] as TW[]);
+    expect(result).toHaveLength(2);
+  });
+
+  it('los resultados están ordenados cronológicamente', () => {
+    const result = groupTonnageByMonth([
+      { label: '2 feb',  week: '2026-W06', tonnage: 100 },
+      { label: '26 ene', week: '2026-W05', tonnage: 200 },
+      { label: '30 mar', week: '2026-W14', tonnage: 150 },
+    ] as TW[]);
+    expect(result[0].label).toMatch(/ene/i);
+    expect(result[1].label).toMatch(/feb/i);
+    expect(result[2].label).toMatch(/mar/i);
+  });
+
+  it('el tonelaje fraccionario se redondea', () => {
+    const result = groupTonnageByMonth([
+      { label: '26 ene', week: '2026-W05', tonnage: 100.7 },
+    ] as TW[]);
+    expect(result[0].tonnage).toBe(101);
+  });
+
+  it('el campo week del resultado es la clave de mes (YYYY-MM)', () => {
+    const result = groupTonnageByMonth([
+      { label: '26 ene', week: '2026-W05', tonnage: 100 },
+    ] as TW[]);
+    expect(result[0].week).toBe('2026-01');
+  });
+});
+
+describe('groupAttendanceByMonth', () => {
+  it('array vacío devuelve []', () => {
+    expect(groupAttendanceByMonth([])).toEqual([]);
+  });
+
+  it('una semana devuelve un entry con completed y total correctos', () => {
+    const result = groupAttendanceByMonth([
+      { label: '26 ene', week: '2026-W05', completed: 2, total: 3 },
+    ] as AW[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].completed).toBe(2);
+    expect(result[0].total).toBe(3);
+    expect(result[0].label).toMatch(/ene/i);
+  });
+
+  it('dos semanas en el mismo mes acumulan completed y total', () => {
+    const result = groupAttendanceByMonth([
+      { label: '2 feb', week: '2026-W06', completed: 2, total: 3 },
+      { label: '9 feb', week: '2026-W07', completed: 1, total: 3 },
+    ] as AW[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].completed).toBe(3);
+    expect(result[0].total).toBe(6);
+  });
+
+  it('semanas en meses distintos generan entries separados', () => {
+    const result = groupAttendanceByMonth([
+      { label: '26 ene', week: '2026-W05', completed: 3, total: 3 },
+      { label: '9 feb',  week: '2026-W07', completed: 2, total: 3 },
+    ] as AW[]);
+    expect(result).toHaveLength(2);
+  });
+
+  it('los resultados están ordenados cronológicamente', () => {
+    const result = groupAttendanceByMonth([
+      { label: '9 feb',  week: '2026-W07', completed: 2, total: 3 },
+      { label: '26 ene', week: '2026-W05', completed: 3, total: 3 },
+    ] as AW[]);
+    expect(result[0].label).toMatch(/ene/i);
+    expect(result[1].label).toMatch(/feb/i);
+  });
+});
+
+describe('groupStrengthByMonth', () => {
+  it('array vacío devuelve []', () => {
+    expect(groupStrengthByMonth([])).toEqual([]);
+  });
+
+  it('un punto devuelve un entry correcto', () => {
+    const result = groupStrengthByMonth([
+      { date: '2026-01-26', label: '26 ene', maxWeight: 80 },
+    ] as SP[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].maxWeight).toBe(80);
+    expect(result[0].label).toMatch(/ene/i);
+  });
+
+  it('dos puntos en el mismo mes conserva el mayor peso', () => {
+    const result = groupStrengthByMonth([
+      { date: '2026-02-02', label: '2 feb',  maxWeight: 90  },
+      { date: '2026-02-09', label: '9 feb',  maxWeight: 100 },
+    ] as SP[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].maxWeight).toBe(100);
+  });
+
+  it('cuando el primer punto tiene mayor peso lo conserva', () => {
+    const result = groupStrengthByMonth([
+      { date: '2026-02-02', label: '2 feb',  maxWeight: 120 },
+      { date: '2026-02-09', label: '9 feb',  maxWeight: 100 },
+    ] as SP[]);
+    expect(result).toHaveLength(1);
+    expect(result[0].maxWeight).toBe(120);
+  });
+
+  it('puntos en meses distintos generan entries separados', () => {
+    const result = groupStrengthByMonth([
+      { date: '2026-01-26', label: '26 ene', maxWeight: 80  },
+      { date: '2026-02-09', label: '9 feb',  maxWeight: 100 },
+    ] as SP[]);
+    expect(result).toHaveLength(2);
+  });
+
+  it('los resultados están ordenados cronológicamente', () => {
+    const result = groupStrengthByMonth([
+      { date: '2026-03-30', label: '30 mar', maxWeight: 90  },
+      { date: '2026-01-26', label: '26 ene', maxWeight: 80  },
+      { date: '2026-02-09', label: '9 feb',  maxWeight: 100 },
+    ] as SP[]);
+    expect(result[0].label).toMatch(/ene/i);
+    expect(result[1].label).toMatch(/feb/i);
+    expect(result[2].label).toMatch(/mar/i);
+  });
+});
+
