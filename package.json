@@ -15,10 +15,11 @@
     "prepare": "husky install",
     "dead-code": "knip",
     "gym-push": "node git-fly.mjs",
-    "test:e2e": "playwright test",
-    "test:e2e:ui": "playwright test --ui",
-    "test:e2e:report": "playwright show-report",
-    "gym-push:full": "npm run test:e2e && node git-fly.mjs"
+    "e2e": "playwright test",
+    "e2e:live": "playwright test --headed --workers=1",
+    "e2e:ui": "playwright test --ui",
+    "e2e:report": "playwright show-report",
+    "gym-push:full": "npm run e2e && node git-fly.mjs"
   },
   "dependencies": {
     "@supabase/ssr": "^0.8.0",

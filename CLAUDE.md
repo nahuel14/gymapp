@@ -21,8 +21,13 @@ npm test                   # Vitest (watch mode interactivo)
 npm run test:run           # Vitest (run once, sin watch)
 npm run test:watch         # Vitest watch mode explícito
 npm run test:coverage      # Vitest + coverage report (falla si baja del umbral)
+npm run e2e                # Playwright headless (levanta el dev server automáticamente si no corre)
+npm run e2e:live           # Playwright con navegador visible, de a un test a la vez
+npm run e2e:ui             # Playwright UI mode interactivo con time-travel debugging
+npm run e2e:report         # Abrir HTML report del último run de Playwright
 npm run dead-code          # Knip: detecta exports/archivos/deps no usados
 npm run gym-push           # Lint + dead-code + tests + coverage + build + commit + push
+npm run gym-push:full      # gym-push + e2e tests + push
 ```
 
 ## Project Structure
