@@ -1,4 +1,4 @@
- "use server";
+"use server";
 
 import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
@@ -35,16 +35,12 @@ async function handleRoleTransitionCleanup(
   const coachRoles = new Set<UserRole>(["COACH", "ADMIN"]);
 
   if (fromRole === "STUDENT") {
-    // Pierde rol de alumno → limpiar sus asignaciones de coaches
     await (adminClient as any).from("coach_students").delete().eq("student_id", userId);
   } else if (fromRole === "SUPER_STUDENT" && coachRoles.has(toRole)) {
-    // Pasa a coach/admin → limpiar stale entries como student_id
     await (adminClient as any).from("coach_students").delete().eq("student_id", userId);
   } else if (coachRoles.has(fromRole) && !coachRoles.has(toRole)) {
-    // Pierde rol de coach → sus alumnos pierden este coach
     await (adminClient as any).from("coach_students").delete().eq("coach_id", userId);
   }
-  // COACH↔ADMIN: sin cambios. SUPER_STUDENT→STUDENT: sin cambios.
 }
 
 export async function inviteUser(email: string, fullName: string, role: UserRole) {
@@ -54,7 +50,6 @@ export async function inviteUser(email: string, fullName: string, role: UserRole
   const [firstName, ...lastNameParts] = fullName.split(" ");
   const lastName = lastNameParts.join(" ");
 
-  // 1. Invitar al usuario vía Supabase Auth
   const { data: authData, error: authError } = await adminClient.auth.admin.inviteUserByEmail(email, {
     data: { name: firstName, last_name: lastName },
     redirectTo: `${process.env.NEXT_PUBLIC_SITE_URL || 'http://localhost:3000'}/auth/callback`
@@ -62,8 +57,6 @@ export async function inviteUser(email: string, fullName: string, role: UserRole
 
   if (authError) throw authError;
 
-  // 2. El trigger de la base de datos debería crear el perfil,
-  // pero lo forzamos/actualizamos para asegurar el nombre y el rol correcto.
   const { error: profileError } = await adminClient
     .from("profiles")
     .upsert({
@@ -92,29 +85,10 @@ export async function getAllProfiles() {
   return data;
 }
 
-export async function updateOwnProfile(name: string, lastName: string) {
-  const supabase = await createSupabaseServerClient();
-  const { data: { user } } = await supabase.auth.getUser();
-
-  if (!user) throw new Error("No autenticado");
-
-  const { error } = await supabase
-    .from("profiles")
-    .update({ name, last_name: lastName } as any)
-    .eq("id", user.id as any);
-
-  if (error) throw error;
-
-  revalidatePath("/profile");
-  revalidatePath("/", "layout");
-  return { success: true };
-}
-
 export async function updateUserAsAdmin(userId: string, name: string, lastName: string, role: UserRole) {
   await ensureAdmin();
   const adminClient = createSupabaseAdminClient();
 
-  // Fetch current role to detect transitions and enforce restrictions
   const { data: current } = await adminClient
     .from("profiles")
     .select("role")
@@ -123,7 +97,6 @@ export async function updateUserAsAdmin(userId: string, name: string, lastName: 
 
   const fromRole = (current as any)?.role as UserRole | undefined;
 
-  // ADMIN → STUDENT/SUPER_STUDENT is blocked (too destructive; delete and recreate instead)
   if (fromRole === "ADMIN" && (role === "STUDENT" || role === "SUPER_STUDENT")) {
     throw new Error("Un administrador no puede cambiar a este rol. Eliminá el usuario y creá uno nuevo.");
   }
@@ -191,7 +164,6 @@ export async function getUserDeleteSummary(userId: string): Promise<{
     return { role, planCount: planCount ?? 0, templateCount: templateCount ?? 0 };
   }
 
-  // COACH or ADMIN
   const { count } = await adminClient
     .from("training_plans")
     .select("id", { count: "exact", head: true })
@@ -204,7 +176,6 @@ export async function deleteUser(userId: string) {
   await ensureAdmin();
   const adminClient = createSupabaseAdminClient();
 
-  // 1. Determine role for cascade logic
   const { data: profile } = await adminClient
     .from("profiles")
     .select("role")
@@ -212,7 +183,6 @@ export async function deleteUser(userId: string) {
     .single();
   const role = (profile as any)?.role ?? "STUDENT";
 
-  // Block deleting the last ADMIN
   if (role === "ADMIN") {
     const { count } = await adminClient
       .from("profiles")
@@ -224,7 +194,6 @@ export async function deleteUser(userId: string) {
   }
 
   if (role === "STUDENT") {
-    // Get student's plans
     const { data: plans } = await adminClient
       .from("training_plans")
       .select("id")
@@ -246,7 +215,6 @@ export async function deleteUser(userId: string) {
       await adminClient.from("training_plans").delete().in("id", planIds as any);
     }
   } else if (role === "SUPER_STUDENT") {
-    // Delete active plans (student_id=X)
     const { data: plans } = await adminClient
       .from("training_plans")
       .select("id")
@@ -268,7 +236,6 @@ export async function deleteUser(userId: string) {
       await adminClient.from("training_plans").delete().in("id", planIds as any);
     }
 
-    // Delete own templates (coach_id=X)
     const { data: templates } = await adminClient
       .from("training_plans")
       .select("id")
@@ -290,14 +257,12 @@ export async function deleteUser(userId: string) {
       await adminClient.from("training_plans").delete().in("id", templateIds as any);
     }
 
-    // Nullify coach_id on student plans they coached
     await adminClient
       .from("training_plans")
       .update({ coach_id: null } as any)
       .eq("coach_id", userId as any)
       .eq("is_template", false as any);
   } else {
-    // COACH or ADMIN: delete templates, nullify coach_id on student plans
     const { data: templates } = await adminClient
       .from("training_plans")
       .select("id")
@@ -319,7 +284,6 @@ export async function deleteUser(userId: string) {
       await adminClient.from("training_plans").delete().in("id", templateIds as any);
     }
 
-    // Nullify coach_id on student plans (preserve the plans)
     await adminClient
       .from("training_plans")
       .update({ coach_id: null } as any)
@@ -327,16 +291,13 @@ export async function deleteUser(userId: string) {
       .eq("is_template", false as any);
   }
 
-  // Delete coach-student relationships
   await (adminClient as any)
     .from("coach_students")
     .delete()
     .or(`coach_id.eq.${userId},student_id.eq.${userId}`);
 
-  // Delete profile
   await adminClient.from("profiles").delete().eq("id", userId as any);
 
-  // Delete from Auth
   const { error } = await adminClient.auth.admin.deleteUser(userId);
   if (error) throw error;
 

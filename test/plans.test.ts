@@ -95,6 +95,11 @@ describe('Planes de Alumno', () => {
       expect(result.generated_day_name).toBe('Monday');
       expect(result.generated_day_name).not.toBe('Lunes');
     });
+
+    it('cuando la fecha elegida es domingo retrocede al lunes anterior', () => {
+      const result = calculatePlanDates('2026-06-28', 4); // jun 28 = domingo
+      expect(result.start_date).toBe('2026-06-22');
+    });
   });
 
   describe('ESCENARIO 2: Extension de Plan Activo', () => {
@@ -128,6 +133,11 @@ describe('Planes de Alumno', () => {
       const others = [{ name: "Potencia Julio", start_date: "2026-06-29" }];
       const newEnd = calculateExtendedEnd("2026-06-14", 2);
       expect(simulateExtendCollision(others, "2026-06-14", newEnd).success).toBe(true);
+    });
+
+    it('si el end_date actual no cae en domingo ajusta al próximo domingo', () => {
+      // jun 15 (lunes) + 7 días = jun 22 (lunes, dow=1) → ajusta +6 días → jun 28 (domingo)
+      expect(calculateExtendedEnd('2026-06-15', 1)).toBe('2026-06-28');
     });
   });
 
@@ -362,6 +372,18 @@ describe('Sesiones del Plan', () => {
       const sessions = distributeTemplateSessions('2026-06-01', [5, 1], 1);
       expect(sessions[0].dayName).toBe('Monday');
       expect(sessions[1].dayName).toBe('Friday');
+    });
+
+    it('cuando selectedDays incluye domingo (0) junto a otro día, domingo queda al final', () => {
+      const sessions = distributeTemplateSessions('2026-06-01', [0, 1], 1);
+      expect(sessions[0].dayName).toBe('Monday');
+      expect(sessions[1].dayName).toBe('Sunday');
+    });
+
+    it('cuando selectedDays tiene domingo al final (1, 0), el sort lo reordena correctamente', () => {
+      const sessions = distributeTemplateSessions('2026-06-01', [1, 0], 1);
+      expect(sessions[0].dayName).toBe('Monday');
+      expect(sessions[1].dayName).toBe('Sunday');
     });
   });
 
@@ -600,6 +622,11 @@ describe('Sesiones del Plan', () => {
       sessions.push({ date: '2026-06-03', plan_id: planId });
       const result = simulateAddSession(sessions, '2026-06-05', planId, plan);
       expect(result.success).toBe(true);
+    });
+
+    it('lanza error si newDate es string vacío', () => {
+      const sessions: { date: string; plan_id: number }[] = [];
+      expect(() => simulateAddSession(sessions, '', planId, plan)).toThrow('Seleccioná una fecha.');
     });
   });
 });
@@ -922,6 +949,19 @@ describe('Ejercicios y Rutina', () => {
       expect(exs.find(e => e.id === 2)!.superset_group).toBe(1);
       expect(exs.find(e => e.id === 3)!.superset_group).toBe(1);
     });
+
+    it('resolveSuperset con targetId inexistente devuelve copia del array sin modificar', () => {
+      const exs = [{ id: 1, superset_group: null }];
+      const result = resolveSuperset(exs, 1, 999);
+      expect(result).toHaveLength(1);
+      expect(result[0].superset_group).toBeNull();
+      expect(result).not.toBe(exs);
+    });
+
+    it('isSameGroupAsLinking devuelve false si algún id no existe en la lista', () => {
+      const exs = [{ id: 1, superset_group: 1 }];
+      expect(isSameGroupAsLinking(exs, 1, 999)).toBe(false);
+    });
   });
 
   describe('ESCENARIO 19: Reordenar con Super Series', () => {
@@ -1071,6 +1111,16 @@ describe('Ejercicios y Rutina', () => {
       expect(result[2].id).toBe(2);
       expect(result[3].id).toBe(3);
       expect(result[4].id).toBe(4);
+    });
+
+    it('reorderItem con exerciseId inexistente devuelve el array sin modificar', () => {
+      const exs: ExItem[] = [
+        { id: 1, order_index: 1, superset_group: null },
+        { id: 2, order_index: 2, superset_group: null },
+      ];
+      const result = reorderItem(exs, { type: 'standalone', exerciseId: 999 }, 'up');
+      expect(result[0].id).toBe(1);
+      expect(result[1].id).toBe(2);
     });
   });
 
@@ -1518,6 +1568,16 @@ describe('Plantillas', () => {
         { id: 3, plan_id: 1, week_number: 2, day_name: 'Día 1', order_index: 3 },
         { id: 4, plan_id: 1, week_number: 2, day_name: 'Día 2', order_index: 4 },
         { id: 5, plan_id: 1, week_number: 2, day_name: 'Día 3', order_index: 5 },
+      ];
+      expect(isTemplateUniform(sessions)).toBe(false);
+    });
+
+    it('isTemplateUniform: misma cantidad de días pero nombres distintos → false', () => {
+      const sessions: TemplateSession[] = [
+        { id: 1, plan_id: 1, week_number: 1, day_name: 'Día 1', order_index: 1 },
+        { id: 2, plan_id: 1, week_number: 1, day_name: 'Día 2', order_index: 2 },
+        { id: 3, plan_id: 1, week_number: 2, day_name: 'Día 1', order_index: 3 },
+        { id: 4, plan_id: 1, week_number: 2, day_name: 'Día 3', order_index: 4 },
       ];
       expect(isTemplateUniform(sessions)).toBe(false);
     });
@@ -2121,6 +2181,25 @@ describe('Plantillas', () => {
       expect(result.find(x => x.id === origIdA)!.order_index).toBe(orderB);
       expect(result.find(x => x.id === origIdB)!.order_index).toBe(orderA);
     });
+
+    it('day_name sin dígitos no rompe el sort interno: usa id como desempate', () => {
+      const sessions: TemplateSession[] = [
+        { id: 1, plan_id: 1, week_number: 1, day_name: 'Reposo', order_index: 1 },
+        { id: 2, plan_id: 1, week_number: 1, day_name: 'Entreno', order_index: 2 },
+      ];
+      expect(() => swapDaysLocal(sessions, 0, 1)).not.toThrow();
+      expect(swapDaysLocal(sessions, 0, 1)).toHaveLength(2);
+    });
+
+    it('índice de día fuera de rango no genera error: la semana queda sin cambios', () => {
+      const sessions: TemplateSession[] = [
+        { id: 1, plan_id: 1, week_number: 1, day_name: 'Día 1', order_index: 1 },
+        { id: 2, plan_id: 1, week_number: 1, day_name: 'Día 2', order_index: 2 },
+      ];
+      const result = swapDaysLocal(sessions, 0, 99);
+      expect(result[0].day_name).toBe('Día 1');
+      expect(result[1].day_name).toBe('Día 2');
+    });
   });
 
   // ════════════════════════════════════════════════════════════════
@@ -2287,6 +2366,18 @@ describe('Plantillas', () => {
         const names = sessions.filter(s => s.week_number === wk).map(s => s.day_name).sort();
         expect(names).toEqual(['Día 1', 'Día 2']);
       }
+    });
+
+    it('day_name sin dígitos no rompe el sort interno al renumerar', () => {
+      const sessions: TemplateSession[] = [
+        { id: 1, plan_id: 1, week_number: 1, day_name: 'Reposo', order_index: 1 },
+        { id: 2, plan_id: 1, week_number: 1, day_name: 'Entreno', order_index: 2 },
+        { id: 3, plan_id: 1, week_number: 1, day_name: 'Cardio', order_index: 3 },
+      ];
+      expect(() => removeSelectedDayLocal(sessions, [1])).not.toThrow();
+      const { sessions: result, success } = removeSelectedDayLocal(sessions, [1]);
+      expect(success).toBe(true);
+      expect(result).toHaveLength(2);
     });
   });
 
@@ -3161,6 +3252,13 @@ describe('Administración', () => {
       expect(result.count).toBe(1);
       expect(result.text).toMatch(/1 alumno\b/);
     });
+
+    it('STUDENT con 1 coach → usa singular "coach" y "asignado"', () => {
+      const singleCoach = [{ coach_id: 'u1', student_id: 'u9' }];
+      const result = computeRoleChangeImpact('u9', 'STUDENT', 'COACH', singleCoach);
+      expect(result.count).toBe(1);
+      expect(result.text).toContain('1 coach asignado');
+    });
   });
 
 }); // Administración
@@ -3283,6 +3381,14 @@ describe('Ejercicios', () => {
     it('todas las categorías del enum tienen etiqueta definida', () => {
       const cats = ['MAIN', 'BALANCE', 'AUX', 'MOBILITY'];
       cats.forEach(c => expect(getCategoryLabel(c)).not.toBe('Sin categoría'));
+    });
+
+    it('zona desconocida devuelve el fallback "Sin zona"', () => {
+      expect(getBodyZoneLabel('ZONA_INEXISTENTE')).toBe('Sin zona');
+    });
+
+    it('categoría desconocida devuelve el fallback "Sin categoría"', () => {
+      expect(getCategoryLabel('CAT_INEXISTENTE')).toBe('Sin categoría');
     });
   });
 
@@ -3985,6 +4091,11 @@ describe('Progreso del Alumno', () => {
       const ex1 = calculateExerciseTonnage(['100', '100'], ['5', '5']);
       const ex2 = calculateExerciseTonnage(['60', '60', '60'], ['10', '10', '10']);
       expect(ex1 + ex2).toBe(1000 + 1800);
+    });
+
+    it('weights más largo que reps: los sets sin reps se tratan como 0', () => {
+      // reps[1] es undefined → ?? "0" → parseFloat("0") = 0 → 80 * 0 = 0
+      expect(calculateExerciseTonnage(['80', '80'], ['10'])).toBe(800);
     });
   });
 

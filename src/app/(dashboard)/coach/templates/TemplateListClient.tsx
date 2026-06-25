@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { Plus, Edit, Trash2, LayoutTemplate, X, Users, Copy } from "lucide-react";
 import { createTemplatePlan, duplicatePlan, deleteTemplatePlan } from "@/app/(dashboard)/coach/student/actions";
-import { reassignTemplate } from "@/app/actions/admin";
+import { reassignTemplate } from "@/app/(dashboard)/admin/actions";
 
 type TemplatePlan = {
   id: number;

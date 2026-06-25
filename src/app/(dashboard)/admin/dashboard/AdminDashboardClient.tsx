@@ -14,7 +14,7 @@ import {
   updateUserAsAdmin,
   deleteUser,
   getUserDeleteSummary,
-} from "@/app/actions/admin";
+} from "@/app/(dashboard)/admin/actions";
 import { buildDeleteSummary } from "@/lib/admin/delete";
 import { computeRoleChangeImpact } from "@/lib/admin/filters";
 import { useRouter } from "next/navigation";

@@ -3,7 +3,7 @@
 import { useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import { User, Mail, Save, Loader2, CheckCircle2, AlertCircle, LogOut } from "lucide-react";
-import { updateOwnProfile } from "@/app/actions/admin";
+import { updateOwnProfile } from "@/app/(dashboard)/profile/actions";
 import { createSupabaseBrowserClient } from "@/lib/supabase";
 import { validateProfileFields } from "@/lib/profile/validation";
 

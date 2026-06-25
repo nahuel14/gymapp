@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { createSupabaseServerClient } from "@/lib/supabase";
 import { AdminDashboardClient } from "./AdminDashboardClient";
-import { getAllProfiles, getCoachStudentAssignments } from "@/app/actions/admin";
+import { getAllProfiles, getCoachStudentAssignments } from "@/app/(dashboard)/admin/actions";
 
 export default async function AdminDashboardPage() {
   const supabase = await createSupabaseServerClient();
