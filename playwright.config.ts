@@ -23,6 +23,8 @@ loadEnvFile(resolve(process.cwd(), '.env'));
 
 export default defineConfig({
   testDir: './e2e',
+  globalSetup: './e2e/global-setup',
+  globalTeardown: './e2e/global-teardown',
   timeout: 45_000,
   expect: { timeout: 12_000 },
   fullyParallel: false,
