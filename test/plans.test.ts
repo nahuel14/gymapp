@@ -1310,6 +1310,105 @@ describe('Ejercicios y Rutina', () => {
       expect(shouldMarkCompleteFromStudent(payload['actual_sets'] as number)).toBe(true);
     });
   });
+
+  describe('ESCENARIO 22: Ejercicios de Tiempo (segundos)', () => {
+    // target_reps / actual_reps almacenan segundos igual que repeticiones (arrays de números).
+    // exercise_type="TIME" solo cambia la etiqueta visual, no la estructura de datos.
+
+    const coachForm = {
+      target_sets: 3,
+      target_reps: [60, 60, 60],
+      target_weight: [null, null, null] as (number | null)[],
+      target_rpe: 8,
+      rest_seconds: 60,
+      coach_notes: 'Mantener posición sin romper la forma',
+    };
+
+    const mixedForm = {
+      ...coachForm,
+      actual_sets: 3,
+      actual_reps: [60, 55, 48],
+      actual_weight: [null, null, null] as (number | null)[],
+      actual_rpe: 9,
+      student_notes: 'El tercero estuvo pesado',
+    };
+
+    it('el coach prescribe segundos por serie y el payload los guarda correctamente', () => {
+      const payload = buildCoachPayload(coachForm);
+      expect(payload.target_reps).toEqual([60, 60, 60]);
+      expect(payload.target_sets).toBe(3);
+    });
+
+    it('el payload del coach no incluye datos del alumno para ejercicios de tiempo', () => {
+      const payload = buildCoachPayload(mixedForm) as Record<string, unknown>;
+      expect('actual_sets' in payload).toBe(false);
+      expect('actual_reps' in payload).toBe(false);
+      expect('actual_rpe' in payload).toBe(false);
+    });
+
+    it('el alumno registra segundos reales y el payload los guarda correctamente', () => {
+      const payload = buildStudentPayload(mixedForm);
+      expect(payload.actual_reps).toEqual([60, 55, 48]);
+      expect(payload.actual_sets).toBe(3);
+      expect(payload.actual_rpe).toBe(9);
+    });
+
+    it('el payload del alumno no incluye la prescripción del coach para ejercicios de tiempo', () => {
+      const payload = buildStudentPayload(mixedForm) as Record<string, unknown>;
+      expect('target_sets' in payload).toBe(false);
+      expect('target_reps' in payload).toBe(false);
+      expect('coach_notes' in payload).toBe(false);
+    });
+
+    it('buildPayloadByMode(coach) preserva los segundos prescritos sin datos del alumno', () => {
+      const payload = buildPayloadByMode(mixedForm, 'coach') as Record<string, unknown>;
+      expect(payload['target_reps']).toEqual([60, 60, 60]);
+      expect('actual_reps' in payload).toBe(false);
+    });
+
+    it('buildPayloadByMode(student) preserva los segundos reales sin sobreescribir la prescripción', () => {
+      const payload = buildPayloadByMode(mixedForm, 'student') as Record<string, unknown>;
+      expect(payload['actual_reps']).toEqual([60, 55, 48]);
+      expect('target_reps' in payload).toBe(false);
+    });
+
+    it('validateActualReps acepta arrays de segundos del mismo largo que los sets', () => {
+      expect(validateActualReps(3, [60, 55, 48]).valid).toBe(true);
+    });
+
+    it('validateActualReps rechaza cuando faltan series de tiempo', () => {
+      const result = validateActualReps(3, [60, 55]);
+      expect(result.valid).toBe(false);
+    });
+
+    it('validateActualReps rechaza segundos negativos', () => {
+      const result = validateActualReps(3, [60, -5, 48]);
+      expect(result.valid).toBe(false);
+    });
+
+    it('la sesión se marca como completada cuando el alumno registra tiempo', () => {
+      const payload = buildPayloadByMode(mixedForm, 'student') as Record<string, unknown>;
+      expect(shouldMarkCompleteFromStudent(payload['actual_sets'] as number)).toBe(true);
+    });
+
+    it('series con duraciones distintas se guardan sin modificar (pirámide de tiempo)', () => {
+      const pyramidForm = {
+        target_sets: 4,
+        target_reps: [45, 40, 35, 30],
+        target_weight: [null, null, null, null] as (number | null)[],
+        target_rpe: 8,
+        rest_seconds: 60,
+        coach_notes: 'Reducir 5 seg por serie',
+      };
+      expect(buildCoachPayload(pyramidForm).target_reps).toEqual([45, 40, 35, 30]);
+    });
+
+    it('el payload de tiempo es agnóstico al tipo: mismos números producen mismo resultado independientemente de exercise_type', () => {
+      const repsForm = { ...coachForm, target_reps: [10, 10, 10] };
+      const timeFormSameNumbers = { ...coachForm, target_reps: [10, 10, 10] };
+      expect(buildCoachPayload(repsForm)).toEqual(buildCoachPayload(timeFormSameNumbers));
+    });
+  });
 });
 
   describe('ESCENARIO 21: Redirección post-login por rol', () => {

@@ -206,6 +206,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
   // renderItemIndex: position in renderItems (for ↑↓ disabled logic)
   const renderExCard = (ex: any, renderItemIndex: number) => {
     const exerciseData = ex.exercise || ex.exercises;
+    const isTimeBased = (exerciseData?.exercise_type ?? "REPS") === "TIME";
     const isEditing = editingId === ex.id;
     const isExpanded = expandedIds.has(ex.id) || isEditing;
     const data = isEditing ? editForm : ex;
@@ -421,7 +422,9 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                   </div>
 
                   <div className="flex flex-col gap-1.5 bg-zinc-900/50 p-1.5 rounded-lg border border-zinc-800 w-full">
-                    <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">Series</span>
+                    <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">
+                      {isTimeBased ? "Tiempo por Serie (seg)" : "Series"}
+                    </span>
                     <div className="flex flex-col gap-1.5 w-full">
                       {Array.from({ length: coachSets }).map((_, i) => (
                         <div key={i} className="flex items-center gap-2 w-full">
@@ -430,7 +433,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                             <input
                               type="number"
                               min="1"
-                              placeholder="Reps"
+                              placeholder={isTimeBased ? "Seg" : "Reps"}
                               className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-yellow-400"
                               value={data.target_reps?.[i] ?? ""}
                               onFocus={(e) => e.target.select()}
@@ -482,7 +485,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                       <div key={i} className="flex items-center justify-between bg-zinc-900/40 px-2 py-1.5 rounded border border-zinc-800/50">
                         <span className="text-[9px] font-black text-zinc-500 shrink-0">SET {i + 1}</span>
                         <div className="flex items-center gap-3">
-                          <span className="text-xs font-bold text-zinc-200 min-w-9 text-right">{data.target_reps?.[i] ?? "-"} reps</span>
+                          <span className="text-xs font-bold text-zinc-200 min-w-9 text-right">{data.target_reps?.[i] ?? "-"}{isTimeBased ? '"' : " reps"}</span>
                           <span className="text-[11px] font-medium text-zinc-400 min-w-8 text-right">{data.target_weight?.[i] ? `${data.target_weight[i]}kg` : "--"}</span>
                         </div>
                       </div>
@@ -552,7 +555,9 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                     </div>
 
                     <div className="flex flex-col gap-1.5 bg-zinc-900/50 p-1.5 rounded-lg border border-zinc-800 w-full">
-                      <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">Tus pesos y reps</span>
+                      <span className="text-[8px] font-black uppercase tracking-widest text-zinc-400">
+                        {isTimeBased ? "Tus tiempos (seg)" : "Tus pesos y reps"}
+                      </span>
                       <div className="flex flex-col gap-1.5 w-full">
                         {Array.from({ length: studentSets }).map((_, i) => (
                           <div key={i} className="flex items-center gap-2 w-full">
@@ -561,7 +566,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                               <input
                                 type="number"
                                 min="1"
-                                placeholder="Reps"
+                                placeholder={isTimeBased ? "Seg" : "Reps"}
                                 className="h-7 w-full min-w-0 rounded-md border border-zinc-700 bg-zinc-950 px-1 text-center text-xs font-black text-zinc-100 outline-none focus:border-emerald-400"
                                 value={data.actual_reps?.[i] ?? ""}
                                 onFocus={(e) => e.target.select()}
@@ -612,7 +617,7 @@ export function ExerciseExcelGrid({ exercises, role, isTemplate = false, allExpa
                             <div key={i} className="flex items-center justify-between bg-zinc-900/40 px-2 py-1.5 rounded border border-zinc-800/50">
                               <span className="text-[9px] font-black text-zinc-500 shrink-0">SET {i + 1}</span>
                               <div className="flex items-center gap-3">
-                                <span className="text-xs font-bold text-zinc-200 min-w-9 text-right">{ex.actual_reps?.[i] ?? "-"} reps</span>
+                                <span className="text-xs font-bold text-zinc-200 min-w-9 text-right">{ex.actual_reps?.[i] ?? "-"}{isTimeBased ? '"' : " reps"}</span>
                                 <span className="text-[11px] font-medium text-emerald-400 min-w-8 text-right">{ex.actual_weight?.[i] ? `${ex.actual_weight[i]}kg` : "--"}</span>
                               </div>
                             </div>

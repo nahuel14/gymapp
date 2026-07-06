@@ -1203,7 +1203,7 @@ export async function reorderSessionItem(
   return { success: true };
 }
 
-export async function createInlineExercise(data: { name: string; body_zone: string }) {
+export async function createInlineExercise(data: { name: string; body_zone: string; exercise_type?: "REPS" | "TIME" }) {
   const supabase = await createSupabaseServerClient();
 
   const { data: { user } } = await supabase.auth.getUser();
@@ -1214,6 +1214,7 @@ export async function createInlineExercise(data: { name: string; body_zone: stri
     .insert([{
       name: data.name.trim(),
       body_zone: data.body_zone || null,
+      exercise_type: data.exercise_type ?? "REPS",
     }] as any)
     .select()
     .single();

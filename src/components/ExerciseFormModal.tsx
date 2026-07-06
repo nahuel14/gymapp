@@ -44,6 +44,7 @@ export function ExerciseFormModal({
   const [newLibraryEx, setNewLibraryEx] = useState({
     name: "",
     body_zone: "",
+    exercise_type: "REPS" as "REPS" | "TIME",
   });
 
   if (!isOpen) return null;
@@ -67,16 +68,16 @@ export function ExerciseFormModal({
     try {
       // 1. Guardamos en Supabase
       const createdExercise = await createInlineExercise(newLibraryEx);
-      
+
       // 2. MAGIA: Inyectamos el ejercicio nuevo en nuestra lista local instantáneamente
       setLocalExercises(prev => [createdExercise, ...prev]);
-      
+
       // 3. Autoseleccionamos el ID nuevo
       setFormState({ ...formState, exerciseId: createdExercise.id.toString() });
-      
+
       // 4. Volvemos a la vista normal
       setIsCreatingInline(false);
-      setNewLibraryEx({ name: "", body_zone: "" });
+      setNewLibraryEx({ name: "", body_zone: "", exercise_type: "REPS" });
       setExerciseSearch("");
       
       // 5. Le decimos a React Query que re-valide la caché en segundo plano
@@ -94,6 +95,7 @@ export function ExerciseFormModal({
   // Buscamos el nombre usando nuestra lista local (que incluye el recién creado)
   const selectedExerciseObj = localExercises.find(ex => ex.id.toString() === formState.exerciseId);
   const displayExerciseName = selectedExerciseObj?.name || (formState.exerciseId ? newLibraryEx.name : "Buscar ejercicio...");
+  const isTimeBased = (selectedExerciseObj?.exercise_type ?? "REPS") === "TIME";
 
   return (
     <div className="fixed inset-0 z-60 flex items-center justify-center bg-black/80 backdrop-blur-sm p-4 animate-in fade-in">
@@ -136,7 +138,7 @@ export function ExerciseFormModal({
                   onChange={e => setNewLibraryEx({...newLibraryEx, name: e.target.value})}
                 />
                 
-                <select 
+                <select
                   className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 text-sm text-zinc-100 outline-none focus:border-yellow-400 appearance-none"
                   value={newLibraryEx.body_zone}
                   onChange={e => setNewLibraryEx({...newLibraryEx, body_zone: e.target.value})}
@@ -145,6 +147,15 @@ export function ExerciseFormModal({
                   {Object.entries(BODY_ZONE_LABELS || {}).map(([key, label]) => (
                     <option key={key} value={key}>{label as string}</option>
                   ))}
+                </select>
+
+                <select
+                  className="w-full rounded-lg border border-zinc-700 bg-zinc-900 p-2.5 text-sm text-zinc-100 outline-none focus:border-yellow-400 appearance-none"
+                  value={newLibraryEx.exercise_type}
+                  onChange={e => setNewLibraryEx({...newLibraryEx, exercise_type: e.target.value as "REPS" | "TIME"})}
+                >
+                  <option value="REPS">Repeticiones</option>
+                  <option value="TIME">Tiempo (segundos)</option>
                 </select>
 
                 <div className="flex gap-2 mt-2">
@@ -194,7 +205,9 @@ export function ExerciseFormModal({
                             type="button"
                             className="w-full text-left px-4 py-2.5 text-sm text-zinc-300 hover:bg-yellow-400/10 hover:text-yellow-400 border-b border-zinc-800/50 last:border-0 transition-colors"
                             onClick={() => {
-                              setFormState({...formState, exerciseId: ex.id.toString()});
+                              const defaultRep = ex.exercise_type === "TIME" ? 60 : 10;
+                              const newReps = Array(formState.target_sets).fill(defaultRep);
+                              setFormState({...formState, exerciseId: ex.id.toString(), target_reps: newReps});
                               setIsExerciseDropdownOpen(false);
                               setExerciseSearch("");
                             }}
@@ -246,13 +259,15 @@ export function ExerciseFormModal({
 
               {/* SERIES DETALLADAS */}
               <div className="flex flex-col gap-2 bg-zinc-900/40 border border-zinc-800/80 rounded-xl p-3">
-                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400">Configuración de Series</span>
+                <span className="text-[9px] font-black uppercase tracking-widest text-zinc-400">
+                  {isTimeBased ? "Tiempo por Serie (seg)" : "Configuración de Series"}
+                </span>
                 <div className="flex flex-col gap-2">
                   {formState.target_reps.map((rep: any, idx: number) => (
                     <div key={idx} className="flex items-center gap-2 w-full">
                       <span className="w-5 shrink-0 text-[10px] font-black text-zinc-500">S{idx + 1}</span>
                       <div className="flex-1 grid grid-cols-2 gap-2">
-                        <input type="number" placeholder="Reps" className="h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center text-xs text-zinc-100 outline-none focus:border-yellow-400 transition-colors" value={rep} onFocus={(e) => e.target.select()} onChange={(e) => updateArrayField("target_reps", idx, e.target.value)} />
+                        <input type="number" placeholder={isTimeBased ? "Seg" : "Reps"} className="h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center text-xs text-zinc-100 outline-none focus:border-yellow-400 transition-colors" value={rep} onFocus={(e) => e.target.select()} onChange={(e) => updateArrayField("target_reps", idx, e.target.value)} />
                         <input type="number" step="0.5" placeholder="Kg" className="h-8 w-full rounded-md border border-zinc-700 bg-zinc-950 px-2 text-center text-xs text-zinc-100 outline-none focus:border-yellow-400 transition-colors" value={formState.target_weight[idx] ?? ""} onFocus={(e) => e.target.select()} onChange={(e) => updateArrayField("target_weight", idx, e.target.value)} />
                       </div>
                     </div>

@@ -12,6 +12,7 @@ type LibraryPageProps = {
 };
 
 type BodyZone = Database["public"]["Enums"]["body_zone"];
+type ExerciseType = Database["public"]["Enums"]["exercise_type"];
 type Exercise = Tables<"exercises">;
 type ExercisesResponse = {
   data: Exercise[] | null;
@@ -58,6 +59,7 @@ async function createExercise(formData: FormData) {
   const nameValue = formData.get("name");
   const bodyZoneValue = formData.get("body_zone");
   const videoUrlValue = formData.get("video_url");
+  const exerciseTypeValue = formData.get("exercise_type");
 
   if (typeof nameValue !== "string" || nameValue.trim().length === 0) {
     redirect("/coach/library?error=missingName");
@@ -75,10 +77,14 @@ async function createExercise(formData: FormData) {
       ? videoUrlValue
       : null;
 
+  const exerciseType: ExerciseType =
+    exerciseTypeValue === "TIME" ? "TIME" : "REPS";
+
   const insert: TablesInsert<"exercises"> = {
     name: nameValue.trim(),
     body_zone: bodyZone,
     video_url: videoUrl,
+    exercise_type: exerciseType,
   };
 
   const { error } = await supabase.from("exercises").insert(insert as never);
@@ -100,6 +106,7 @@ async function updateExercise(formData: FormData) {
   const nameValue = formData.get("name");
   const bodyZoneValue = formData.get("body_zone");
   const videoUrlValue = formData.get("video_url");
+  const exerciseTypeValue = formData.get("exercise_type");
 
   const id = typeof idValue === "string" ? parseInt(idValue, 10) : NaN;
   if (isNaN(id)) redirect("/coach/library?error=save");
@@ -118,9 +125,12 @@ async function updateExercise(formData: FormData) {
       ? videoUrlValue.trim()
       : null;
 
+  const exerciseType: ExerciseType =
+    exerciseTypeValue === "TIME" ? "TIME" : "REPS";
+
   const { error } = await supabase
     .from("exercises")
-    .update({ name: nameValue.trim(), body_zone: bodyZone, video_url: videoUrl } as never)
+    .update({ name: nameValue.trim(), body_zone: bodyZone, video_url: videoUrl, exercise_type: exerciseType } as never)
     .eq("id", id as never);
 
   if (error) redirect("/coach/library?error=save");
@@ -162,7 +172,7 @@ async function getExercises(): Promise<Exercise[]> {
 
   const response = (await supabase
     .from("exercises")
-    .select("id, name, body_zone, video_url, created_at")
+    .select("id, name, body_zone, video_url, created_at, exercise_type")
     .order("name", { ascending: true })) as ExercisesResponse;
 
   return response.data ?? [];

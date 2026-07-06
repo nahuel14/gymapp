@@ -123,6 +123,7 @@ export function ExerciseListClient({ initialExercises, createAction, updateActio
                     {exercise.body_zone
                       ? (BODY_ZONE_LABELS as Record<string, string>)[exercise.body_zone]
                       : "Sin zona"}
+                    {exercise.exercise_type === "TIME" ? " · Tiempo" : ""}
                   </p>
                 </div>
 
@@ -266,6 +267,20 @@ export function ExerciseListClient({ initialExercises, createAction, updateActio
                         {label}
                       </option>
                     ))}
+                  </select>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-muted-foreground ml-1">
+                    Tipo de medición
+                  </label>
+                  <select
+                    name="exercise_type"
+                    defaultValue={isEditOpen ? (editingExercise!.exercise_type ?? "REPS") : "REPS"}
+                    className="w-full rounded-2xl border-2 border-transparent bg-muted px-4 py-3 text-sm font-medium outline-none transition focus:border-primary appearance-none"
+                  >
+                    <option value="REPS">Repeticiones</option>
+                    <option value="TIME">Tiempo (segundos)</option>
                   </select>
                 </div>
 

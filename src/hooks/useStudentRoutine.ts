@@ -16,6 +16,7 @@ type SessionExercise = Tables<"session_exercises"> & {
     body_zone: string | null;
     category: string | null;
     video_url: string | null;
+    exercise_type: "REPS" | "TIME" | null;
   } | null;
 };
 
@@ -98,7 +99,7 @@ async function fetchStudentRoutine(studentId: string): Promise<RoutineResult> {
   const { data: sessionExercises } = await supabase
     .from("session_exercises")
     .select(
-      "*, exercise:exercises(name, body_zone, video_url)",
+      "*, exercise:exercises(name, body_zone, video_url, exercise_type)",
     )
     .in("session_id", sessionIds)
     .order("order_index", { ascending: true });
