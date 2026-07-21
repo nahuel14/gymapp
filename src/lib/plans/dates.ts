@@ -56,3 +56,10 @@ export function getMonday(dateStr: string): string {
   d.setDate(d.getDate() + diff);
   return formatDate(d);
 }
+
+export function calcWeekNumber(date: string, planStartDate: string | null): number {
+  if (!planStartDate) return 1;
+  const sessionMs = new Date(getMonday(date) + "T00:00:00").getTime();
+  const planMs = new Date(getMonday(planStartDate) + "T00:00:00").getTime();
+  return Math.round((sessionMs - planMs) / (7 * 24 * 60 * 60 * 1000)) + 1;
+}

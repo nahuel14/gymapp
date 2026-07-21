@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState, useTransition } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { useRouter } from "next/navigation";
-import { X, Minus, Plus, ChevronLeft, ChevronRight } from "lucide-react";
+import { X, Minus, Plus, ChevronLeft, ChevronRight, Download, Copy, Trash2 } from "lucide-react";
 import { importTemplateToStudent, createBlankPlan, updatePlanMeta, deletePlan, duplicatePlan } from "./actions";
 
 type TemplateOption = {
@@ -25,6 +25,8 @@ type ImportTemplateModalProps = {
   studentId: string;
   managedPlan?: ManagedPlan | null;
   planHasSessions?: boolean;
+  onExport?: () => void;
+  isExporting?: boolean;
 };
 
 const DAY_OPTIONS = [
@@ -99,7 +101,7 @@ function getDefaultDaysForCount(count: number): number[] {
   return [1, 3, 5].slice(0, Math.max(1, Math.min(count, 3)));
 }
 
-export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, planHasSessions = false }: ImportTemplateModalProps) {
+export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, planHasSessions = false, onExport, isExporting = false }: ImportTemplateModalProps) {
   const queryClient = useQueryClient();
   const router = useRouter();
   const [isPending, startTransition] = useTransition();
@@ -464,33 +466,48 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
           )}
 
           {isManageMode && !isConfirmingDelete && (
-            <button
-              onClick={handleUpdatePlan}
-              disabled={isPending}
-              className="w-full rounded-2xl bg-yellow-400 py-3 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
-            >
-              {isPending ? "Guardando..." : "GUARDAR CAMBIOS"}
-            </button>
-          )}
+            <>
+              {/* Acción principal */}
+              <button
+                onClick={handleUpdatePlan}
+                disabled={isPending}
+                className="w-full rounded-2xl bg-yellow-400 py-3.5 text-sm font-black uppercase tracking-widest text-black transition hover:scale-[1.01] active:scale-[0.99] disabled:opacity-50"
+              >
+                {isPending ? "Guardando..." : "Guardar cambios"}
+              </button>
 
-          {isManageMode && !isConfirmingDelete && (
-            <button
-              onClick={handleSaveAsTemplate}
-              disabled={isPending}
-              className="w-full rounded-2xl border border-zinc-700 py-2.5 text-sm font-black uppercase tracking-widest text-zinc-300 transition hover:bg-zinc-800 active:scale-[0.99] disabled:opacity-50"
-            >
-              {isPending ? "Guardando..." : "GUARDAR COMO PLANTILLA"}
-            </button>
-          )}
+              {/* Fila de acciones secundarias */}
+              <div className="grid grid-cols-2 gap-2">
+                {onExport && (
+                  <button
+                    onClick={onExport}
+                    disabled={isExporting || isPending}
+                    className="flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 py-2.5 text-xs font-black uppercase tracking-widest text-zinc-300 transition hover:bg-zinc-800 hover:border-zinc-500 active:scale-[0.99] disabled:opacity-50"
+                  >
+                    <Download className="h-3.5 w-3.5 shrink-0" />
+                    {isExporting ? "Generando..." : "Excel"}
+                  </button>
+                )}
+                <button
+                  onClick={handleSaveAsTemplate}
+                  disabled={isPending}
+                  className={`flex items-center justify-center gap-2 rounded-xl border border-zinc-700 bg-zinc-900 py-2.5 text-xs font-black uppercase tracking-widest text-zinc-300 transition hover:bg-zinc-800 hover:border-zinc-500 active:scale-[0.99] disabled:opacity-50 ${!onExport ? "col-span-2" : ""}`}
+                >
+                  <Copy className="h-3.5 w-3.5 shrink-0" />
+                  Plantilla
+                </button>
+              </div>
 
-          {isManageMode && !isConfirmingDelete && (
-            <button
-              onClick={() => { setIsConfirmingDelete(true); setError(null); }}
-              disabled={isPending}
-              className="w-full rounded-2xl border border-red-500/30 py-2.5 text-sm font-black uppercase tracking-widest text-red-500 transition hover:bg-red-500/10 active:scale-[0.99] disabled:opacity-50"
-            >
-              ELIMINAR PLAN
-            </button>
+              {/* Eliminar: acción destructiva discreta */}
+              <button
+                onClick={() => { setIsConfirmingDelete(true); setError(null); }}
+                disabled={isPending}
+                className="flex items-center justify-center gap-1.5 w-full py-2 text-xs font-black uppercase tracking-widest text-red-500/60 transition hover:text-red-400 active:scale-[0.99] disabled:opacity-50"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                Eliminar plan
+              </button>
+            </>
           )}
 
           {isManageMode && isConfirmingDelete && (
@@ -503,14 +520,14 @@ export function ImportTemplateModal({ isOpen, onClose, studentId, managedPlan, p
                 disabled={isPending}
                 className="w-full rounded-2xl bg-red-500 py-3.5 text-sm font-black uppercase tracking-widest text-white transition hover:bg-red-600 active:scale-[0.99] disabled:opacity-50"
               >
-                {isPending ? "Eliminando..." : "SÍ, ELIMINAR"}
+                {isPending ? "Eliminando..." : "Sí, eliminar"}
               </button>
               <button
                 onClick={() => setIsConfirmingDelete(false)}
                 disabled={isPending}
                 className="w-full rounded-2xl border border-zinc-700 py-3 text-sm font-black uppercase tracking-widest text-zinc-400 transition hover:bg-zinc-900 active:scale-[0.99] disabled:opacity-50"
               >
-                CANCELAR
+                Cancelar
               </button>
             </div>
           )}

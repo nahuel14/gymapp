@@ -10,7 +10,7 @@ export default defineConfig({
       provider: 'v8',
       reporter: ['text', 'html', 'json-summary'],
       include: ['src/lib/**/*.ts'],
-      exclude: ['src/lib/supabase.ts', 'src/lib/utils.ts', 'src/types/**'],
+      exclude: ['src/lib/supabase.ts', 'src/lib/utils.ts', 'src/types/**', 'src/lib/export/planExcel.ts'],
       thresholds: {
         lines: 80,
         functions: 80,

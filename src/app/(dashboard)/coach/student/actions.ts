@@ -2,7 +2,7 @@
 
 import { createSupabaseServerClient, createSupabaseAdminClient } from "@/lib/supabase";
 import { revalidatePath } from "next/cache";
-import { getMonday, calcEndDateLocal } from "@/lib/plans/dates";
+import { getMonday, calcEndDateLocal, calcWeekNumber } from "@/lib/plans/dates";
 import { parseDayNumber } from "@/lib/templates/structure";
 // --- Helpers de fechas y validación de colisiones ---
 
@@ -103,6 +103,12 @@ export async function duplicateSession(sessionId: number, targetDate: string) {
 
   if (fetchSessionError || !originalSession) throw new Error("No se encontró la sesión original");
 
+  const { data: plan } = await adminClient
+    .from("training_plans")
+    .select("start_date")
+    .eq("id", (originalSession as any).plan_id)
+    .single();
+
   const { data: existingOnDate } = await adminClient
     .from("sessions")
     .select("id")
@@ -118,7 +124,7 @@ export async function duplicateSession(sessionId: number, targetDate: string) {
     .from("sessions")
     .insert({
       plan_id: originalSession.plan_id,
-      week_number: originalSession.week_number,
+      week_number: calcWeekNumber(targetDate, (plan as any)?.start_date ?? null),
       day_name: originalSession.day_name,
       order_index: (originalSession.order_index ?? 0) + 1,
       is_completed: false,
@@ -201,7 +207,7 @@ export async function moveSession(sessionId: number, newDate: string) {
 
   const { error } = await adminClient
     .from("sessions")
-    .update({ date: newDate } as any)
+    .update({ date: newDate, week_number: calcWeekNumber(newDate, startDate) } as any)
     .eq("id", sessionId);
 
   if (error) throw error;

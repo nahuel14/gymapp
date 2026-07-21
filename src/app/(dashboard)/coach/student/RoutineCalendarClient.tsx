@@ -16,6 +16,7 @@ import {
   CalendarClock,
   ChevronsUpDown,
   ChevronsDownUp,
+  Download,
 } from "lucide-react";
 import type { Tables } from "@/types/supabase";
 import {
@@ -103,10 +104,38 @@ export function RoutineCalendarClient({
   const [newDayForm, setNewDayForm] = useState<{ date: string } | null>(null);
   const [isConfirmingDelete, setIsConfirmingDelete] = useState(false);
   const [allExpanded, setAllExpanded] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
 
   useEffect(() => {
     setAllExpanded(false);
   }, [selectedDate]);
+
+  async function handleExport() {
+    if (!currentViewedPlan) return;
+    const planId = Number(currentViewedPlan.id);
+    const sid = studentId ?? profile?.id;
+    if (!sid) return;
+    setIsExporting(true);
+    try {
+      const res = await fetch("/api/export/plan", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ studentId: sid, planId }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = `rutina-${currentViewedPlan.name}.xlsx`;
+      a.click();
+      URL.revokeObjectURL(url);
+    } catch (err) {
+      console.error("Export error:", err);
+    } finally {
+      setIsExporting(false);
+    }
+  }
 
   const [newExForm, setNewExForm] = useState({
     exerciseId: "",
@@ -311,6 +340,8 @@ export function RoutineCalendarClient({
           studentId={studentId}
           managedPlan={managedPlan}
           planHasSessions={managedPlanHasSessions}
+          onExport={currentViewedPlan ? handleExport : undefined}
+          isExporting={isExporting}
         />
       )}
 
@@ -331,9 +362,21 @@ export function RoutineCalendarClient({
               )}
             </div>
 
-            {/* Acciones del Coach/Admin sobre el plan */}
-            {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && studentId && (
-              <div className="flex items-center gap-1.5 shrink-0">
+            <div className="flex items-center gap-1.5 shrink-0">
+              {/* Export: icono discreto para STUDENT (coach tiene el botón dentro del modal) */}
+              {role === "STUDENT" && currentViewedPlan && (
+                <button
+                  onClick={handleExport}
+                  disabled={isExporting}
+                  title={isExporting ? "Generando..." : "Exportar Excel"}
+                  className="flex h-8 w-8 items-center justify-center rounded-lg border border-zinc-700 bg-zinc-900 text-zinc-400 transition hover:bg-zinc-800 hover:text-zinc-200 active:scale-95 disabled:opacity-50"
+                >
+                  <Download className="h-3.5 w-3.5" />
+                </button>
+              )}
+
+              {/* Acciones del Coach/Admin sobre el plan */}
+              {(role === "COACH" || role === "ADMIN" || role === "SUPER_STUDENT") && studentId && (
                 <button
                   onClick={() => setIsImportModalOpen(true)}
                   className={currentViewedPlan
@@ -344,8 +387,8 @@ export function RoutineCalendarClient({
                   {!currentViewedPlan && <Plus className="h-3 w-3" />}
                   {currentViewedPlan ? "Gestionar" : "Nuevo Plan"}
                 </button>
-              </div>
-            )}
+              )}
+            </div>
           </div>
 
           <div className="flex items-center justify-between border-t border-zinc-800/50 pt-2">
